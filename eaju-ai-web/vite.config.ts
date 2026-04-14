@@ -26,5 +26,10 @@ export default defineConfig({
         changeOrigin: true,
       },
     },
+    // 允许外部访问时保持代理功能
+    hmr: {
+      protocol: 'ws',
+      host: 'localhost',
+    },
   },
 })
