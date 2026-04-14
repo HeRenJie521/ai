@@ -150,8 +150,34 @@ public class OpenAiLlmExecutor {
     }
 
     private void applyThinkingMode(LlmProviderConfigSnapshot cfg, ObjectNode body, ChatRequestDto request) {
-        // 仅当 provider 支持 thinking API 且当前 mode 配置了 deepThinking 时才下发 thinking 参数
         if (!cfg.supportsThinkingFlag()) {
+            return;  // 该 provider 不支持 thinking API，不下发任何 thinking 参数
+        }
+
+        InferenceDefaults d = cfg.defaultsOrEmpty();
+        // 优先取请求里明确传入的值，其次取提供方配置默认值
+        Boolean explicit = request.getThinkingMode();
+        Boolean effective = explicit != null ? explicit : d.getThinkingMode();
+
+        boolean dashScope = cfg.usesDashScopeThinkingParam();
+
+        // 用户/调用方明确关闭思考：无论 mode 配置如何，都必须显式告知上游禁用，
+        // 否则像 Qwen3 这类默认开启思考的模型会仍然思考，导致等待延迟。
+        if (Boolean.FALSE.equals(explicit)) {
+            if (dashScope) {
+                // DashScope/Qwen 格式：enable_thinking=false
+                body.put("enable_thinking", false);
+            } else {
+                // DeepSeek/Anthropic 格式：thinking.type=disabled
+                ObjectNode t = objectMapper.createObjectNode();
+                t.put("type", "disabled");
+                body.set("thinking", t);
+            }
+            return;
+        }
+
+        // 开启思考：要求 mode 配置声明支持 deepThinking，防止对不支持的模式误传
+        if (!Boolean.TRUE.equals(effective)) {
             return;
         }
         String modeKey = StringUtils.hasText(request.getMode())
@@ -160,12 +186,13 @@ public class OpenAiLlmExecutor {
         if (!cfg.modeSupportsDeepThinking(modeKey)) {
             return;
         }
-        // 显式告知上游开启或关闭思考，防止模型按自身默认值决策（部分模型默认开启思考）
-        InferenceDefaults d = cfg.defaultsOrEmpty();
-        Boolean thinking = coalesce(request.getThinkingMode(), d.getThinkingMode());
-        ObjectNode thinkingBody = objectMapper.createObjectNode();
-        thinkingBody.put("type", Boolean.TRUE.equals(thinking) ? "enabled" : "disabled");
-        body.set("thinking", thinkingBody);
+        if (dashScope) {
+            body.put("enable_thinking", true);
+        } else {
+            ObjectNode t = objectMapper.createObjectNode();
+            t.put("type", "enabled");
+            body.set("thinking", t);
+        }
     }
 
     private static boolean isKimiProvider(LlmProviderConfigSnapshot cfg) {

@@ -158,6 +158,29 @@ public final class LlmProviderConfigSnapshot {
     }
 
     /**
+     * 该 provider 是否使用 DashScope/Qwen 风格的 {@code enable_thinking} 参数
+     * （而非 DeepSeek/Anthropic 风格的 {@code thinking: {type: ...}}）。
+     */
+    public boolean usesDashScopeThinkingParam() {
+        if (StringUtils.hasText(code)) {
+            String c = code.toUpperCase(Locale.ROOT);
+            if (c.contains("BAILIAN") || c.contains("DASHSCOPE") || c.contains("CODINGPLAN") || c.contains("CODING_PLAN")) {
+                return true;
+            }
+        }
+        if (StringUtils.hasText(baseUrl)) {
+            String u = baseUrl.toLowerCase(Locale.ROOT);
+            if (u.contains("dashscope") || u.contains("bailian")) {
+                return true;
+            }
+            if (u.contains("aliyuncs.com") && u.contains("compatible-mode")) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
      * 与 {@link #supportsThinkingFlag()} 在未配置覆盖时的规则一致（供 modes 旧数据解析等复用）。
      */
     public static boolean inferGatewayThinkingSupport(String providerCode, String baseUrl) {
