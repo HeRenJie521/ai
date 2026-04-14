@@ -176,7 +176,8 @@ const createdIntegrationId = ref<number | null>(null)
 const embedCodePc = computed(() => {
   const id = createdIntegrationId.value
   if (!id) return ''
-  const token = secretModal.value || '{凭证}'
+  // Token 仅在创建时可见，已创建的集成显示占位符提示用户替换
+  const token = secretModal.value || '{凭证-创建时自动填入}'
   return `<iframe
   src="${embedBaseUrl.value}?iid=${id}&uid={手机号}&token=${token}"
   width="100%"
@@ -189,7 +190,7 @@ const embedCodePc = computed(() => {
 const embedCodeMobile = computed(() => {
   const id = createdIntegrationId.value
   if (!id) return ''
-  const token = secretModal.value || '{凭证}'
+  const token = secretModal.value || '{凭证-创建时自动填入}'
   return `<iframe
   src="${embedBaseUrl.value}?iid=${id}&uid={手机号}&token=${token}"
   width="100%"
@@ -200,7 +201,21 @@ const embedCodeMobile = computed(() => {
 
 async function copyText(text: string) {
   try {
-    await navigator.clipboard.writeText(text)
+    // 优先使用现代 Clipboard API
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(text)
+      message.success('已复制')
+      return
+    }
+    // 降级方案：使用传统 execCommand（兼容 HTTP 环境）
+    const textarea = document.createElement('textarea')
+    textarea.value = text
+    textarea.style.position = 'fixed'
+    textarea.style.opacity = '0'
+    document.body.appendChild(textarea)
+    textarea.select()
+    document.execCommand('copy')
+    document.body.removeChild(textarea)
     message.success('已复制')
   } catch {
     message.error('复制失败')
@@ -589,8 +604,13 @@ function turnColumns(keyId: number): DataTableColumns<RecentTurnRow> {
     style="width: min(680px, 96vw)"
     :on-after-leave="closeSecretReveal"
   >
-    <n-alert type="info" :bordered="false" style="margin-bottom: 16px">
-      请将下方代码复制到目标网页中，并将 <code>{手机号}</code> 替换为实际用户手机号。
+    <n-alert type="warning" :bordered="false" style="margin-bottom: 16px">
+      <template v-if="secretModal">
+        嵌入代码已自动生成，<code>{手机号}</code> 需要替换为实际用户手机号。
+      </template>
+      <template v-else>
+        凭证仅在创建时可见，请将下方代码中的 <code>{凭证-创建时自动填入}</code> 替换为创建时生成的完整凭证。
+      </template>
     </n-alert>
 
     <n-tabs type="line" animated>
