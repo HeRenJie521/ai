@@ -105,7 +105,7 @@ function fmtTime(val: string | null): string {
 const columns: DataTableColumns<ApiKeyRow> = [
   { title: '名称', key: 'name', ellipsis: { tooltip: true } },
   {
-    title: '密钥前缀',
+    title: '集成前缀',
     key: 'secretPrefix',
     width: 120,
     render: (r) => (r.secretPrefix ? `${r.secretPrefix}…` : '—'),
@@ -169,7 +169,7 @@ async function submitCreate() {
   try {
     const created = await adminCreateApiKey(name)
     showCreate.value = false
-    secretTitle.value = '请立即保存密钥'
+    secretTitle.value = '请立即保存集成密钥'
     secretModal.value = created.plainSecret || ''
     showSecretModal.value = true
     message.success('已创建')
@@ -220,8 +220,8 @@ async function toggleEnabled(r: ApiKeyRow) {
 
 function confirmDelete(r: ApiKeyRow) {
   dialog.warning({
-    title: '删除 API Key',
-    content: `确定删除「${r.name}」？相关用量记录保留，但密钥将立即失效。`,
+    title: '删除集成',
+    content: `确定删除「${r.name}」？相关用量记录保留，但集成将立即失效。`,
     positiveText: '删除',
     negativeText: '取消',
     onPositiveClick: async () => {
@@ -322,13 +322,13 @@ function turnColumns(keyId: number): DataTableColumns<RecentTurnRow> {
 <template>
   <div class="inner">
     <header class="toolbar">
-      <n-text strong class="page-title">API Key 管理</n-text>
+      <n-text strong class="page-title">集成管理</n-text>
       <n-space :size="12" wrap>
-        <n-button type="primary" @click="openCreate">新建密钥</n-button>
+        <n-button type="primary" @click="openCreate">新建集成</n-button>
       </n-space>
     </header>
 
-    <n-card :bordered="false" class="card" title="密钥列表">
+    <n-card :bordered="false" class="card" title="集成列表">
       <n-data-table :columns="columns" :data="rows" :loading="loading" :row-key="(r: ApiKeyRow) => r.id" />
     </n-card>
   </div>
@@ -336,7 +336,7 @@ function turnColumns(keyId: number): DataTableColumns<RecentTurnRow> {
   <n-modal
       v-model:show="showCreate"
       preset="card"
-      title="新建 API Key"
+      title="新建集成"
       style="width: min(420px, 96vw)"
       :mask-closable="false"
     >
@@ -356,7 +356,7 @@ function turnColumns(keyId: number): DataTableColumns<RecentTurnRow> {
     <n-modal
       :show="editId != null"
       preset="card"
-      title="编辑 API Key"
+      title="编辑集成"
       style="width: min(420px, 96vw)"
       :mask-closable="false"
       @update:show="(v: boolean) => { if (!v) editId = null }"
@@ -379,13 +379,13 @@ function turnColumns(keyId: number): DataTableColumns<RecentTurnRow> {
 
     <n-modal v-model:show="showSecretModal" preset="card" :title="secretTitle" style="width: min(520px, 96vw)">
       <n-text depth="3" style="display: block; margin-bottom: 12px">
-        完整密钥仅显示一次，请复制到安全位置。请求开放接口时在请求头加入：
+        完整集成密钥仅显示一次，请复制到安全位置。请求开放接口时在请求头加入：
         <code>X-API-Key: …</code>
       </n-text>
       <n-input type="textarea" :value="secretModal" readonly :autosize="{ minRows: 3, maxRows: 8 }" />
       <template #footer>
         <n-space justify="end">
-          <n-button type="primary" @click="void copySecretToClipboard()">复制密钥</n-button>
+          <n-button type="primary" @click="void copySecretToClipboard()">复制集成密钥</n-button>
           <n-button @click="closeSecretReveal">关闭</n-button>
         </n-space>
       </template>

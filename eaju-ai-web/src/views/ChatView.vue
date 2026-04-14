@@ -737,7 +737,7 @@ function goSettingsPage(page: 'llm' | 'api-keys' | 'api-docs') {
             <div class="settings-nav-item" @click="goSettingsPage('api-keys')">
               <n-icon class="settings-nav-icon" :component="KeyOutline" />
               <div class="settings-nav-text">
-                <span class="settings-nav-label">API Key 管理</span>
+                <span class="settings-nav-label">集成管理</span>
               </div>
               <n-icon class="settings-nav-arrow" :component="ChevronForwardOutline" />
             </div>

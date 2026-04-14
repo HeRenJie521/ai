@@ -76,6 +76,7 @@ interface ModelRow {
   textGeneration: boolean
   deepThinking: boolean
   vision: boolean
+  contextWindowK: number | null
 }
 
 const showModelsModal = ref(false)
@@ -86,6 +87,7 @@ const modelRows = ref<ModelRow[]>([
     textGeneration: true,
     deepThinking: false,
     vision: false,
+    contextWindowK: null,
   },
 ])
 const modelDefaultMode = ref<string>('')
@@ -159,6 +161,34 @@ function inferLegacyDeepThinking(provCode: string, baseUrl: string): boolean {
   return u.includes('aliyuncs.com') && u.includes('compatible-mode')
 }
 
+function tokensToContextWindowK(tokens: unknown): number | null {
+  if (typeof tokens !== 'number' || !Number.isFinite(tokens) || tokens <= 0) {
+    return null
+  }
+  return Math.round(tokens / 1024)
+}
+
+function contextWindowKToTokens(contextWindowK: number | null | undefined): number | null {
+  if (typeof contextWindowK !== 'number' || !Number.isFinite(contextWindowK) || contextWindowK <= 0) {
+    return null
+  }
+  return Math.round(contextWindowK * 1024)
+}
+
+function updateContextWindowK(row: ModelRow, value: string) {
+  const trimmed = value.trim()
+  if (!trimmed) {
+    row.contextWindowK = null
+    return
+  }
+  const digitsOnly = trimmed.replace(/[^\d]/g, '')
+  if (!digitsOnly) {
+    row.contextWindowK = null
+    return
+  }
+  row.contextWindowK = Number.parseInt(digitsOnly, 10)
+}
+
 function parseModesToRows(raw: string, provCode: string, baseUrl: string): ModelRow[] {
   const legacyDeep = inferLegacyDeepThinking(provCode, baseUrl)
   try {
@@ -180,6 +210,7 @@ function parseModesToRows(raw: string, provCode: string, baseUrl: string): Model
           textGeneration: true,
           deepThinking: legacyDeep,
           vision: false,
+          contextWindowK: null,
         })
       } else if (v && typeof v === 'object') {
         const obj = v as Record<string, unknown>
@@ -188,6 +219,7 @@ function parseModesToRows(raw: string, provCode: string, baseUrl: string): Model
           textGeneration: obj.textGeneration !== false,
           deepThinking: obj.deepThinking === true,
           vision: obj.vision === true,
+          contextWindowK: tokensToContextWindowK(obj.contextWindow),
         })
       }
     }
@@ -203,6 +235,7 @@ function emptyModelRow(): ModelRow {
     textGeneration: true,
     deepThinking: false,
     vision: false,
+    contextWindowK: null,
   }
 }
 
@@ -219,6 +252,10 @@ function buildModesJsonFromRows(rows: ModelRow[]): string {
       textGeneration: r.textGeneration,
       deepThinking: r.deepThinking,
       vision: r.vision,
+    }
+    const contextWindow = contextWindowKToTokens(r.contextWindowK)
+    if (contextWindow != null) {
+      o[name].contextWindow = contextWindow
     }
   }
   return JSON.stringify(o)
@@ -544,7 +581,7 @@ function avatarLetter(row: LlmAdminRow): string {
         </div>
         <div v-if="auth.isAdmin" class="menu-item" :class="{ active: currentPage === 'api-keys' }" @click="goTo('api-keys')">
           <span class="menu-icon">🔑</span>
-          <span class="menu-label">API Key 管理</span>
+          <span class="menu-label">集成管理</span>
         </div>
       </div>
     </div>
@@ -654,7 +691,7 @@ function avatarLetter(row: LlmAdminRow): string {
       :mask-closable="false"
     >
       <n-text depth="3" style="display: block; margin-bottom: 12px; font-size: 13px">
-        每行填写一个模型标识（与上游 API 的 model id 相同，也作为对话里 mode 下拉的逻辑名），并配置三种能力；**由上至下的顺序**即对话中模型列表顺序。保存后 JSON 中 upstreamModel 与该名称一致。
+        每行填写一个模型标识（与上游 API 的 model id 相同，也作为对话里 mode 下拉的逻辑名），并配置三种能力；**由上至下的顺序**即对话中模型列表顺序。上下文按 K 回显与编辑，保存时自动换算为 token 数写入。保存后 JSON 中 upstreamModel 与该名称一致。
       </n-text>
       <n-form label-placement="top">
         <n-form-item label="默认模型（须为下方列表中的某一个）">
@@ -671,6 +708,7 @@ function avatarLetter(row: LlmAdminRow): string {
           <span class="mode-col-cap">文本生成</span>
           <span class="mode-col-cap">深度思考</span>
           <span class="mode-col-cap">视觉理解</span>
+          <span class="mode-col-ctx">上下文（K）</span>
           <span class="mode-col-order">顺序</span>
           <span class="mode-col-act" />
         </div>
@@ -684,6 +722,15 @@ function avatarLetter(row: LlmAdminRow): string {
           </div>
           <div class="mode-cap-cell">
             <n-switch v-model:value="row.vision" size="small" />
+          </div>
+          <div class="mode-ctx-cell">
+            <n-input
+              :value="row.contextWindowK == null ? '' : String(row.contextWindowK)"
+              inputmode="numeric"
+              placeholder="如 128"
+              class="mode-in-ctx"
+              @update:value="(value) => updateContextWindowK(row, value)"
+            />
           </div>
           <div class="mode-order-cell">
             <n-button
@@ -905,7 +952,7 @@ function avatarLetter(row: LlmAdminRow): string {
       <ConversationsView />
     </div>
 
-    <!-- API Key 管理 -->
+    <!-- 集成管理 -->
     <div v-if="currentPage === 'api-keys'" class="settings-content-inner-full">
       <ApiKeysView />
     </div>
@@ -1099,7 +1146,7 @@ function avatarLetter(row: LlmAdminRow): string {
 }
 .mode-table-head {
   display: grid;
-  grid-template-columns: minmax(140px, 1.4fr) repeat(3, 88px) 76px 52px;
+  grid-template-columns: minmax(140px, 1.4fr) repeat(3, 88px) 112px 76px 52px;
   gap: 8px;
   font-size: 12px;
   font-weight: 600;
@@ -1114,6 +1161,9 @@ function avatarLetter(row: LlmAdminRow): string {
 .mode-col-cap {
   text-align: center;
 }
+.mode-col-ctx {
+  text-align: center;
+}
 .mode-col-order {
   text-align: center;
 }
@@ -1122,7 +1172,7 @@ function avatarLetter(row: LlmAdminRow): string {
 }
 .mode-row {
   display: grid;
-  grid-template-columns: minmax(140px, 1.4fr) repeat(3, 88px) 76px 52px;
+  grid-template-columns: minmax(140px, 1.4fr) repeat(3, 88px) 112px 76px 52px;
   gap: 8px;
   align-items: center;
   margin-bottom: 8px;
@@ -1134,6 +1184,17 @@ function avatarLetter(row: LlmAdminRow): string {
   display: flex;
   justify-content: center;
   align-items: center;
+}
+.mode-ctx-cell {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+.mode-in-ctx {
+  width: 68px;
+}
+.mode-in-ctx :deep(.n-input__input-el) {
+  text-align: center;
 }
 .mode-order-cell {
   display: flex;
