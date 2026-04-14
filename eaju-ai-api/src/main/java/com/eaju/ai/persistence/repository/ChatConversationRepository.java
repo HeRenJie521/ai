@@ -57,4 +57,7 @@ public interface ChatConversationRepository extends JpaRepository<ChatConversati
 
     /** 根据 sessionId 查询会话（包括已删除） */
     Optional<ChatConversationEntity> findBySessionId(String sessionId);
+
+    /** 按 integrationId + sessionId 查（仅未删除），用于 WEB_EMBED 会话归属校验 */
+    Optional<ChatConversationEntity> findByIntegrationIdAndSessionIdAndDeletedAtIsNull(Long integrationId, String sessionId);
 }

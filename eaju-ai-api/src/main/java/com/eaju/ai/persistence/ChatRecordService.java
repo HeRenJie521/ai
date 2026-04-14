@@ -53,6 +53,9 @@ public class ChatRecordService {
             if (clientRequest.getInternalApiKeyId() != null) {
                 row.setApiKeyId(clientRequest.getInternalApiKeyId());
             }
+            if (clientRequest.getInternalIntegrationId() != null) {
+                row.setIntegrationId(clientRequest.getInternalIntegrationId());
+            }
             chatTurnRepository.save(row);
         } catch (Exception ex) {
             log.warn("写入 chat_turn 失败: {}", ex.getMessage(), ex);

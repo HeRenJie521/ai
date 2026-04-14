@@ -36,23 +36,56 @@ public class ApiKeyService {
     }
 
     /**
+     * 创建 API_KEY 类型集成（保持原有行为）。
      * @return 实体与明文 secret（仅此时返回）
      */
     @Transactional
     public CreatedApiKey create(String name) {
+        return create(name, 1, null, null);
+    }
+
+    /**
+     * 创建集成（支持 API_KEY 与 WEB_EMBED 两种类型）。
+     *
+     * @param type          1=API_KEY  2=WEB_EMBED
+     * @param defaultModel  WEB_EMBED 默认模型（type=2 时必填）
+     * @param allowedOrigins 允许嵌入的来源域名（逗号分隔，null 表示不限）
+     * @return 实体与明文凭证（仅此时返回）
+     */
+    @Transactional
+    public CreatedApiKey create(String name, int type, String defaultModel, String allowedOrigins) {
         if (!StringUtils.hasText(name)) {
             throw new IllegalArgumentException("名称不能为空");
         }
-        // PREFIX(5) + 27 hex chars = 32 位固定长度
-        String plain = PREFIX + randomHex(14).substring(0, 27);
+        if (type == 2 && !StringUtils.hasText(defaultModel)) {
+            throw new IllegalArgumentException("嵌入网站集成必须指定默认模型");
+        }
         ApiKeyEntity e = new ApiKeyEntity();
         e.setName(name.trim());
-        e.setSecretHash(sha256Hex(plain));
-        String prefix = plain.length() <= 20 ? plain : plain.substring(0, 20);
-        e.setSecretPrefix(prefix);
+        e.setType(type);
         e.setEnabled(true);
-        apiKeyRepository.save(e);
-        return new CreatedApiKey(e, plain);
+
+        if (type == 2) {
+            // WEB_EMBED：emb_ + 27 hex chars = 32 位固定长度，与 API_KEY 格式对齐
+            String plain = "emb_" + randomHex(14).substring(0, 28);
+            e.setSecretHash(sha256Hex(plain));
+            String prefix = plain.length() <= 20 ? plain : plain.substring(0, 20);
+            e.setSecretPrefix(prefix);
+            e.setDefaultModel(defaultModel.trim());
+            if (StringUtils.hasText(allowedOrigins)) {
+                e.setAllowedOrigins(allowedOrigins.trim());
+            }
+            apiKeyRepository.save(e);
+            return new CreatedApiKey(e, plain, null);
+        } else {
+            // API_KEY：PREFIX(5) + 27 hex chars = 32 位固定长度
+            String plain = PREFIX + randomHex(14).substring(0, 27);
+            e.setSecretHash(sha256Hex(plain));
+            String prefix = plain.length() <= 20 ? plain : plain.substring(0, 20);
+            e.setSecretPrefix(prefix);
+            apiKeyRepository.save(e);
+            return new CreatedApiKey(e, plain, null);
+        }
     }
 
     @Transactional
@@ -82,7 +115,8 @@ public class ApiKeyService {
             return Optional.empty();
         }
         String hash = sha256Hex(plain.trim());
-        return apiKeyRepository.findBySecretHashAndEnabledIsTrueAndDeletedIsFalse(hash);
+        // type=1 (API_KEY) only — prevents embed credentials from authenticating via X-API-Key header
+        return apiKeyRepository.findBySecretHashAndTypeAndEnabledIsTrueAndDeletedIsFalse(hash, 1);
     }
 
     private static String randomHex(int bytes) {
@@ -113,7 +147,7 @@ public class ApiKeyService {
         private final ApiKeyEntity entity;
         private final String plainSecret;
 
-        public CreatedApiKey(ApiKeyEntity entity, String plainSecret) {
+        public CreatedApiKey(ApiKeyEntity entity, String plainSecret, String ignored) {
             this.entity = entity;
             this.plainSecret = plainSecret;
         }

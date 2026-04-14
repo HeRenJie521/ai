@@ -41,4 +41,21 @@ public final class CallerPrincipal {
         }
         return null;
     }
+
+    /**
+     * WEB_EMBED 免密登录时 JWT 携带的集成 ID；普通登录返回 null。
+     */
+    public static Long integrationId(Authentication authentication) {
+        if (authentication == null || !authentication.isAuthenticated()) {
+            return null;
+        }
+        if (authentication instanceof AnonymousAuthenticationToken) {
+            return null;
+        }
+        Object p = authentication.getPrincipal();
+        if (p instanceof AuthUserPrincipal) {
+            return ((AuthUserPrincipal) p).getIntegrationId();
+        }
+        return null;
+    }
 }

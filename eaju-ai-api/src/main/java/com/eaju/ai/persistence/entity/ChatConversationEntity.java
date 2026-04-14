@@ -48,6 +48,10 @@ public class ChatConversationEntity {
     @Column(name = "api_key_id")
     private Long apiKeyId;
 
+    /** WEB_EMBED 集成 ID（api_key.id），用于统计该集成的对话用量；普通会话为 null */
+    @Column(name = "integration_id")
+    private Long integrationId;
+
     /** 逻辑删除时间，非空表示已删除 */
     @Column(name = "deleted_at")
     private Instant deletedAt;
@@ -141,5 +145,13 @@ public class ChatConversationEntity {
 
     public void setDeletedAt(Instant deletedAt) {
         this.deletedAt = deletedAt;
+    }
+
+    public Long getIntegrationId() {
+        return integrationId;
+    }
+
+    public void setIntegrationId(Long integrationId) {
+        this.integrationId = integrationId;
     }
 }

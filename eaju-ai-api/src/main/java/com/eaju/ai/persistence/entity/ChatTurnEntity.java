@@ -72,6 +72,10 @@ public class ChatTurnEntity {
     @Column(name = "api_key_id")
     private Long apiKeyId;
 
+    /** WEB_EMBED 集成 ID（api_key.id），用于按集成统计用量；非嵌入调用为 null */
+    @Column(name = "integration_id")
+    private Long integrationId;
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
@@ -216,5 +220,13 @@ public class ChatTurnEntity {
 
     public void setCreatedAt(Instant createdAt) {
         this.createdAt = createdAt;
+    }
+
+    public Long getIntegrationId() {
+        return integrationId;
+    }
+
+    public void setIntegrationId(Long integrationId) {
+        this.integrationId = integrationId;
     }
 }

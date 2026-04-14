@@ -39,6 +39,20 @@ public class ApiKeyEntity {
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
+    /**
+     * 集成类型：1=API_KEY（默认）  2=WEB_EMBED（嵌入网站）
+     */
+    @Column(nullable = false)
+    private int type = 1;
+
+    /** WEB_EMBED：默认对话模型 ID（如 deepseek-chat） */
+    @Column(name = "default_model", length = 256)
+    private String defaultModel;
+
+    /** WEB_EMBED：允许嵌入的来源域名，逗号分隔；为空表示不限 */
+    @Column(name = "allowed_origins", length = 1000)
+    private String allowedOrigins;
+
     @PrePersist
     public void prePersist() {
         Instant n = Instant.now();
@@ -116,4 +130,29 @@ public class ApiKeyEntity {
     public void setUpdatedAt(Instant updatedAt) {
         this.updatedAt = updatedAt;
     }
+
+    public int getType() {
+        return type;
+    }
+
+    public void setType(int type) {
+        this.type = type;
+    }
+
+    public String getDefaultModel() {
+        return defaultModel;
+    }
+
+    public void setDefaultModel(String defaultModel) {
+        this.defaultModel = defaultModel;
+    }
+
+    public String getAllowedOrigins() {
+        return allowedOrigins;
+    }
+
+    public void setAllowedOrigins(String allowedOrigins) {
+        this.allowedOrigins = allowedOrigins;
+    }
+
 }

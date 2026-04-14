@@ -12,5 +12,9 @@ public interface ApiKeyRepository extends JpaRepository<ApiKeyEntity, Long> {
 
     Optional<ApiKeyEntity> findByIdAndDeletedIsFalse(Long id);
 
-    Optional<ApiKeyEntity> findBySecretHashAndEnabledIsTrueAndDeletedIsFalse(String secretHash);
+    /** 仅匹配指定 type，防止嵌入凭证被用作 API Key */
+    Optional<ApiKeyEntity> findBySecretHashAndTypeAndEnabledIsTrueAndDeletedIsFalse(String secretHash, int type);
+
+    /** WEB_EMBED：按集成 ID 查找，仅返回已启用且未删除的嵌入类型集成 */
+    Optional<ApiKeyEntity> findByIdAndTypeAndEnabledIsTrueAndDeletedIsFalse(Long id, int type);
 }

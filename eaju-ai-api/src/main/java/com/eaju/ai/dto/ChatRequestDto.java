@@ -71,6 +71,10 @@ public class ChatRequestDto {
     @JsonIgnore
     private Long internalApiKeyId;
 
+    /** 服务端写入：WEB_EMBED 免密登录时的集成 id，不落库到请求 JSON */
+    @JsonIgnore
+    private Long internalIntegrationId;
+
     public String getProvider() {
         return provider;
     }
@@ -205,5 +209,13 @@ public class ChatRequestDto {
 
     public void setInternalApiKeyId(Long internalApiKeyId) {
         this.internalApiKeyId = internalApiKeyId;
+    }
+
+    public Long getInternalIntegrationId() {
+        return internalIntegrationId;
+    }
+
+    public void setInternalIntegrationId(Long internalIntegrationId) {
+        this.internalIntegrationId = internalIntegrationId;
     }
 }

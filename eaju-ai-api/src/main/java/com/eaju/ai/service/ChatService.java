@@ -47,11 +47,11 @@ public class ChatService {
         ChatRequestDto effective = chatSessionService.mergeHistory(request);
         LlmProviderConfigSnapshot cfg = llmProviderConfigService.requireSnapshot(effective.getProvider());
         ChatResponseDto response = openAiLlmExecutor.chat(effective, cfg);
+        chatSessionService.appendAssistantToSession(request, effective, response);
+        chatRecordService.saveBlockingTurn(request, effective, response, false);
         if (!cfg.resolveThinkingContentWanted(effective)) {
             response.setReasoningContent(null);
         }
-        chatSessionService.appendAssistantToSession(request, effective, response);
-        chatRecordService.saveBlockingTurn(request, effective, response, false);
         return response;
     }
 
@@ -71,15 +71,11 @@ public class ChatService {
         chatStreamExecutor.execute(() -> {
             try {
                 LlmProviderConfigSnapshot cfg = llmProviderConfigService.requireSnapshot(effective.getProvider());
-                boolean captureReasoning = cfg.resolveThinkingContentWanted(effective);
-                OpenAiStreamAccumulator accum = new OpenAiStreamAccumulator(objectMapper, captureReasoning);
+                OpenAiStreamAccumulator accum = new OpenAiStreamAccumulator(objectMapper, true);
                 String resolvedModel = cfg.resolveUpstreamModelId(effective.getModel(), effective.getMode());
                 openAiLlmExecutor.chatStream(effective, cfg, emitter, accum::acceptChunkJson, upstreamHolder);
                 if (accum.hasAssistantPayload()) {
                     ChatResponseDto response = accum.toResponse(cfg.getCode(), resolvedModel);
-                    if (!captureReasoning) {
-                        response.setReasoningContent(null);
-                    }
                     chatSessionService.appendAssistantToSession(request, effective, response);
                     chatRecordService.saveBlockingTurn(request, effective, response, true);
                 }

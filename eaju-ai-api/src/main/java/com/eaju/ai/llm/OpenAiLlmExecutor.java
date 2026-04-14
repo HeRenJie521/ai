@@ -150,11 +150,7 @@ public class OpenAiLlmExecutor {
     }
 
     private void applyThinkingMode(LlmProviderConfigSnapshot cfg, ObjectNode body, ChatRequestDto request) {
-        InferenceDefaults d = cfg.defaultsOrEmpty();
-        Boolean thinking = coalesce(request.getThinkingMode(), d.getThinkingMode());
-        if (!Boolean.TRUE.equals(thinking)) {
-            return;
-        }
+        // 仅当 provider 支持 thinking API 且当前 mode 配置了 deepThinking 时才下发 thinking 参数
         if (!cfg.supportsThinkingFlag()) {
             return;
         }
@@ -164,8 +160,11 @@ public class OpenAiLlmExecutor {
         if (!cfg.modeSupportsDeepThinking(modeKey)) {
             return;
         }
+        // 显式告知上游开启或关闭思考，防止模型按自身默认值决策（部分模型默认开启思考）
+        InferenceDefaults d = cfg.defaultsOrEmpty();
+        Boolean thinking = coalesce(request.getThinkingMode(), d.getThinkingMode());
         ObjectNode thinkingBody = objectMapper.createObjectNode();
-        thinkingBody.put("type", "enabled");
+        thinkingBody.put("type", Boolean.TRUE.equals(thinking) ? "enabled" : "disabled");
         body.set("thinking", thinkingBody);
     }
 

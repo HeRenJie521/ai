@@ -4,6 +4,7 @@ public class RecentTurnDto {
 
     private Long id;
     private String sessionId;
+    private String userId;
     private String provider;
     private String model;
     private Integer promptTokens;
@@ -26,6 +27,14 @@ public class RecentTurnDto {
 
     public void setSessionId(String sessionId) {
         this.sessionId = sessionId;
+    }
+
+    public String getUserId() {
+        return userId;
+    }
+
+    public void setUserId(String userId) {
+        this.userId = userId;
     }
 
     public String getProvider() {

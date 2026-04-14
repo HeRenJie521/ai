@@ -83,14 +83,14 @@ public class AdminConversationController {
             pageResult = conversationRepository.findAllByOrderByLastMessageAtDesc(pageable);
         }
 
-        // 预加载 API Key 名称
-        List<Long> apiKeyIds = pageResult.getContent().stream()
-                .filter(c -> c.getApiKeyId() != null)
-                .map(ChatConversationEntity::getApiKeyId)
+        // 预加载 API Key / 嵌入集成名称
+        List<Long> relatedIds = pageResult.getContent().stream()
+                .map(c -> c.getIntegrationId() != null ? c.getIntegrationId() : c.getApiKeyId())
+                .filter(id -> id != null)
                 .distinct()
                 .collect(Collectors.toList());
         Map<Long, String> apiKeyNameMap = new HashMap<>();
-        for (Long akId : apiKeyIds) {
+        for (Long akId : relatedIds) {
             apiKeyRepository.findById(akId).ifPresent(ak -> apiKeyNameMap.put(akId, ak.getName()));
         }
 
@@ -136,7 +136,11 @@ public class AdminConversationController {
         dto.setApiKeyId(e.getApiKeyId());
         dto.setDeletedAt(e.getDeletedAt() != null ? e.getDeletedAt().toString() : null);
 
-        if (e.getApiKeyId() != null) {
+        if (e.getIntegrationId() != null) {
+            apiKeyRepository.findById(e.getIntegrationId())
+                    .ifPresent(ak -> dto.setApiKeyName(ak.getName()));
+            dto.setType("EMBED");
+        } else if (e.getApiKeyId() != null) {
             apiKeyRepository.findById(e.getApiKeyId())
                     .ifPresent(ak -> dto.setApiKeyName(ak.getName()));
             dto.setType("API_KEY");
@@ -191,7 +195,10 @@ public class AdminConversationController {
         dto.setLastProviderCode(e.getLastProviderCode());
         dto.setLastModeKey(e.getLastModeKey());
         dto.setApiKeyId(e.getApiKeyId());
-        if (e.getApiKeyId() != null) {
+        if (e.getIntegrationId() != null) {
+            dto.setApiKeyName(apiKeyNameMap.get(e.getIntegrationId()));
+            dto.setType("EMBED");
+        } else if (e.getApiKeyId() != null) {
             dto.setApiKeyName(apiKeyNameMap.get(e.getApiKeyId()));
             dto.setType("API_KEY");
         } else {

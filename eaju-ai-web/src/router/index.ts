@@ -47,6 +47,13 @@ const router = createRouter({
       path: '/settings',
       redirect: '/settings/llm',
     },
+    {
+      // 嵌入网站路由：通过 ?iid=&uid=&ts=&sign= 参数完成 SSO 后展示聊天界面
+      path: '/embed',
+      name: 'embed',
+      component: () => import('@/views/EmbedView.vue'),
+      meta: { embed: true },
+    },
   ],
 })
 

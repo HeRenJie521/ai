@@ -35,18 +35,21 @@ public class ChatController {
     @PostMapping("/chat")
     public Object chat(@Valid @RequestBody ChatRequestDto request, Authentication authentication) {
         applyPrincipal(request, authentication);
-        // API Key 鉴权：sessionId 未传时自动生成 UUID，确保每次对话都落库
-        if (CallerPrincipal.apiKeyId(authentication) != null
+        // API Key / 嵌入集成鉴权：sessionId 未传时自动生成 UUID，确保每次对话都落库
+        if ((CallerPrincipal.apiKeyId(authentication) != null || CallerPrincipal.integrationId(authentication) != null)
                 && !StringUtils.hasText(request.getSessionId())) {
             request.setSessionId(UUID.randomUUID().toString());
         }
         String uid = CallerPrincipal.userId(authentication);
         Long apiKeyId = CallerPrincipal.apiKeyId(authentication);
+        Long integrationId = CallerPrincipal.integrationId(authentication);
         request.setInternalApiKeyId(apiKeyId);
+        request.setInternalIntegrationId(integrationId);
         if (StringUtils.hasText(uid) && StringUtils.hasText(request.getSessionId())) {
             chatConversationService.touchOnChatStart(
                     uid,
                     apiKeyId,
+                    integrationId,
                     request.getSessionId(),
                     request.getMessages(),
                     request.getProvider(),

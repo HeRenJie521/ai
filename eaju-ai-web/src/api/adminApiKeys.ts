@@ -1,16 +1,32 @@
 import http from './http'
 import type { ChatMessage, ConversationItem } from './conversations'
 
+/** 集成类型：1=API_KEY  2=WEB_EMBED */
+export type IntegrationType = 1 | 2
+
 export interface ApiKeyRow {
   id: number
   name: string
   secretPrefix: string
   enabled: boolean
   createdAt: string | null
+  /** 1=API_KEY  2=WEB_EMBED */
+  type: IntegrationType
+  defaultModel: string | null
 }
 
 export interface ApiKeyCreated extends ApiKeyRow {
-  plainSecret: string
+  /** 仅创建时返回完整凭证（API_KEY 或 WEB_EMBED），请立即保存 */
+  plainSecret: string | null
+}
+
+export interface CreateIntegrationPayload {
+  name: string
+  type: IntegrationType
+  /** WEB_EMBED 时必填 */
+  defaultModel?: string
+  /** WEB_EMBED 允许的来源域名（可选） */
+  allowedOrigins?: string
 }
 
 export async function adminListApiKeys(): Promise<ApiKeyRow[]> {
@@ -18,8 +34,8 @@ export async function adminListApiKeys(): Promise<ApiKeyRow[]> {
   return data
 }
 
-export async function adminCreateApiKey(name: string): Promise<ApiKeyCreated> {
-  const { data } = await http.post<ApiKeyCreated>('/api/admin/api-keys', { name })
+export async function adminCreateApiKey(payload: CreateIntegrationPayload): Promise<ApiKeyCreated> {
+  const { data } = await http.post<ApiKeyCreated>('/api/admin/api-keys', payload)
   return data
 }
 
@@ -44,6 +60,7 @@ export interface ModelUsageRow {
 export interface RecentTurnRow {
   id: number
   sessionId: string
+  userId: string | null
   provider: string
   model: string
   promptTokens: number | null

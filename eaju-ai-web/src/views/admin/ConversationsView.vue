@@ -46,6 +46,10 @@ const detailLoading = ref(false)
 const detailData = ref<ConversationDetail | null>(null)
 const messages = ref<{ role: string; content: string; reasoningContent?: string; createdAt?: string }[]>([])
 
+function integrationTypeLabel(type: ApiKeyRow['type']): string {
+  return type === 2 ? '嵌入网站' : 'API Key'
+}
+
 onMounted(async () => {
   await loadApiKeys()
   await loadData()
@@ -120,20 +124,23 @@ const columns = [
   {
     title: '用户',
     key: 'userId',
-    width: 120,
+    width: 160,
+    align: 'center' as const,
   },
   {
     title: '会话标题',
     key: 'title',
+    width: 240,
     ellipsis: { tooltip: true },
   },
   {
     title: '会话类型',
     key: 'type',
     width: 100,
+    align: 'center' as const,
     render: (row: ConversationAdminRow) => {
-      const tagType = row.type === 'API_KEY' ? 'warning' : 'success'
-      const label = row.type === 'API_KEY' ? 'API Key' : 'Chat'
+      const tagType = row.type === 'API_KEY' ? 'warning' : row.type === 'EMBED' ? 'info' : 'success'
+      const label = row.type === 'API_KEY' ? 'API Key' : row.type === 'EMBED' ? '嵌入网站' : 'Chat'
       return h(NTag, { type: tagType, size: 'small' }, { default: () => label })
     },
   },
@@ -141,6 +148,7 @@ const columns = [
     title: '模型',
     key: 'lastModeKey',
     width: 150,
+    align: 'center' as const,
     ellipsis: { tooltip: true },
   },
   {
@@ -153,13 +161,14 @@ const columns = [
     title: 'Token',
     key: 'totalTokens',
     width: 80,
-    align: 'right' as const,
+    align: 'center' as const,
     render: (row: ConversationAdminRow) => formatTokens(row.totalTokens),
   },
   {
     title: '状态',
     key: 'deletedAt',
     width: 80,
+    align: 'center' as const,
     render: (row: ConversationAdminRow) =>
       row.deletedAt ? '已删除' : '正常',
   },
@@ -167,6 +176,7 @@ const columns = [
     title: '最后消息',
     key: 'lastMessageAt',
     width: 180,
+    align: 'center' as const,
     render: (row: ConversationAdminRow) =>
       row.lastMessageAt ? row.lastMessageAt.replace('T', ' ').slice(0, 19) : '-',
   },
@@ -174,6 +184,7 @@ const columns = [
     title: '操作',
     key: 'actions',
     width: 100,
+    align: 'center' as const,
     render: (row: ConversationAdminRow) =>
       h(
         NButton,
@@ -201,7 +212,7 @@ const columns = [
           />
           <n-select
             v-model:value="queryApiKeyId"
-            :options="apiKeys.map(k => ({ label: k.name, value: k.id }))"
+            :options="apiKeys.map(k => ({ label: `${k.name}（${integrationTypeLabel(k.type)}）`, value: k.id }))"
             placeholder="按 API Key 筛选"
             clearable
             style="width: 180px"

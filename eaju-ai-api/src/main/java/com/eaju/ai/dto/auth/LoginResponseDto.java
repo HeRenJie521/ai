@@ -68,4 +68,15 @@ public class LoginResponseDto {
     public void setAdmin(boolean admin) {
         this.admin = admin;
     }
+
+    /** WEB_EMBED 登录时携带，用于前端聊天页默认选中该模型；普通登录为 null */
+    private String defaultModel;
+
+    public String getDefaultModel() {
+        return defaultModel;
+    }
+
+    public void setDefaultModel(String defaultModel) {
+        this.defaultModel = defaultModel;
+    }
 }

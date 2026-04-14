@@ -38,4 +38,22 @@ public interface ChatTurnRepository extends JpaRepository<ChatTurnEntity, Long> 
     /** 按会话统计各模型用量 */
     @Query("SELECT t.model, COUNT(t), COALESCE(SUM(t.promptTokens), 0), COALESCE(SUM(t.completionTokens), 0), COALESCE(SUM(t.totalTokens), 0) FROM ChatTurnEntity t WHERE t.sessionId = :sessionId GROUP BY t.model")
     List<Object[]> aggregateBySessionId(@Param("sessionId") String sessionId);
+
+    // ---- WEB_EMBED 集成维度统计 ----
+
+    long countByIntegrationId(Long integrationId);
+
+    @Query("SELECT COALESCE(SUM(t.promptTokens), 0) FROM ChatTurnEntity t WHERE t.integrationId = :iid")
+    long sumPromptTokensByIntegrationId(@Param("iid") Long integrationId);
+
+    @Query("SELECT COALESCE(SUM(t.completionTokens), 0) FROM ChatTurnEntity t WHERE t.integrationId = :iid")
+    long sumCompletionTokensByIntegrationId(@Param("iid") Long integrationId);
+
+    @Query("SELECT COALESCE(SUM(t.totalTokens), 0) FROM ChatTurnEntity t WHERE t.integrationId = :iid")
+    long sumTotalTokensByIntegrationId(@Param("iid") Long integrationId);
+
+    @Query("SELECT t.model, COUNT(t), COALESCE(SUM(t.totalTokens), 0) FROM ChatTurnEntity t WHERE t.integrationId = :iid GROUP BY t.model")
+    List<Object[]> aggregateByModelForIntegration(@Param("iid") Long integrationId);
+
+    List<ChatTurnEntity> findTop50ByIntegrationIdOrderByCreatedAtDesc(Long integrationId);
 }

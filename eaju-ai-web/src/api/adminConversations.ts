@@ -15,7 +15,7 @@ export interface ConversationAdminRow {
   deletedAt: string | null
   turnCount: number
   totalTokens: number
-  type: 'CHAT' | 'API_KEY'
+  type: 'CHAT' | 'API_KEY' | 'EMBED'
 }
 
 export interface ConversationDetail {
@@ -35,7 +35,7 @@ export interface ConversationDetail {
     totalTokens: number
   } | null
   byModel: ModelUsage[]
-  type: 'CHAT' | 'API_KEY'
+  type: 'CHAT' | 'API_KEY' | 'EMBED'
 }
 
 export interface ModelUsage {

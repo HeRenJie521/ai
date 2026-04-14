@@ -20,6 +20,16 @@ export interface StreamDelta {
   reasoning?: string
 }
 
+function waitForPaint(): Promise<void> {
+  return new Promise((resolve) => {
+    if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
+      window.requestAnimationFrame(() => resolve())
+      return
+    }
+    window.setTimeout(resolve, 0)
+  })
+}
+
 function parseSseBlock(block: string): { event: string; data: string } | null {
   let event = 'message'
   const dataLines: string[] = []
@@ -52,9 +62,9 @@ export interface ChatStreamOptions {
 export async function chatStreamFetch(
   token: string,
   body: ChatRequestBody,
-  onDelta: (delta: StreamDelta) => void,
-  onDone: () => void,
-  onError: (e: Error) => void,
+  onDelta: (delta: StreamDelta) => void | Promise<void>,
+  onDone: () => void | Promise<void>,
+  onError: (e: Error) => void | Promise<void>,
   options?: ChatStreamOptions,
 ): Promise<void> {
   const signal = options?.signal
@@ -75,17 +85,17 @@ export async function chatStreamFetch(
       await options?.onAbort?.()
       return
     }
-    onError(e instanceof Error ? e : new Error(String(e)))
+    await onError(e instanceof Error ? e : new Error(String(e)))
     return
   }
   if (!res.ok) {
     const t = await res.text()
-    onError(new Error(t || `HTTP ${res.status}`))
+    await onError(new Error(t || `HTTP ${res.status}`))
     return
   }
   const reader = res.body?.getReader()
   if (!reader) {
-    onError(new Error('无响应流'))
+    await onError(new Error('无响应流'))
     return
   }
   const onSigAbort = () => {
@@ -114,7 +124,7 @@ export async function chatStreamFetch(
         const parsed = parseSseBlock(block)
         if (parsed) {
           if (parsed.event === 'done' || parsed.data === '[DONE]') {
-            onDone()
+            await onDone()
             return
           }
           if (parsed.event === 'chunk' && parsed.data) {
@@ -139,7 +149,8 @@ export async function chatStreamFetch(
                   ? delta.reasoning_content
                   : undefined
               if (content || reasoning) {
-                onDelta({ content, reasoning })
+                await onDelta({ content, reasoning })
+                await waitForPaint()
               }
             } catch {
               /* ignore */
@@ -149,13 +160,13 @@ export async function chatStreamFetch(
         sep = carry.indexOf('\n\n')
       }
     }
-    onDone()
+    await onDone()
   } catch (e) {
     if (isAbortError(e) || signal?.aborted) {
       await options?.onAbort?.()
       return
     }
-    onError(e instanceof Error ? e : new Error(String(e)))
+    await onError(e instanceof Error ? e : new Error(String(e)))
   } finally {
     if (signal) {
       signal.removeEventListener('abort', onSigAbort)
@@ -175,4 +186,3 @@ export async function chatBlock(body: ChatRequestBody): Promise<ChatBlockRespons
   const { data } = await http.post<ChatBlockResponse>('/api/chat', { ...body, stream: false })
   return data
 }
-

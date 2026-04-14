@@ -41,7 +41,8 @@ public class SecurityConfig {
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http.csrf().disable();
         http.cors().configurationSource(corsConfigurationSource());
-        http.headers().frameOptions().sameOrigin();
+        // 允许 /embed 路由被第三方页面以 iframe 嵌入（前端 EmbedView 路由）
+        http.headers().frameOptions().disable();
         http.sessionManagement().sessionCreationPolicy(SessionCreationPolicy.STATELESS);
         http.exceptionHandling()
                 .authenticationEntryPoint(jwtAuthEntryPoint)
@@ -49,6 +50,8 @@ public class SecurityConfig {
         http.authorizeRequests()
                 .antMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                 .antMatchers("/api/auth/login").permitAll()
+                // 嵌入网站免密 SSO 登录（由 HMAC 签名保障安全，无需 JWT）
+                .antMatchers("/api/embed/login").permitAll()
                 .antMatchers("/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs", "/v3/api-docs/**")
                 .permitAll()
                 // 大模型提供方配置：已登录用户均可维护（其余 /api/admin/** 仍仅管理员）

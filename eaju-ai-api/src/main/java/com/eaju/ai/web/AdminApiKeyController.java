@@ -54,7 +54,8 @@ public class AdminApiKeyController {
 
     @PostMapping
     public ApiKeyCreateResponseDto create(@Valid @RequestBody ApiKeyCreateRequestDto body) {
-        ApiKeyService.CreatedApiKey created = apiKeyService.create(body.getName());
+        ApiKeyService.CreatedApiKey created = apiKeyService.create(
+                body.getName(), body.getType(), body.getDefaultModel(), body.getAllowedOrigins());
         ApiKeyEntity e = created.getEntity();
         ApiKeyCreateResponseDto dto = new ApiKeyCreateResponseDto();
         copyToRow(e, dto);
@@ -108,5 +109,7 @@ public class AdminApiKeyController {
         dto.setSecretPrefix(e.getSecretPrefix());
         dto.setEnabled(e.isEnabled());
         dto.setCreatedAt(e.getCreatedAt() != null ? e.getCreatedAt().toString() : null);
+        dto.setType(e.getType());
+        dto.setDefaultModel(e.getDefaultModel());
     }
 }

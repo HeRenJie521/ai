@@ -168,6 +168,12 @@ public class ChatConversationService {
     @Transactional
     public void touchOnChatStart(String userId, Long apiKeyId, String sessionId, List<ChatMessageDto> messages,
                                  String providerCode, String modeKey) {
+        touchOnChatStart(userId, apiKeyId, null, sessionId, messages, providerCode, modeKey);
+    }
+
+    @Transactional
+    public void touchOnChatStart(String userId, Long apiKeyId, Long integrationId, String sessionId,
+                                 List<ChatMessageDto> messages, String providerCode, String modeKey) {
         if (!StringUtils.hasText(userId) || !StringUtils.hasText(sessionId)) {
             return;
         }
@@ -180,6 +186,9 @@ public class ChatConversationService {
             e.setLastMessageAt(Instant.now());
             if (apiKeyId != null) {
                 e.setApiKeyId(apiKeyId);
+            }
+            if (integrationId != null) {
+                e.setIntegrationId(integrationId);
             }
             if (("新对话".equals(e.getTitle()) || !StringUtils.hasText(e.getTitle())) && StringUtils.hasText(titleHint)) {
                 e.setTitle(titleHint);
@@ -194,6 +203,9 @@ public class ChatConversationService {
             n.setLastMessageAt(Instant.now());
             if (apiKeyId != null) {
                 n.setApiKeyId(apiKeyId);
+            }
+            if (integrationId != null) {
+                n.setIntegrationId(integrationId);
             }
             applyLastModelChoice(n, providerCode, modeKey);
             conversationRepository.save(n);

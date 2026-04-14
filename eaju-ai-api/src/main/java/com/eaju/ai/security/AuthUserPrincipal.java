@@ -20,13 +20,23 @@ public class AuthUserPrincipal implements UserDetails {
     private final boolean enabled;
     /** JWT jti，与 {@link com.eaju.ai.service.LoginSessionCacheService} 键一致 */
     private final String jti;
+    /**
+     * WEB_EMBED 免密登录时携带，表示通过哪个集成登录；普通 JWT 登录为 null。
+     * 写入 chat_turn.integration_id / chat_conversation.integration_id 以供统计。
+     */
+    private final Long integrationId;
 
     public AuthUserPrincipal(String phone, String displayName, boolean admin, boolean enabled, String jti) {
+        this(phone, displayName, admin, enabled, jti, null);
+    }
+
+    public AuthUserPrincipal(String phone, String displayName, boolean admin, boolean enabled, String jti, Long integrationId) {
         this.phone = phone != null ? phone.trim() : "";
         this.displayName = displayName != null ? displayName : this.phone;
         this.admin = admin;
         this.enabled = enabled;
         this.jti = jti != null ? jti : "";
+        this.integrationId = integrationId;
     }
 
     public String getPhone() {
@@ -83,6 +93,11 @@ public class AuthUserPrincipal implements UserDetails {
     @Override
     public boolean isEnabled() {
         return enabled;
+    }
+
+    /** 会话是否带 jti（旧 token 无 jti 时仅校验 JWT，不查 Redis） */
+    public Long getIntegrationId() {
+        return integrationId;
     }
 
     /** 会话是否带 jti（旧 token 无 jti 时仅校验 JWT，不查 Redis） */
