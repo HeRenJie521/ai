@@ -176,25 +176,26 @@ const createdIntegrationId = ref<number | null>(null)
 const embedCodePc = computed(() => {
   const id = createdIntegrationId.value
   if (!id) return ''
+  const token = secretModal.value || '{凭证}'
   return `<iframe
-  src="${embedBaseUrl.value}?iid=${id}&uid={用户手机号}&token={嵌入凭证}"
+  src="${embedBaseUrl.value}?iid=${id}&uid={手机号}&token=${token}"
   width="100%"
-  height="700px"
-  style="border:none; border-radius:12px; box-shadow:0 4px 24px rgba(0,0,0,.1);"
-  allow="clipboard-write"
-></iframe>`
+  height="100%"
+  style="height: 100vh; border:none; border-radius:12px; box-shadow:0 4px 24px rgba(0,0,0,.1);"
+  allow="clipboard-write">
+</iframe>`
 })
 
 const embedCodeMobile = computed(() => {
   const id = createdIntegrationId.value
   if (!id) return ''
+  const token = secretModal.value || '{凭证}'
   return `<iframe
-  src="${embedBaseUrl.value}?iid=${id}&uid={用户手机号}&token={嵌入凭证}"
+  src="${embedBaseUrl.value}?iid=${id}&uid={手机号}&token=${token}"
   width="100%"
-  height="100svh"
-  style="border:none; display:block;"
-  allow="clipboard-write"
-></iframe>`
+  style="height: 100svh; border:none; display:block;"
+  allow="clipboard-write">
+</iframe>`
 })
 
 async function copyText(text: string) {
@@ -344,20 +345,24 @@ const columns: DataTableColumns<ApiKeyRow> = [
   {
     title: '凭证',
     key: 'credential',
-    minWidth: 200,
+    width: 320,
     render: (r) => {
-      // API Key / WEB_EMBED：均展示 secretPrefix（前20位）
       const text = r.secretPrefix ?? '—'
 
       if (text === '—') return h('span', { style: 'color:#bbb' }, '—')
 
-      return h('span', { class: 'credential-cell' }, [
-        h('span', { class: 'credential-text', title: text }, text),
+      // 隐藏中间部分，只显示前8位和后4位
+      const maskedText = text.length > 12 ? `${text.slice(0, 8)}••••••••${text.slice(-4)}` : text
+
+      return h('div', { class: 'credential-cell' }, [
+        h('span', { class: 'credential-text', title: text }, maskedText),
         h(
-          'button',
+          NButton,
           {
-            class: 'copy-icon-btn',
-            title: '复制',
+            size: 'small',
+            type: 'primary',
+            ghost: true,
+            style: 'margin-left: 12px; flex-shrink: 0;',
             onClick: (e: MouseEvent) => {
               e.stopPropagation()
               void navigator.clipboard.writeText(text).then(
@@ -366,16 +371,7 @@ const columns: DataTableColumns<ApiKeyRow> = [
               )
             },
           },
-          [
-            h(
-              'svg',
-              { width: 14, height: 14, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': '2' },
-              [
-                h('rect', { x: '9', y: '9', width: '13', height: '13', rx: '2', ry: '2' }),
-                h('path', { d: 'M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1' }),
-              ],
-            ),
-          ],
+          { default: () => '复制' },
         ),
       ])
     },
@@ -593,32 +589,12 @@ function turnColumns(keyId: number): DataTableColumns<RecentTurnRow> {
     style="width: min(680px, 96vw)"
     :on-after-leave="closeSecretReveal"
   >
-    <n-tabs type="line" animated>
-      <!-- Tab 1: 嵌入密钥 -->
-      <n-tab-pane name="token" tab="嵌入密钥">
-        <template v-if="secretModal">
-          <n-input
-            type="textarea"
-            :value="secretModal"
-            readonly
-            :autosize="{ minRows: 2, maxRows: 4 }"
-            style="font-family: monospace"
-          />
-          <n-space style="margin-top: 8px">
-            <n-button type="primary" @click="void copyText(secretModal)">复制嵌入密钥</n-button>
-          </n-space>
-        </template>
-        <template v-else>
-          <div class="token-hidden-tip">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-              <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
-            </svg>
-            <span>嵌入密钥仅在创建时显示一次，若已遗失请删除后重新创建。</span>
-          </div>
-        </template>
-      </n-tab-pane>
+    <n-alert type="info" :bordered="false" style="margin-bottom: 16px">
+      请将下方代码复制到目标网页中，并将 <code>{手机号}</code> 替换为实际用户手机号。
+    </n-alert>
 
-      <!-- Tab 2: PC 端代码 -->
+    <n-tabs type="line" animated>
+      <!-- Tab 1: PC 端代码 -->
       <n-tab-pane name="pc" tab="PC 端">
         <n-input
           type="textarea"
@@ -628,11 +604,11 @@ function turnColumns(keyId: number): DataTableColumns<RecentTurnRow> {
           style="font-family: monospace; font-size: 12px"
         />
         <n-space style="margin-top: 8px">
-          <n-button @click="void copyText(embedCodePc)">复制</n-button>
+          <n-button type="primary" @click="void copyText(embedCodePc)">复制</n-button>
         </n-space>
       </n-tab-pane>
 
-      <!-- Tab 3: 移动端代码 -->
+      <!-- Tab 2: 移动端代码 -->
       <n-tab-pane name="mobile" tab="移动端">
         <n-input
           type="textarea"
@@ -642,7 +618,7 @@ function turnColumns(keyId: number): DataTableColumns<RecentTurnRow> {
           style="font-family: monospace; font-size: 12px"
         />
         <n-space style="margin-top: 8px">
-          <n-button @click="void copyText(embedCodeMobile)">复制</n-button>
+          <n-button type="primary" @click="void copyText(embedCodeMobile)">复制</n-button>
         </n-space>
       </n-tab-pane>
     </n-tabs>
@@ -746,41 +722,23 @@ function turnColumns(keyId: number): DataTableColumns<RecentTurnRow> {
   border-radius: 12px;
 }
 
-/* 凭证列：文本 + 复制图标 */
+/* 凭证列：文本 + 复制按钮 */
 .credential-cell {
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  gap: 10px;
-  max-width: 100%;
+  gap: 12px;
+  width: 100%;
 }
 .credential-text {
-  font-family: ui-monospace, 'Cascadia Code', monospace;
-  font-size: 12px;
+  font-family: ui-monospace, 'Cascadia Code', 'SF Mono', Consolas, monospace;
+  font-size: 13px;
   color: #374151;
+  letter-spacing: 0.5px;
+  flex: 1;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  max-width: calc(100% - 34px);
-}
-.copy-icon-btn {
-  flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 26px;
-  height: 26px;
-  padding: 0;
-  border: 1px solid #e5e7eb;
-  background: #f9fafb;
-  color: #6b7280;
-  cursor: pointer;
-  border-radius: 6px;
-  transition: color 0.15s, background 0.15s, border-color 0.15s;
-}
-.copy-icon-btn:hover {
-  color: #2563eb;
-  background: #eff6ff;
-  border-color: #bfdbfe;
 }
 
 /* 密钥不可见提示 */

@@ -69,8 +69,7 @@ public class ApiKeyService {
             // WEB_EMBED：emb_ + 27 hex chars = 32 位固定长度，与 API_KEY 格式对齐
             String plain = "emb_" + randomHex(14).substring(0, 28);
             e.setSecretHash(sha256Hex(plain));
-            String prefix = plain.length() <= 20 ? plain : plain.substring(0, 20);
-            e.setSecretPrefix(prefix);
+            e.setSecretPrefix(plain);
             e.setDefaultModel(defaultModel.trim());
             if (StringUtils.hasText(allowedOrigins)) {
                 e.setAllowedOrigins(allowedOrigins.trim());
@@ -81,8 +80,7 @@ public class ApiKeyService {
             // API_KEY：PREFIX(5) + 27 hex chars = 32 位固定长度
             String plain = PREFIX + randomHex(14).substring(0, 27);
             e.setSecretHash(sha256Hex(plain));
-            String prefix = plain.length() <= 20 ? plain : plain.substring(0, 20);
-            e.setSecretPrefix(prefix);
+            e.setSecretPrefix(plain);
             apiKeyRepository.save(e);
             return new CreatedApiKey(e, plain, null);
         }

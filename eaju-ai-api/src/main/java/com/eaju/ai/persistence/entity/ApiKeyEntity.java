@@ -24,7 +24,7 @@ public class ApiKeyEntity {
     @Column(name = "secret_hash", nullable = false, length = 64)
     private String secretHash;
 
-    @Column(name = "secret_prefix", nullable = false, length = 24)
+    @Column(name = "secret_prefix", nullable = false, length = 64)
     private String secretPrefix;
 
     @Column(nullable = false)

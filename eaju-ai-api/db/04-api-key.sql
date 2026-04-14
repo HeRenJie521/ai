@@ -3,7 +3,7 @@ CREATE TABLE IF NOT EXISTS api_key (
     id              BIGSERIAL PRIMARY KEY,
     name            VARCHAR(128) NOT NULL,
     secret_hash     VARCHAR(64)  NOT NULL,
-    secret_prefix   VARCHAR(24)  NOT NULL,
+    secret_prefix   VARCHAR(32)  NOT NULL,
     enabled         BOOLEAN      NOT NULL DEFAULT TRUE,
     created_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
     updated_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW()
