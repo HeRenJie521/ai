@@ -1,0 +1,15 @@
+# mode 键与上游 model 名称一致，便于请求里直接传官方名
+ai:
+  deepseek:
+    api-key: ${DEEPSEEK_API_KEY:sk-9e74456ca6f84917bcce36bd48e3bdfd}
+    base-url: https://api.deepseek.com/v1
+    default-mode: deepseek-chat
+    modes:
+      deepseek-chat: deepseek-chat
+      deepseek-reasoner: deepseek-reasoner
+    inference-defaults:
+      temperature: 0.7
+      max-tokens: 4096
+      top-p: 0.95
+      response-format: TEXT
+      thinking-mode: false

@@ -1,0 +1,254 @@
+### 变量：服务地址（按需修改端口）
+@baseUrl = http://localhost:8080
+### 登录后把 JWT 填到下面（管理端 / 聊天接口需要）
+@token = 替换为登录返回的 token
+### API Key（通过管理后台生成，header 名为 X-API-Key）
+@apiKey = eaju_5355181d9d6a76dd49b4cc2330e
+
+### 登录（获取 token）
+POST {{baseUrl}}/api/auth/login
+Content-Type: application/json
+
+{
+  "phone": "13121656267",
+  "password": "你的明文密码"
+}
+
+### 登出（清除服务端 Redis 登录会话 + 前端应清 localStorage）
+POST {{baseUrl}}/api/auth/logout
+Authorization: Bearer {{token}}
+
+### 入参说明（阻塞 / 流式）
+### - 阻塞式：不传 stream，或 "stream": false → 响应为 application/json（一次性 ChatResponseDto）
+### - 流式：  "stream": true → 响应为 text/event-stream（SSE，event: chunk / done）
+### - 流式时控制台会出现很多行：上游每生成一小段 token 就推一条 chunk，属正常现象，不是重复调用
+### - 若 chunk 里中文在控制台显示成乱码，多为 HTTP 客户端未按 UTF-8 解码；换 curl -N、浏览器或确认 IDE 编码为 UTF-8
+### - provider：与表 llm_provider_config.code 一致（大小写不敏感），配置在库中而非 yaml
+### - 多轮会话：传 sessionId 时从 Redis 读历史并拼在 messages 前；阻塞成功后写回 Redis，并写入 PostgreSQL（chat_turn）
+### - 重要：stream:true 走 SSE，当前实现不写 PostgreSQL；要落库请用 stream:false 或不传 stream
+### - 流式 + sessionId：仍会拼接历史发给模型，但不会在流结束后更新 Redis / 落库
+
+### DeepSeek：阻塞 + mode（需 Authorization: Bearer {{token}}）
+POST {{baseUrl}}/api/chat
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "provider": "DEEPSEEK",
+  "mode": "deepseek-chat",
+  "stream": false,
+  "messages": [
+    { "role": "user", "content": "用一句话介绍 Spring Boot。" }
+  ],
+  "temperature": 0.7,
+  "maxTokens": 512
+}
+
+### Qwen：阻塞
+POST {{baseUrl}}/api/chat
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "provider": "QWEN",
+  "mode": "qwen3.6-plus",
+  "stream": false,
+  "messages": [
+    { "role": "user", "content": "你好" }
+  ]
+}
+
+### DeepSeek：阻塞 + 多轮（sessionId / userId，需 Redis + PostgreSQL 已启动）
+POST {{baseUrl}}/api/chat
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "provider": "DEEPSEEK",
+  "mode": "deepseek-chat",
+  "stream": false,
+  "sessionId": "demo-session-001",
+  "userId": "user-10001",
+  "messages": [
+    { "role": "user", "content": "我叫小明，请记住。" }
+  ]
+}
+
+### DeepSeek：阻塞 + 思考模式
+POST {{baseUrl}}/api/chat
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "provider": "DEEPSEEK",
+  "mode": "deepseek-chat",
+  "stream": false,
+  "thinkingMode": true,
+  "messages": [
+    { "role": "user", "content": "9.11 和 9.8 哪个大？简要说明。" }
+  ]
+}
+
+### Kimi：阻塞
+POST {{baseUrl}}/api/chat
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "provider": "KIMI",
+  "mode": "kimi-k2.5",
+  "stream": false,
+  "messages": [
+    { "role": "user", "content": "你好" }
+  ]
+}
+
+### 百度千帆：阻塞
+POST {{baseUrl}}/api/chat
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "provider": "QIANFAN",
+  "mode": "ernie-4.0-turbo-128k",
+  "stream": false,
+  "messages": [
+    { "role": "user", "content": "你好" }
+  ]
+}
+
+### Google Gemini：阻塞
+POST {{baseUrl}}/api/chat
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "provider": "GEMINI",
+  "mode": "gemini-3-flash-preview",
+  "stream": false,
+  "messages": [
+    { "role": "user", "content": "你好" }
+  ]
+}
+
+### 直传上游 model：阻塞
+POST {{baseUrl}}/api/chat
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "provider": "DEEPSEEK",
+  "model": "deepseek-chat",
+  "stream": false,
+  "messages": [
+    { "role": "user", "content": "1+1=?" }
+  ]
+}
+
+### DeepSeek：流式（SSE，stream=true）
+POST {{baseUrl}}/api/chat
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "provider": "DEEPSEEK",
+  "mode": "deepseek-chat",
+  "stream": true,
+  "messages": [
+    { "role": "user", "content": "用三句话介绍 Spring Boot。" }
+  ]
+}
+
+### Qwen：流式（SSE，stream=true）
+POST {{baseUrl}}/api/chat
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "provider": "QWEN",
+  "mode": "qwen3.6-plus",
+  "stream": true,
+  "messages": [
+    { "role": "user", "content": "流式输出这段介绍：什么是 REST。" }
+  ]
+}
+
+###############################################################
+### 以下为使用 API Key 鉴权的测试用例（X-API-Key header）
+###############################################################
+
+### [API Key] DeepSeek：阻塞式单轮会话
+POST {{baseUrl}}/api/chat
+X-API-Key: {{apiKey}}
+Content-Type: application/json
+
+{
+  "provider": "DEEPSEEK",
+  "mode": "deepseek-chat",
+  "stream": false,
+  "messages": [
+    { "role": "user", "content": "你好，用一句话介绍 DeepSeek。" }
+  ],
+  "temperature": 0.7,
+  "maxTokens": 256
+}
+
+### [API Key] DeepSeek：多轮会话（第一轮）
+POST {{baseUrl}}/api/chat
+X-API-Key: {{apiKey}}
+Content-Type: application/json
+
+{
+  "provider": "DEEPSEEK",
+  "mode": "deepseek-chat",
+  "stream": false,
+  "sessionId": "apikey-session-001",
+  "userId": "apikey-user-001",
+  "messages": [
+    { "role": "user", "content": "我叫小红，请记住我的名字。" }
+  ]
+}
+
+### [API Key] DeepSeek：多轮会话（第二轮，验证上下文）
+POST {{baseUrl}}/api/chat
+X-API-Key: {{apiKey}}
+Content-Type: application/json
+
+{
+  "provider": "DEEPSEEK",
+  "mode": "deepseek-chat",
+  "stream": false,
+  "sessionId": "apikey-session-001",
+  "userId": "apikey-user-001",
+  "messages": [
+    { "role": "user", "content": "我叫什么名字？" }
+  ]
+}
+
+### [API Key] Qwen：阻塞式单轮会话
+POST {{baseUrl}}/api/chat
+X-API-Key: {{apiKey}}
+Content-Type: application/json
+
+{
+  "provider": "QWEN",
+  "mode": "qwen3.6-plus",
+  "stream": false,
+  "messages": [
+    { "role": "user", "content": "用中文简要介绍什么是大语言模型。" }
+  ]
+}
+
+### [API Key] DeepSeek：流式会话（SSE）
+POST {{baseUrl}}/api/chat
+X-API-Key: {{apiKey}}
+Content-Type: application/json
+
+{
+  "provider": "DEEPSEEK",
+  "mode": "deepseek-chat",
+  "stream": true,
+  "messages": [
+    { "role": "user", "content": "请用三句话介绍 Spring Boot。" }
+  ]
+}

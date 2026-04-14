@@ -1,0 +1,23 @@
+# 月之暗面 Kimi：与控制台 model id 完全一致（键值相同）
+ai:
+  kimi:
+    api-key: ${KIMI_API_KEY:sk-PIxyYP7cagxrqt4TEgFJfMZJv1Oz9vkuuel0H0etJR9jYhvd}
+    base-url: https://api.moonshot.cn/v1
+    default-mode: "kimi-k2.5"
+    modes:
+      moonshot-v1-8k: moonshot-v1-8k
+      moonshot-v1-32k: moonshot-v1-32k
+      moonshot-v1-128k: moonshot-v1-128k
+      kimi-k2-0711-preview: kimi-k2-0711-preview
+      kimi-k2-0905-preview: kimi-k2-0905-preview
+      kimi-k2-turbo-preview: kimi-k2-turbo-preview
+      kimi-k2-thinking: kimi-k2-thinking
+      kimi-k2-thinking-turbo: kimi-k2-thinking-turbo
+      "kimi-k2.5": kimi-k2.5
+    inference-defaults:
+      # 部分 Kimi 模型仅接受 temperature=1
+      temperature: 1
+      max-tokens: 4096
+      top-p: 0.95
+      response-format: TEXT
+      thinking-mode: false

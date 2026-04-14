@@ -1,0 +1,49 @@
+server:
+  port: 8080
+  servlet:
+    encoding:
+      charset: UTF-8
+      enabled: true
+      force: true
+
+spring:
+  application:
+    name: eaju-ai-api
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:dev}
+  servlet:
+    multipart:
+      max-file-size: 25MB
+      max-request-size: 30MB
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.security.servlet.UserDetailsServiceAutoConfiguration
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+
+app:
+  auth:
+    # DMS 登录：GET ?method=appUserLogin&data={"phone","password","type"}
+    dms-base-url: ${APP_AUTH_DMS_BASE_URL:http://superapp.51eanj.com:82/eaju_app_service/eajudms/DmsInterface}
+    dms-login-method: ${APP_AUTH_DMS_LOGIN_METHOD:appUserLogin}
+    dms-login-type: ${APP_AUTH_DMS_LOGIN_TYPE:1}
+    # 逗号分隔的手机号，对应用户可访问 /api/admin/**
+    admin-phones: ${APP_AUTH_ADMIN_PHONES:15296711325}
+    # 登录会话在 Redis 中的前缀（值 JSON 含手机号、昵称、DMS 响应摘要等）
+    session-redis-key-prefix: ${APP_AUTH_SESSION_REDIS_PREFIX:auth:session:}
+    # 0 表示与 app.jwt.expiration-hours 相同
+    session-ttl-hours: ${APP_AUTH_SESSION_TTL_HOURS:0}
+  jwt:
+    # 至少 32 字节 UTF-8；生产务必用环境变量覆盖
+    secret: ${APP_JWT_SECRET:dev-jwt-secret-change-me-32bytes-minimum!!}
+    expiration-hours: ${APP_JWT_EXPIRATION_HOURS:168}
+  chat:
+    redis-key-prefix: "chat:session:"
+    redis-session-ttl-hours: 168
+  # 代理上传到 eaju-open（multipart 字段名 file）；可用环境变量覆盖
+  file-upload:
+    proxy-url: ${APP_FILE_UPLOAD_PROXY_URL:https://wx.51eanj.com/eaju-open-api/api/file/upload/file}

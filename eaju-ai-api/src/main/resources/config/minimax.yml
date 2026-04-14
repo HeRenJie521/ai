@@ -1,0 +1,25 @@
+# MiniMax：与控制台 model 名一致（含大小写）；默认与截图勾选一致
+ai:
+  minimax:
+    api-key: ${MINIMAX_API_KEY:sk-api-vONOIR00mDkk0Q_CkKaExOjS4lbVbzHZJNVk4pNPiMGvFVODcPYLw9a-Dq8Z4Q44ZCquHtv8AQZPUVCv5AzmC7vEDRim9DH--dfjzmYXFy8hzBN3upfGRwc}
+    base-url: https://api.minimax.io/v1
+    default-mode: "MiniMax-M2.7"
+    modes:
+      "Abab6.5t-Chat": "Abab6.5t-Chat"
+      "Abab7-chat-preview": "Abab7-chat-preview"
+      "MiniMax-M1": "MiniMax-M1"
+      "MiniMax-M2-Her": "MiniMax-M2-Her"
+      "MiniMax-M2.1-Lightning": "MiniMax-M2.1-Lightning"
+      "MiniMax-M2.1": "MiniMax-M2.1"
+      "MiniMax-M2.5-Lightning": "MiniMax-M2.5-Lightning"
+      "MiniMax-M2.5": "MiniMax-M2.5"
+      "MiniMax-M2.7-highspeed": "MiniMax-M2.7-highspeed"
+      "MiniMax-M2.7": "MiniMax-M2.7"
+      "MiniMax-M2": "MiniMax-M2"
+      "Minimax-Text-01": "Minimax-Text-01"
+    inference-defaults:
+      temperature: 0.7
+      max-tokens: 4096
+      top-p: 0.95
+      response-format: TEXT
+      thinking-mode: false

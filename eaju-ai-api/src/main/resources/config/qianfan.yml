@@ -1,0 +1,20 @@
+# 百度千帆：与控制台 model 名一致（键值相同）；默认与截图勾选一致
+ai:
+  qianfan:
+    api-key: ${QIANFAN_API_KEY:bce-v3/ALTAK-sDbxb5qH7A335EfISGG2D/0e0b9e86eb52ab7bf023687b4aaf99539ad55da5}
+    base-url: https://qianfan.baidubce.com/v2
+    default-mode: "ernie-4.0-turbo-128k"
+    modes:
+      "ernie-3.5-128k": ernie-3.5-128k
+      "ernie-4.0-turbo-128k": ernie-4.0-turbo-128k
+      "ernie-4.5-turbo-128k": ernie-4.5-turbo-128k
+      "ernie-4.5-turbo-32k": ernie-4.5-turbo-32k
+      "ernie-lite-pro-128k": ernie-lite-pro-128k
+      "ernie-speed-pro-128k": ernie-speed-pro-128k
+      "ernie-x1-turbo-32k": ernie-x1-turbo-32k
+    inference-defaults:
+      temperature: 0.7
+      max-tokens: 4096
+      top-p: 0.95
+      response-format: TEXT
+      thinking-mode: false
