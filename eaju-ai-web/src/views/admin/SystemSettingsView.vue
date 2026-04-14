@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import {
   NAvatar,
@@ -45,19 +45,17 @@ const route = useRoute()
 const message = useMessage()
 const auth = useAuthStore()
 
-// 当前显示的页面
-const currentPage = ref<'llm' | 'conversations' | 'api-keys'>('llm')
-
-// 监听路由变化
-watch(() => route.query.tab, (tab) => {
-  if (tab === 'conversations') {
-    currentPage.value = 'conversations'
-  } else if (tab === 'api-keys') {
-    currentPage.value = 'api-keys'
+// 根据路由路径确定当前页面
+const currentPage = computed<'llm' | 'conversations' | 'api-keys'>(() => {
+  const path = route.path
+  if (path === '/settings/conversations') {
+    return 'conversations'
+  } else if (path === '/settings/api-keys') {
+    return 'api-keys'
   } else {
-    currentPage.value = 'llm'
+    return 'llm'
   }
-}, { immediate: true })
+})
 
 const rows = ref<LlmAdminRow[]>([])
 const loading = ref(false)
@@ -520,7 +518,7 @@ function back() {
 }
 
 function goTo(page: 'llm' | 'conversations' | 'api-keys') {
-  router.push({ path: '/settings/llm', query: { tab: page } })
+  router.push(`/settings/${page}`)
 }
 
 function avatarLetter(row: LlmAdminRow): string {

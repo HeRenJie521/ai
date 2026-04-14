@@ -1,18 +1,14 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
 import {
-  NButton,
   NCard,
   NCollapse,
   NCollapseItem,
-  NSpace,
   NTag,
   NText,
   useMessage,
 } from 'naive-ui'
 
-const router = useRouter()
 const message = useMessage()
 
 // ---- /api/chat 数据 ----
@@ -221,10 +217,6 @@ onUnmounted(() => {
   <div class="page">
     <header class="bar">
       <n-text strong class="title">API 文档</n-text>
-      <n-space :size="12" wrap>
-        <n-button @click="router.push('/settings/llm')">系统设置</n-button>
-        <n-button type="primary" @click="router.push('/chat')">返回对话</n-button>
-      </n-space>
     </header>
 
     <div class="doc-layout">

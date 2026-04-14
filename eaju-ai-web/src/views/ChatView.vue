@@ -547,6 +547,17 @@ function stopStreaming() {
   streamAbort.value?.abort()
 }
 
+function onComposerKeydown(event: KeyboardEvent) {
+  if (event.key !== 'Enter' || event.isComposing) {
+    return
+  }
+  if (event.shiftKey || event.ctrlKey || event.metaKey || event.altKey) {
+    return
+  }
+  event.preventDefault()
+  void send()
+}
+
 async function send() {
   const text = input.value.trim()
   if ((!text && !pendingAttachments.value.length) || sending.value) {
@@ -779,11 +790,13 @@ function goSettingsPage(page: 'llm' | 'api-keys' | 'api-docs') {
           <div class="user-foot-main">
             <div class="user-foot-row">
               <n-ellipsis class="user-foot-name" :tooltip="false">{{ auth.username || '用户' }}</n-ellipsis>
+            </div>
+            <span class="api-docs-link" @click="router.push('/settings/api-docs')">API文档</span>
+            <div class="user-foot-menu">
               <n-dropdown trigger="click" :options="userMenuOptions" @select="onUserMenuSelect">
                 <n-button quaternary size="tiny" class="user-foot-more" aria-label="菜单"><template #icon><n-icon :component="SettingsOutline" /></template></n-button>
               </n-dropdown>
             </div>
-            <span class="api-docs-link" @click="router.push('/settings/api-docs')">API文档</span>
           </div>
         </div>
       </div>
@@ -896,11 +909,11 @@ function goSettingsPage(page: 'llm' | 'api-keys' | 'api-docs') {
               v-model:value="input"
               type="textarea"
               :bordered="false"
-              placeholder="输入消息或粘贴截图；有附件时发送会先上传再交给模型"
+              placeholder="输入消息或粘贴截图；Enter 发送，组合键回车换行"
               :autosize="{ minRows: 2, maxRows: 6 }"
               class="composer-textarea"
               @paste="onComposerPaste"
-              @keydown.enter.prevent.exact="send"
+              @keydown="onComposerKeydown"
             />
             <div class="composer-toolbar">
               <div class="composer-toolbar-left composer-model-picks">
@@ -1011,6 +1024,8 @@ function goSettingsPage(page: 'llm' | 'api-keys' | 'api-docs') {
           <div class="user-foot-main">
             <div class="user-foot-row">
               <n-ellipsis class="user-foot-name" :tooltip="false">{{ auth.username || '用户' }}</n-ellipsis>
+            </div>
+            <div class="user-foot-menu">
               <n-dropdown trigger="click" :options="userMenuOptions" @select="onUserMenuSelect">
                 <n-button quaternary size="tiny" class="user-foot-more" aria-label="菜单"><template #icon><n-icon :component="SettingsOutline" /></template></n-button>
               </n-dropdown>
@@ -1118,17 +1133,18 @@ function goSettingsPage(page: 'llm' | 'api-keys' | 'api-docs') {
 .user-foot-main {
   flex: 1;
   min-width: 0;
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 4px;
+  padding-right: 44px;
 }
 .user-foot-row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 6px;
   min-width: 0;
-  height: 24px;
+  min-height: 24px;
 }
 .user-foot-name {
   flex: 1;
@@ -1136,6 +1152,14 @@ function goSettingsPage(page: 'llm' | 'api-keys' | 'api-docs') {
   font-size: 14px;
   font-weight: 500;
   color: #111827;
+}
+.user-foot-menu {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
 }
 .api-docs-link {
   font-size: 13px;
@@ -1148,15 +1172,18 @@ function goSettingsPage(page: 'llm' | 'api-keys' | 'api-docs') {
 }
 .user-foot-more {
   flex-shrink: 0;
-  min-width: 36px;
-  min-height: 36px;
+  min-width: 40px;
+  min-height: 40px;
   padding: 0;
-  font-size: 20px;
+  font-size: 22px;
   line-height: 1;
   color: #6b7280;
   display: flex;
   align-items: center;
   justify-content: center;
+}
+.user-foot-more :deep(.n-icon) {
+  font-size: 24px;
 }
 .user-foot-more:hover {
   color: #111827;
