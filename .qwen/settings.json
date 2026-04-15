@@ -67,7 +67,8 @@
       "Bash(word-break: *)",
       "Bash(.suggestion-empty *)",
       "Bash(text-align: *)",
-      "Bash(psql *)"
+      "Bash(psql *)",
+      "Bash(echo *)"
     ]
   },
   "$version": 3

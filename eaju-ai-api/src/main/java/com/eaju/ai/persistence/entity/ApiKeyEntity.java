@@ -61,6 +61,18 @@ public class ApiKeyEntity {
     @Column(name = "suggestions", columnDefinition = "TEXT")
     private String suggestions;
 
+    /** WEB_EMBED：Agent 角色设定 */
+    @Column(name = "system_role", columnDefinition = "TEXT")
+    private String systemRole;
+
+    /** WEB_EMBED：Agent 任务指令 */
+    @Column(name = "system_task", columnDefinition = "TEXT")
+    private String systemTask;
+
+    /** WEB_EMBED：Agent 限制条件 */
+    @Column(name = "system_constraints", columnDefinition = "TEXT")
+    private String systemConstraints;
+
     @PrePersist
     public void prePersist() {
         Instant n = Instant.now();
@@ -177,6 +189,30 @@ public class ApiKeyEntity {
 
     public void setSuggestions(String suggestions) {
         this.suggestions = suggestions;
+    }
+
+    public String getSystemRole() {
+        return systemRole;
+    }
+
+    public void setSystemRole(String systemRole) {
+        this.systemRole = systemRole;
+    }
+
+    public String getSystemTask() {
+        return systemTask;
+    }
+
+    public void setSystemTask(String systemTask) {
+        this.systemTask = systemTask;
+    }
+
+    public String getSystemConstraints() {
+        return systemConstraints;
+    }
+
+    public void setSystemConstraints(String systemConstraints) {
+        this.systemConstraints = systemConstraints;
     }
 
 }

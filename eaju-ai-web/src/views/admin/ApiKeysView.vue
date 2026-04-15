@@ -90,6 +90,14 @@ const welcomeText = ref('')
 const suggestionItems = ref<string[]>([])
 const newSuggestion = ref('')
 
+// ---- 提示词配置弹窗 ----
+const showPromptConfig = ref(false)
+const promptConfigId = ref<number | null>(null)
+const promptConfigName = ref('')
+const promptRole = ref('')
+const promptTask = ref('')
+const promptConstraints = ref('')
+
 // ---- 用量抽屉 ----
 const usageOpen = ref(false)
 const usageKeyId = ref<number | null>(null)
@@ -269,6 +277,34 @@ async function submitEdit() {
   }
 }
 
+// ---- 提示词配置管理 ----
+function openPromptConfig(r: ApiKeyRow) {
+  promptConfigId.value = r.id
+  promptConfigName.value = r.name
+  promptRole.value = r.systemRole || ''
+  promptTask.value = r.systemTask || ''
+  promptConstraints.value = r.systemConstraints || ''
+  showPromptConfig.value = true
+}
+
+async function savePromptConfig() {
+  const id = promptConfigId.value
+  if (id == null) return
+  try {
+    await adminPatchApiKey(id, {
+      systemRole: promptRole.value,
+      systemTask: promptTask.value,
+      systemConstraints: promptConstraints.value,
+    })
+    message.success('已保存')
+    showPromptConfig.value = false
+    await load()
+  } catch (e: unknown) {
+    const err = e as { response?: { data?: { message?: string } }; message?: string }
+    message.error(err.response?.data?.message || err.message || '保存失败')
+  }
+}
+
 // ---- 开场白配置管理 ----
 function openWelcomeConfig(r: ApiKeyRow) {
   welcomeConfigId.value = r.id
@@ -432,8 +468,8 @@ const columns: DataTableColumns<ApiKeyRow> = [
       // 隐藏中间部分，只显示前8位和后4位
       const maskedText = text.length > 12 ? `${text.slice(0, 8)}••••••••${text.slice(-4)}` : text
 
-      return h('div', { class: 'credential-cell' }, [
-        h('span', { class: 'credential-text', title: text }, maskedText),
+      return h('div', { style: 'display:flex; align-items:center;' }, [
+        h('span', { style: 'font-family:monospace; font-size:13px; white-space:nowrap;', title: text }, maskedText),
         h(
           NButton,
           {
@@ -494,6 +530,13 @@ const columns: DataTableColumns<ApiKeyRow> = [
         ...(r.type === 2
           ? [h(
               NButton,
+              { size: 'small', type: 'warning', ghost: true, onClick: () => openPromptConfig(r) },
+              { default: () => '提示词' },
+            )]
+          : []),
+        ...(r.type === 2
+          ? [h(
+              NButton,
               { size: 'small', type: 'info', ghost: true, onClick: () => openEmbedCode(r) },
               { default: () => '嵌入方式' },
             )]
@@ -512,25 +555,54 @@ const columns: DataTableColumns<ApiKeyRow> = [
   },
 ]
 
-function turnColumns(keyId: number): DataTableColumns<RecentTurnRow> {
+interface SessionGroup {
+  sessionId: string
+  userId: string | null
+  models: string
+  turnCount: number
+  totalTokens: number
+  lastAt: string | null
+}
+
+function groupBySession(turns: RecentTurnRow[]): SessionGroup[] {
+  const map = new Map<string, SessionGroup>()
+  for (const t of turns) {
+    const key = t.sessionId
+    if (!map.has(key)) {
+      map.set(key, {
+        sessionId: key,
+        userId: t.userId,
+        models: t.model,
+        turnCount: 1,
+        totalTokens: t.totalTokens ?? 0,
+        lastAt: t.createdAt,
+      })
+    } else {
+      const g = map.get(key)!
+      g.turnCount += 1
+      g.totalTokens += t.totalTokens ?? 0
+      if (!g.models.split('、').includes(t.model)) g.models += '、' + t.model
+      if (t.createdAt && (!g.lastAt || t.createdAt > g.lastAt)) g.lastAt = t.createdAt
+    }
+  }
+  return Array.from(map.values())
+}
+
+function sessionColumns(keyId: number): DataTableColumns<SessionGroup> {
   return [
-    { title: '用户ID', key: 'userId', width: 120, ellipsis: { tooltip: true }, render: (r) => r.userId ?? '—' },
-    { title: '模型', key: 'model', width: 130, ellipsis: { tooltip: true } },
-    {
-      title: 'Token',
-      key: 'totalTokens',
-      width: 70,
-      render: (r) => (r.totalTokens != null ? String(r.totalTokens) : '—'),
-    },
+    { title: '用户ID', key: 'userId', width: 130, ellipsis: { tooltip: true }, render: (r) => r.userId ?? '—' },
     {
       title: '会话ID',
       key: 'sessionId',
-      width: 90,
-      render: (r) => (r.sessionId ? r.sessionId.slice(0, 8) + '…' : '—'),
+      width: 100,
+      render: (r) => r.sessionId.slice(0, 8) + '…',
     },
-    { title: '时间', key: 'createdAt', width: 152, render: (r) => fmtTime(r.createdAt) },
+    { title: '次数', key: 'turnCount', width: 60 },
+    { title: '模型', key: 'models', width: 140, ellipsis: { tooltip: true } },
+    { title: 'Token', key: 'totalTokens', width: 80 },
+    { title: '最近时间', key: 'lastAt', width: 152, render: (r) => fmtTime(r.lastAt) },
     {
-      title: '',
+      title: '操作',
       key: 'open',
       width: 88,
       fixed: 'right',
@@ -632,9 +704,6 @@ function turnColumns(keyId: number): DataTableColumns<RecentTurnRow> {
       <n-form-item label="名称">
         <n-input v-model:value="editName" />
       </n-form-item>
-      <n-form-item label="启用">
-        <n-switch v-model:value="editEnabled" />
-      </n-form-item>
     </n-form>
     <template #footer>
       <n-space justify="end">
@@ -665,7 +734,7 @@ function turnColumns(keyId: number): DataTableColumns<RecentTurnRow> {
         </template>
       </n-form-item>
       <n-form-item label="推荐问题（最多 10 个）">
-        <n-space vertical :size="12">
+        <div style="width: 100%; display: flex; flex-direction: column; gap: 12px;">
           <!-- 已添加的问题列表 -->
           <div v-if="suggestionItems.length > 0" class="suggestion-list">
             <div
@@ -688,20 +757,21 @@ function turnColumns(keyId: number): DataTableColumns<RecentTurnRow> {
             暂无推荐问题，请添加
           </div>
           <!-- 添加问题输入框 -->
-          <n-space :size="8">
+          <div style="display: flex; gap: 8px; width: 100%;">
             <n-input
               v-model:value="newSuggestion"
+              style="flex: 1;"
               placeholder="输入推荐问题，按 Enter 添加"
               @keydown="handleSuggestionKeydown"
             />
             <n-button type="primary" @click="addSuggestion">
               添加
             </n-button>
-          </n-space>
-          <template #feedback>
-            用户点击推荐问题后自动发送，按 Enter 快速添加
-          </template>
-        </n-space>
+          </div>
+        </div>
+        <template #feedback>
+          用户点击推荐问题后自动发送，按 Enter 快速添加
+        </template>
       </n-form-item>
     </n-form>
     <template #footer>
@@ -711,6 +781,51 @@ function turnColumns(keyId: number): DataTableColumns<RecentTurnRow> {
       </n-space>
     </template>
   </n-modal>
+  <!-- ============ 提示词配置弹窗 ============ -->
+  <n-modal
+    v-model:show="showPromptConfig"
+    preset="card"
+    :title="`提示词配置 · ${promptConfigName}`"
+    style="width: min(640px, 96vw)"
+    :mask-closable="false"
+  >
+    <n-form label-placement="top">
+      <n-form-item label="角色设定">
+        <n-input
+          v-model:value="promptRole"
+          type="textarea"
+          placeholder="例如：你是一名专业的客服助手，熟悉公司产品与服务。"
+          :autosize="{ minRows: 3, maxRows: 6 }"
+        />
+      </n-form-item>
+      <n-form-item label="任务指令">
+        <n-input
+          v-model:value="promptTask"
+          type="textarea"
+          placeholder="例如：帮助用户解决售前、售后问题，引导用户下单。"
+          :autosize="{ minRows: 3, maxRows: 6 }"
+        />
+      </n-form-item>
+      <n-form-item label="限制条件">
+        <n-input
+          v-model:value="promptConstraints"
+          type="textarea"
+          placeholder="例如：不得讨论竞争对手；不得透露内部价格体系；回答简洁，不超过 200 字。"
+          :autosize="{ minRows: 3, maxRows: 6 }"
+        />
+        <template #feedback>
+          三个字段均为空时不下发 system prompt；部分为空时只拼接有值的部分
+        </template>
+      </n-form-item>
+    </n-form>
+    <template #footer>
+      <n-space justify="end">
+        <n-button @click="showPromptConfig = false">取消</n-button>
+        <n-button type="primary" @click="savePromptConfig">保存</n-button>
+      </n-space>
+    </template>
+  </n-modal>
+
   <!-- ============ API Key 密钥弹窗 ============ -->
   <n-modal
     v-if="!isEmbedModal"
@@ -813,10 +928,10 @@ function turnColumns(keyId: number): DataTableColumns<RecentTurnRow> {
             <div v-if="usageKeyId != null">
               <n-text strong style="display: block; margin-bottom: 8px">调用记录</n-text>
               <n-data-table
-                :columns="turnColumns(usageKeyId)"
-                :data="usageData.recentTurns"
+                :columns="sessionColumns(usageKeyId)"
+                :data="groupBySession(usageData.recentTurns)"
                 :max-height="360"
-                :scroll-x="540"
+                :scroll-x="620"
                 size="small"
                 :single-line="false"
                 style="white-space: nowrap"

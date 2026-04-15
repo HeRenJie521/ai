@@ -1,15 +1,48 @@
-# 测试环境：请在本机或测试机创建库 eaju_ai_test；账号与本地一致时可不改
+# =============================================================================
+# 测试环境配置
+# 激活方式：java -jar xxx.jar --spring.profiles.active=test
+# =============================================================================
+
+server:
+  port: 8080
+  servlet:
+    encoding:
+      charset: UTF-8
+      enabled: true
+      force: true
+  tomcat:
+    max-threads: 100
+    min-spare-threads: 10
+    max-connections: 5000
+    accept-count: 50
+    connection-timeout: 20000
+
 spring:
   datasource:
-    url: jdbc:postgresql://localhost:5432/eaju_ai
-    username: postgres
-    password: root
+    url: jdbc:postgresql://10.0.254.21:5432/eaju_ai
+    username: eaju_ai_user
+    password: anbang@123
     driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+      pool-name: HikariPool-Test
+      connection-test-query: SELECT 1
+      initialization-fail-timeout: -1
   redis:
-    host: ${REDIS_HOST:localhost}
-    port: ${REDIS_PORT:6379}
-    password: ${REDIS_PASSWORD:}
+    host: 10.0.254.5
+    port: 6379
+    password: laSQL2019
     timeout: 10s
+    lettuce:
+      pool:
+        max-active: 20
+        max-idle: 10
+        min-idle: 5
+        max-wait: 3000ms
   jpa:
     hibernate:
       ddl-auto: update
@@ -19,3 +52,43 @@ spring:
       hibernate:
         jdbc:
           time_zone: UTC
+          batch_size: 50
+        order_inserts: true
+        order_updates: true
+        generate_statistics: false
+
+logging:
+  level:
+    root: INFO
+    com.eaju.ai: DEBUG
+    org.springframework.web: INFO
+    org.hibernate.SQL: WARN
+    com.zaxxer.hikari: INFO
+
+app:
+  jwt:
+    secret: test-jwt-secret-change-me-32bytes-minimum!!
+    expiration-hours: 168
+  auth:
+    dms-base-url: http://superapp.51eanj.com:82/eaju_app_service/eajudms/DmsInterface
+    dms-login-method: appUserLogin
+    dms-login-type: "1"
+    admin-phones: "15296711325"
+    session-redis-key-prefix: "auth:session:"
+    session-ttl-hours: 0
+  http-client:
+    connect-timeout-ms: 10000
+    read-timeout-ms: 120000
+    connection-request-timeout-ms: 5000
+    max-total: 50
+    max-per-route: 10
+  thread-pool:
+    core-size: 4
+    max-size: 16
+    queue-capacity: 500
+    keep-alive-seconds: 60
+  chat:
+    redis-key-prefix: "chat:session:"
+    redis-session-ttl-hours: 168
+  file-upload:
+    proxy-url: https://wx.51eanj.com/eaju-open-api/api/file/upload/file

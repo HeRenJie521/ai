@@ -93,6 +93,13 @@ public class ApiKeyService {
 
     @Transactional
     public ApiKeyEntity update(Long id, String name, Boolean enabled, String welcomeText, String suggestions) {
+        return update(id, name, enabled, welcomeText, suggestions, null, null, null);
+    }
+
+    @Transactional
+    public ApiKeyEntity update(Long id, String name, Boolean enabled,
+                               String welcomeText, String suggestions,
+                               String systemRole, String systemTask, String systemConstraints) {
         ApiKeyEntity e = apiKeyRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("API Key 不存在"));
         if (StringUtils.hasText(name)) {
@@ -106,6 +113,15 @@ public class ApiKeyService {
         }
         if (suggestions != null) {
             e.setSuggestions(suggestions);
+        }
+        if (systemRole != null) {
+            e.setSystemRole(systemRole);
+        }
+        if (systemTask != null) {
+            e.setSystemTask(systemTask);
+        }
+        if (systemConstraints != null) {
+            e.setSystemConstraints(systemConstraints);
         }
         return apiKeyRepository.save(e);
     }

@@ -17,6 +17,10 @@ export interface ApiKeyRow {
   welcomeText: string | null
   /** WEB_EMBED 推荐问题 JSON 字符串 */
   suggestions: string | null
+  /** WEB_EMBED Agent Prompt */
+  systemRole: string | null
+  systemTask: string | null
+  systemConstraints: string | null
 }
 
 export interface ApiKeyCreated extends ApiKeyRow {
@@ -45,7 +49,7 @@ export async function adminCreateApiKey(payload: CreateIntegrationPayload): Prom
 
 export async function adminPatchApiKey(
   id: number,
-  body: Partial<{ name: string; enabled: boolean; welcomeText: string; suggestions: string }>,
+  body: Partial<{ name: string; enabled: boolean; welcomeText: string; suggestions: string; systemRole: string; systemTask: string; systemConstraints: string }>,
 ): Promise<ApiKeyRow> {
   const { data } = await http.patch<ApiKeyRow>(`/api/admin/api-keys/${id}`, body)
   return data
