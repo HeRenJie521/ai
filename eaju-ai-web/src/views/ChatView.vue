@@ -919,7 +919,7 @@ function goSettingsPage(page: 'llm' | 'api-keys' | 'api-docs') {
               v-model:value="input"
               type="textarea"
               :bordered="false"
-              placeholder="输入消息或粘贴截图；Enter 发送，组合键回车换行"
+              placeholder="请输入你的问题"
               :autosize="{ minRows: 2, maxRows: 6 }"
               class="composer-textarea"
               @paste="onComposerPaste"
@@ -1078,7 +1078,7 @@ function goSettingsPage(page: 'llm' | 'api-keys' | 'api-docs') {
 }
 .brand {
   padding: 14px 16px 8px;
-  font-size: 18px;
+  font-size: 20px;
   font-weight: 600;
   letter-spacing: 0.02em;
   border-bottom: 1px solid #e5e5e5;
@@ -1117,7 +1117,7 @@ function goSettingsPage(page: 'llm' | 'api-keys' | 'api-docs') {
   margin: 0 8px 4px;
   border-radius: 8px;
   cursor: pointer;
-  font-size: 14px;
+  font-size: 15px;
   color: #4b5563;
 }
 .conv-item:hover {
@@ -1159,7 +1159,7 @@ function goSettingsPage(page: 'llm' | 'api-keys' | 'api-docs') {
 .user-foot-name {
   flex: 1;
   min-width: 0;
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 500;
   color: #111827;
 }
@@ -1203,9 +1203,10 @@ function goSettingsPage(page: 'llm' | 'api-keys' | 'api-docs') {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 10px 16px;
+  padding: 12px 16px;
   border-bottom: 1px solid #e5e5e5;
   background: #ffffff;
+  font-size: 16px;
 }
 .msg-scroll {
   flex: 1 1 auto;
@@ -1224,9 +1225,10 @@ function goSettingsPage(page: 'llm' | 'api-keys' | 'api-docs') {
   text-align: center;
   color: #9ca3af;
   margin-top: 15vh;
+  font-size: 16px;
 }
 .empty-hint .sub {
-  font-size: 13px;
+  font-size: 14px;
   margin-top: 8px;
 }
 .msg-row {
@@ -1255,7 +1257,7 @@ function goSettingsPage(page: 'llm' | 'api-keys' | 'api-docs') {
   gap: 8px;
 }
 .msg-time {
-  font-size: 11px;
+  font-size: 12px;
   color: #9ca3af;
   padding: 0 2px;
   white-space: nowrap;
@@ -1267,25 +1269,25 @@ function goSettingsPage(page: 'llm' | 'api-keys' | 'api-docs') {
   border: 1px solid #e5e7eb;
   border-radius: 10px;
   background: #f9fafb;
-  padding: 8px 10px;
+  padding: 10px 12px;
 }
 .thinking-summary {
   cursor: pointer;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
   color: #6b7280;
   user-select: none;
 }
 .thinking-pre {
   margin-top: 8px;
-  font-size: 13px;
+  font-size: 14px;
   color: #4b5563;
 }
 .thinking-md-wrap {
   margin-top: 8px;
-  font-size: 13px;
+  font-size: 14px;
   color: #4b5563;
-  line-height: 1.55;
+  line-height: 1.6;
 }
 .bubble {
   max-width: 100%;
@@ -1296,8 +1298,8 @@ function goSettingsPage(page: 'llm' | 'api-keys' | 'api-docs') {
   white-space: pre-wrap;
   word-break: break-word;
   font-family: inherit;
-  font-size: 14px;
-  line-height: 1.55;
+  font-size: 15px;
+  line-height: 1.6;
   color: #111827;
 }
 .msg-md-placeholder {
@@ -1305,8 +1307,8 @@ function goSettingsPage(page: 'llm' | 'api-keys' | 'api-docs') {
   color: transparent;
 }
 .msg-md {
-  font-size: 14px;
-  line-height: 1.55;
+  font-size: 15px;
+  line-height: 1.6;
   color: #111827;
   word-break: break-word;
 }
@@ -1333,20 +1335,21 @@ function goSettingsPage(page: 'llm' | 'api-keys' | 'api-docs') {
   line-height: 1.3;
 }
 .msg-md :deep(h1) {
-  font-size: 1.25em;
+  font-size: 1.35em;
 }
 .msg-md :deep(h2) {
-  font-size: 1.15em;
+  font-size: 1.25em;
 }
 .msg-md :deep(h3),
 .msg-md :deep(h4) {
-  font-size: 1.05em;
+  font-size: 1.15em;
 }
 .msg-md :deep(blockquote) {
   margin: 0.5em 0;
   padding: 0.35em 0 0.35em 0.85em;
   border-left: 3px solid #d1d5db;
   color: #4b5563;
+  font-size: 15px;
 }
 .msg-md :deep(a) {
   color: #2563eb;
@@ -1360,7 +1363,7 @@ function goSettingsPage(page: 'llm' | 'api-keys' | 'api-docs') {
   border-radius: 4px;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New',
     monospace;
-  font-size: 0.9em;
+  font-size: 0.95em;
 }
 .msg-md :deep(.md-code-block) {
   margin: 0.75em 0;
@@ -1405,7 +1408,7 @@ function goSettingsPage(page: 'llm' | 'api-keys' | 'api-docs') {
   margin: 0;
   padding: 12px 14px;
   overflow-x: auto;
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.5;
   background: #fafafa;
 }
@@ -1416,7 +1419,7 @@ function goSettingsPage(page: 'llm' | 'api-keys' | 'api-docs') {
 .msg-md :deep(table) {
   border-collapse: collapse;
   margin: 0.6em 0;
-  font-size: 0.95em;
+  font-size: 14px;
 }
 .msg-md :deep(th),
 .msg-md :deep(td) {
@@ -1517,8 +1520,8 @@ function goSettingsPage(page: 'llm' | 'api-keys' | 'api-docs') {
 .composer-textarea :deep(textarea.n-input__textarea-el) {
   min-height: 0;
   overflow-y: auto;
-  line-height: 1.55;
-  font-size: 15px;
+  line-height: 1.6;
+  font-size: 16px;
 }
 .composer-attach-list {
   display: flex;
