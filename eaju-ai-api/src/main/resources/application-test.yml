@@ -1,14 +1,14 @@
 # 测试环境：请在本机或测试机创建库 eaju_ai_test；账号与本地一致时可不改
 spring:
   datasource:
-    url: jdbc:postgresql://localhost:5432/eaju_ai
-    username: postgres
-    password: root
+    url: jdbc:postgresql://10.0.254.21:5432/eaju_ai
+    username: eaju_ai_user
+    password: anbang@123
     driver-class-name: org.postgresql.Driver
   redis:
-    host: ${REDIS_HOST:localhost}
+    host: ${REDIS_HOST:10.0.254.5}
     port: ${REDIS_PORT:6379}
-    password: ${REDIS_PASSWORD:}
+    password: ${REDIS_PASSWORD:laSQL2019}
     timeout: 10s
   jpa:
     hibernate:

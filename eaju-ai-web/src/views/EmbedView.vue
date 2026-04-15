@@ -945,25 +945,16 @@ function onMdAreaClick(ev: MouseEvent) {
   transition: all 0.15s ease;
   text-align: left;
   min-height: 40px;
-}
-.suggestion-btn:focus,
-.suggestion-btn:focus-visible {
   outline: none;
-  border-color: #e5e7eb;
-  box-shadow: none;
 }
 .suggestion-btn:hover:not(:disabled) {
-  background: #eff6ff;
-  border-color: #3b82f6;
-  transform: translateY(-1px);
-  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.15);
+  /* 无样式变化 */
+}
+.suggestion-btn:active:not(:disabled) {
+  /* 无样式变化 */
 }
 .suggestion-btn:disabled {
   opacity: 0.6;
-  cursor: not-allowed;
-}
-.suggestion-btn--disabled {
-  opacity: 0.5;
   cursor: not-allowed;
 }
 
