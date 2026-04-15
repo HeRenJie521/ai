@@ -23,6 +23,9 @@ public class EmbedLoginRequestDto {
     @NotBlank
     private String userId;
 
+    /** 用户姓名（可选，如 DMS 的 esusUserNameCn）；未传时展示名降级为手机号 */
+    private String username;
+
     /** 嵌入凭证（Embed Token，与管理台展示的一致） */
     @NotBlank
     private String token;
@@ -41,6 +44,14 @@ public class EmbedLoginRequestDto {
 
     public void setUserId(String userId) {
         this.userId = userId;
+    }
+
+    public String getUsername() {
+        return username;
+    }
+
+    public void setUsername(String username) {
+        this.username = username;
     }
 
     public String getToken() {

@@ -119,6 +119,7 @@ onMounted(async () => {
   iid = Number(params.iid)
   const uid = String(params.uid ?? '')
   const token = String(params.token ?? '')
+  const username = params.username ? String(params.username) : undefined
 
   if (!iid || !uid || !token) {
     status.value = 'error'
@@ -127,7 +128,7 @@ onMounted(async () => {
   }
 
   try {
-    const result = await embedLoginApi({ integrationId: iid, userId: uid, token })
+    const result = await embedLoginApi({ integrationId: iid, userId: uid, token, username })
     authStore.setFromLogin(result)
     if (result.defaultModel) integrationDefaultModel.value = result.defaultModel
     if (result.integrationName) integrationName.value = result.integrationName
@@ -158,13 +159,11 @@ onMounted(async () => {
     conversations.value = await listConversations()
   } catch { /* 忽略 */ }
 
-  // 加载开场引导配置（仅当没有对话记录时）
-  if (messages.value.length === 0) {
-    try {
-      welcomeConfig.value = await getWelcomeConfig(iid)
-      welcomeLoaded.value = true
-    } catch { /* 忽略，不显示错误 */ }
-  }
+  // 始终加载开场引导配置（永远显示在第一个位置）
+  try {
+    welcomeConfig.value = await getWelcomeConfig(iid)
+    welcomeLoaded.value = true
+  } catch { /* 忽略，不显示错误 */ }
 
   status.value = 'ready'
   await scrollToBottom()
@@ -211,7 +210,6 @@ function newConversation() {
   // 新会话时重新加载开场引导
   getWelcomeConfig(iid).then(config => {
     welcomeConfig.value = config
-    welcomeLoaded.value = true
   }).catch(() => { /* 忽略 */ })
 }
 
@@ -255,7 +253,16 @@ async function confirmDelete(sid: string) {
 // ---- 发送消息 ----
 async function sendMessage(text?: string) {
   const msgText = text ?? input.value.trim()
-  if (!msgText || sending.value || suggestionsSending.value) return
+  
+  if (!msgText || sending.value) {
+    return
+  }
+  
+  // 检查是否有选中的 provider
+  if (!selectedProvider.value) {
+    console.error('No provider selected')
+    return
+  }
 
   const isNewSession = !sessionId.value
   if (isNewSession) {
@@ -341,11 +348,12 @@ function handleKeydown(e: KeyboardEvent) {
 }
 
 // ---- 推荐问题点击 ----
-function handleSuggestionClick(question: string) {
-  if (suggestionsSending.value || sending.value) return
+function handleSuggestionClick(question: string, e: MouseEvent) {
+  if (suggestionsSending.value || sending.value) {
+    return
+  }
+  ;(e.currentTarget as HTMLElement).blur()
   suggestionsSending.value = true
-  // 点击推荐问题后隐藏开场引导
-  welcomeConfig.value = null
   void sendMessage(question).finally(() => {
     suggestionsSending.value = false
   })
@@ -677,31 +685,21 @@ function onMdAreaClick(ev: MouseEvent) {
       <!-- 消息区域 -->
       <div ref="msgScrollRef" class="msg-list" @click="onMdAreaClick">
         
-        <!-- 开场引导区域（仅当没有对话记录且有配置时显示） -->
-        <div v-if="messages.length === 0 && welcomeConfig && welcomeConfig.welcomeText" class="welcome-section">
-          <div class="welcome-bubble">
-            <div class="welcome-icon">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-              </svg>
-            </div>
-            <div class="welcome-content">
-              <p class="welcome-text">{{ welcomeConfig.welcomeText }}</p>
-              <!-- 推荐问题列表 -->
-              <div v-if="welcomeConfig.suggestions && welcomeConfig.suggestions.length > 0" class="suggestions-list">
-                <button
-                  v-for="(suggestion, index) in welcomeConfig.suggestions"
-                  :key="index"
-                  :class="['suggestion-btn', { 'suggestion-btn--loading': suggestionsSending }]"
-                  :disabled="suggestionsSending || sending"
-                  @click.stop="handleSuggestionClick(suggestion)"
-                >
-                  <span v-if="!suggestionsSending">{{ suggestion }}</span>
-                  <span v-else class="suggestion-loading">
-                    <span class="dot" /><span class="dot" /><span class="dot" />
-                  </span>
-                </button>
-              </div>
+        <!-- 开场引导区域（永远显示在第一个位置） -->
+        <div v-if="welcomeConfig && welcomeConfig.welcomeText" class="msg msg--ai">
+          <div class="bubble bubble--ai">
+            <p class="welcome-text">{{ welcomeConfig.welcomeText }}</p>
+            <!-- 推荐问题列表 -->
+            <div v-if="welcomeConfig.suggestions && welcomeConfig.suggestions.length > 0" class="suggestions-list">
+              <button
+                v-for="(suggestion, index) in welcomeConfig.suggestions"
+                :key="index"
+                :class="['suggestion-btn', { 'suggestion-btn--disabled': sending }]"
+                :disabled="sending || suggestionsSending"
+                @click="handleSuggestionClick(suggestion, $event)"
+              >
+                {{ suggestion }}
+              </button>
             </div>
           </div>
         </div>
@@ -918,58 +916,41 @@ function onMdAreaClick(ev: MouseEvent) {
 .sidebar-empty { padding: 24px 16px; font-size: 13px; color: #9ca3af; text-align: center; }
 
 /* ===== 开场引导区域 ===== */
-.welcome-section {
-  padding: 24px 16px 32px;
-  display: flex;
-  justify-content: center;
-}
-.welcome-bubble {
-  max-width: 520px;
-  background: #fff;
-  border-radius: 16px;
-  padding: 20px 24px;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
-  border: 1px solid #f0f0f0;
-}
-.welcome-icon {
-  width: 48px;
-  height: 48px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, #60a5fa 0%, #3b82f6 100%);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #fff;
-  margin-bottom: 16px;
-}
+/* 使用 AI 消息样式 */
 .welcome-text {
-  font-size: 15px;
+  font-size: 14px;
   color: #1f2937;
-  line-height: 1.6;
-  margin: 0 0 20px 0;
+  line-height: 1.5;
+  margin: 0 0 12px 0;
   white-space: pre-wrap;
   word-break: break-word;
 }
 .suggestions-list {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
 }
 .suggestion-btn {
   display: flex;
   align-items: center;
-  justify-content: center;
-  padding: 12px 16px;
+  justify-content: flex-start;
+  padding: 10px 14px;
   border: 1px solid #e5e7eb;
   border-radius: 12px;
   background: #fff;
   color: #3b82f6;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 500;
   cursor: pointer;
   transition: all 0.15s ease;
   text-align: left;
-  min-height: 44px;
+  min-height: 40px;
+}
+.suggestion-btn:focus,
+.suggestion-btn:focus-visible {
+  outline: none;
+  border-color: #e5e7eb;
+  box-shadow: none;
 }
 .suggestion-btn:hover:not(:disabled) {
   background: #eff6ff;
@@ -981,26 +962,9 @@ function onMdAreaClick(ev: MouseEvent) {
   opacity: 0.6;
   cursor: not-allowed;
 }
-.suggestion-btn--loading {
-  justify-content: center;
-}
-.suggestion-loading {
-  display: flex;
-  gap: 4px;
-  align-items: center;
-}
-.suggestion-loading .dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: #3b82f6;
-  animation: bounce 1.4s infinite ease-in-out both;
-}
-.suggestion-loading .dot:nth-child(1) { animation-delay: -0.32s; }
-.suggestion-loading .dot:nth-child(2) { animation-delay: -0.16s; }
-@keyframes bounce {
-  0%, 80%, 100% { transform: scale(0); opacity: 0.5; }
-  40% { transform: scale(1); opacity: 1; }
+.suggestion-btn--disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 /* ===== 顶部栏 ===== */

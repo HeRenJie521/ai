@@ -41,6 +41,7 @@ export interface EmbedLoginPayload {
   integrationId: number
   userId: string
   token: string
+  username?: string
 }
 
 /**

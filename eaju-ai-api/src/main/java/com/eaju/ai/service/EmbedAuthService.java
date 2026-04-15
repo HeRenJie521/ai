@@ -60,11 +60,12 @@ public class EmbedAuthService {
             throw new IllegalArgumentException("嵌入凭证不正确");
         }
 
-        JwtIssueResult issued = jwtTokenProvider.createEmbedToken(userId, userId, integration.getId());
+        String displayName = StringUtils.hasText(req.getUsername()) ? req.getUsername().trim() : userId;
+        JwtIssueResult issued = jwtTokenProvider.createEmbedToken(userId, displayName, integration.getId());
 
         LoginSessionSnapshot snap = new LoginSessionSnapshot();
         snap.setPhone(userId);
-        snap.setUsername(userId);
+        snap.setUsername(displayName);
         snap.setAdmin(false);
         snap.setIssuedAtEpochMs(System.currentTimeMillis());
         snap.setDmsResponseExcerpt("{\"embed\":true,\"integrationId\":" + integration.getId() + "}");
@@ -78,7 +79,7 @@ public class EmbedAuthService {
         dto.setExpiresIn(jwtTokenProvider.getExpirationSeconds());
         dto.setUserId(userId);
         dto.setPhone(userId);
-        dto.setUsername(userId);
+        dto.setUsername(displayName);
         dto.setAdmin(false);
         dto.setDefaultModel(integration.getDefaultModel());
         dto.setIntegrationName(integration.getName());

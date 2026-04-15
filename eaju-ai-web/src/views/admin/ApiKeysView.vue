@@ -81,8 +81,14 @@ const embedBaseUrl = computed(() => {
 const editId = ref<number | null>(null)
 const editName = ref('')
 const editEnabled = ref(true)
-const editWelcomeText = ref('')
-const editSuggestions = ref('')
+
+// ---- 开场白配置弹窗 ----
+const showWelcomeConfig = ref(false)
+const welcomeConfigId = ref<number | null>(null)
+const welcomeConfigName = ref('')
+const welcomeText = ref('')
+const suggestionItems = ref<string[]>([])
+const newSuggestion = ref('')
 
 // ---- 用量抽屉 ----
 const usageOpen = ref(false)
@@ -181,7 +187,7 @@ const embedCodePc = computed(() => {
   // Token 仅在创建时可见，已创建的集成显示占位符提示用户替换
   const token = secretModal.value || '{凭证-创建时自动填入}'
   return `<iframe
-  src="${embedBaseUrl.value}?iid=${id}&uid={手机号}&token=${token}"
+  src="${embedBaseUrl.value}?iid=${id}&uid={手机号}&username={姓名}&token=${token}"
   width="100%"
   height="100%"
   style="height: 100vh; border:none; border-radius:12px; box-shadow:0 4px 24px rgba(0,0,0,.1);"
@@ -194,7 +200,7 @@ const embedCodeMobile = computed(() => {
   if (!id) return ''
   const token = secretModal.value || '{凭证-创建时自动填入}'
   return `<iframe
-  src="${embedBaseUrl.value}?iid=${id}&uid={手机号}&token=${token}"
+  src="${embedBaseUrl.value}?iid=${id}&uid={手机号}&username={姓名}&token=${token}"
   width="100%"
   style="height: 100svh; border:none; display:block;"
   allow="clipboard-write">
@@ -233,8 +239,6 @@ function openEdit(r: ApiKeyRow) {
   editId.value = r.id
   editName.value = r.name
   editEnabled.value = r.enabled
-  editWelcomeText.value = r.welcomeText || ''
-  editSuggestions.value = r.suggestions ? JSON.stringify(r.suggestions, null, 2) : ''
 }
 
 /** 查看已有嵌入网站集成的嵌入代码（不展示 Token，Token 只在创建时显示一次） */
@@ -254,36 +258,69 @@ async function submitEdit() {
     message.warning('请填写名称')
     return
   }
-  
-  // 验证 suggestions JSON 格式
-  let suggestionsJson: string | undefined = undefined
-  if (editSuggestions.value.trim()) {
-    try {
-      const parsed = JSON.parse(editSuggestions.value)
-      if (!Array.isArray(parsed)) {
-        message.warning('推荐问题必须是数组格式')
-        return
-      }
-      suggestionsJson = JSON.stringify(parsed)
-    } catch {
-      message.warning('推荐问题 JSON 格式错误')
-      return
-    }
-  }
-  
   try {
-    await adminPatchApiKey(id, {
-      name,
-      enabled: editEnabled.value,
-      welcomeText: editWelcomeText.value || undefined,
-      suggestions: suggestionsJson,
-    })
+    await adminPatchApiKey(id, { name, enabled: editEnabled.value })
     message.success('已保存')
     editId.value = null
     await load()
   } catch (e: unknown) {
     const err = e as { response?: { data?: { message?: string } }; message?: string }
     message.error(err.response?.data?.message || err.message || '保存失败')
+  }
+}
+
+// ---- 开场白配置管理 ----
+function openWelcomeConfig(r: ApiKeyRow) {
+  welcomeConfigId.value = r.id
+  welcomeConfigName.value = r.name
+  welcomeText.value = r.welcomeText || ''
+  suggestionItems.value = r.suggestions ? JSON.parse(r.suggestions) : []
+  newSuggestion.value = ''
+  showWelcomeConfig.value = true
+}
+
+async function saveWelcomeConfig() {
+  const id = welcomeConfigId.value
+  if (id == null) return
+
+  const suggestionsJson = suggestionItems.value.length > 0 ? JSON.stringify(suggestionItems.value) : null
+
+  try {
+    await adminPatchApiKey(id, {
+      welcomeText: welcomeText.value || undefined,
+      suggestions: suggestionsJson || undefined,
+    })
+    message.success('已保存')
+    showWelcomeConfig.value = false
+    await load()
+  } catch (e: unknown) {
+    const err = e as { response?: { data?: { message?: string } }; message?: string }
+    message.error(err.response?.data?.message || err.message || '保存失败')
+  }
+}
+
+function addSuggestion() {
+  const text = newSuggestion.value.trim()
+  if (!text) {
+    message.warning('请输入推荐问题')
+    return
+  }
+  if (suggestionItems.value.length >= 10) {
+    message.warning('最多添加 10 个推荐问题')
+    return
+  }
+  suggestionItems.value.push(text)
+  newSuggestion.value = ''
+}
+
+function removeSuggestion(index: number) {
+  suggestionItems.value.splice(index, 1)
+}
+
+function handleSuggestionKeydown(e: KeyboardEvent) {
+  if (e.key === 'Enter') {
+    e.preventDefault()
+    addSuggestion()
   }
 }
 
@@ -442,11 +479,18 @@ const columns: DataTableColumns<ApiKeyRow> = [
   {
     title: '操作',
     key: 'actions',
-    width: 400,
+    width: 480,
     render: (r) =>
       h(NSpace, { size: 8, wrap: false }, () => [
         h(NButton, { size: 'small', onClick: () => openUsage(r) }, { default: () => '用量' }),
         h(NButton, { size: 'small', onClick: () => openEdit(r) }, { default: () => '编辑' }),
+        ...(r.type === 2
+          ? [h(
+              NButton,
+              { size: 'small', type: 'primary', ghost: true, onClick: () => openWelcomeConfig(r) },
+              { default: () => '开场白' },
+            )]
+          : []),
         ...(r.type === 2
           ? [h(
               NButton,
@@ -580,7 +624,7 @@ function turnColumns(keyId: number): DataTableColumns<RecentTurnRow> {
     :show="editId != null"
     preset="card"
     title="编辑集成"
-    style="width: min(580px, 96vw)"
+    style="width: min(420px, 96vw)"
     :mask-closable="false"
     @update:show="(v: boolean) => { if (!v) editId = null }"
   >
@@ -591,32 +635,6 @@ function turnColumns(keyId: number): DataTableColumns<RecentTurnRow> {
       <n-form-item label="启用">
         <n-switch v-model:value="editEnabled" />
       </n-form-item>
-      
-      <!-- 开场引导配置（仅嵌入网站类型显示） -->
-      <template v-if="rows.find(r => r.id === editId)?.type === 2">
-        <n-form-item label="开场白文本（可选）">
-          <n-input
-            v-model:value="editWelcomeText"
-            type="textarea"
-            placeholder="例如：你好，我是AI助手，有什么可以帮助您的吗？"
-            :autosize="{ minRows: 3, maxRows: 6 }"
-          />
-          <template #feedback>
-            用户打开聊天页面且无对话记录时显示
-          </template>
-        </n-form-item>
-        <n-form-item label="推荐问题（可选，JSON数组格式）">
-          <n-input
-            v-model:value="editSuggestions"
-            type="textarea"
-            placeholder='例如：["问题1", "问题2", "问题3"]'
-            :autosize="{ minRows: 4, maxRows: 8 }"
-          />
-          <template #feedback>
-            格式：["问题1", "问题2"]，用户点击后自动发送
-          </template>
-        </n-form-item>
-      </template>
     </n-form>
     <template #footer>
       <n-space justify="end">
@@ -626,6 +644,73 @@ function turnColumns(keyId: number): DataTableColumns<RecentTurnRow> {
     </template>
   </n-modal>
 
+  <!-- ============ 开场白配置弹窗 ============ -->
+  <n-modal
+    v-model:show="showWelcomeConfig"
+    preset="card"
+    :title="`开场白配置 · ${welcomeConfigName}`"
+    style="width: min(600px, 96vw)"
+    :mask-closable="false"
+  >
+    <n-form label-placement="top">
+      <n-form-item label="开场白文本（可选）">
+        <n-input
+          v-model:value="welcomeText"
+          type="textarea"
+          placeholder="例如：你好，我是 AI 助手，有什么可以帮助您的吗？"
+          :autosize="{ minRows: 3, maxRows: 6 }"
+        />
+        <template #feedback>
+          用户打开聊天页面且无对话记录时显示
+        </template>
+      </n-form-item>
+      <n-form-item label="推荐问题（最多 10 个）">
+        <n-space vertical :size="12">
+          <!-- 已添加的问题列表 -->
+          <div v-if="suggestionItems.length > 0" class="suggestion-list">
+            <div
+              v-for="(item, index) in suggestionItems"
+              :key="index"
+              class="suggestion-item"
+            >
+              <span class="suggestion-text">{{ item }}</span>
+              <n-button
+                size="tiny"
+                type="error"
+                ghost
+                @click="removeSuggestion(index)"
+              >
+                删除
+              </n-button>
+            </div>
+          </div>
+          <div v-else class="suggestion-empty">
+            暂无推荐问题，请添加
+          </div>
+          <!-- 添加问题输入框 -->
+          <n-space :size="8">
+            <n-input
+              v-model:value="newSuggestion"
+              placeholder="输入推荐问题，按 Enter 添加"
+              @keydown="handleSuggestionKeydown"
+            />
+            <n-button type="primary" @click="addSuggestion">
+              添加
+            </n-button>
+          </n-space>
+          <template #feedback>
+            用户点击推荐问题后自动发送，按 Enter 快速添加
+          </template>
+        </n-space>
+      </n-form-item>
+    </n-form>
+    <template #footer>
+      <n-space justify="end">
+        <n-button @click="showWelcomeConfig = false">取消</n-button>
+        <n-button type="primary" @click="saveWelcomeConfig">保存</n-button>
+      </n-space>
+    </template>
+  </n-modal>
   <!-- ============ API Key 密钥弹窗 ============ -->
   <n-modal
     v-if="!isEmbedModal"
@@ -798,7 +883,7 @@ function turnColumns(keyId: number): DataTableColumns<RecentTurnRow> {
 .credential-cell {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
   width: 100%;
 }
 .credential-text {
@@ -806,11 +891,12 @@ function turnColumns(keyId: number): DataTableColumns<RecentTurnRow> {
   font-size: 13px;
   color: #374151;
   letter-spacing: 0.5px;
-  flex: 1;
-  min-width: 0;
+  /* 固定宽度，确保按钮位置固定 */
+  width: 220px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  flex-shrink: 0;
 }
 
 /* 密钥不可见提示 */
@@ -873,5 +959,44 @@ code { font-size: 12px; }
 .msg-modal-session {
   font-size: 12px; color: #999; font-family: ui-monospace, monospace;
   word-break: break-all; min-width: 0;
+}
+
+/* 开场白配置弹窗 - 推荐问题列表 */
+.suggestion-list {
+  max-height: 300px;
+  overflow-y: auto;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 8px;
+  background: #f9fafb;
+}
+.suggestion-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  margin-bottom: 6px;
+  background: #fff;
+  border-radius: 6px;
+  border: 1px solid #e5e7eb;
+}
+.suggestion-item:last-child {
+  margin-bottom: 0;
+}
+.suggestion-text {
+  flex: 1;
+  font-size: 13px;
+  color: #1f2937;
+  margin-right: 12px;
+  word-break: break-word;
+}
+.suggestion-empty {
+  padding: 24px;
+  text-align: center;
+  color: #9ca3af;
+  font-size: 13px;
+  border: 1px dashed #d1d5db;
+  border-radius: 8px;
+  margin-bottom: 8px;
 }
 </style>

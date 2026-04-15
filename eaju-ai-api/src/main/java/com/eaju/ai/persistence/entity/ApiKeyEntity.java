@@ -57,8 +57,8 @@ public class ApiKeyEntity {
     @Column(name = "welcome_text", columnDefinition = "TEXT")
     private String welcomeText;
 
-    /** WEB_EMBED：推荐问题 JSON 数组 */
-    @Column(name = "suggestions", columnDefinition = "JSONB")
+    /** WEB_EMBED：推荐问题 JSON 字符串 */
+    @Column(name = "suggestions", columnDefinition = "TEXT")
     private String suggestions;
 
     @PrePersist
