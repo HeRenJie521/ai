@@ -4,10 +4,8 @@ import com.eaju.ai.dto.ChatMessageDto;
 import com.eaju.ai.dto.admin.ApiKeyUsageDto;
 import com.eaju.ai.dto.admin.ModelUsageRowDto;
 import com.eaju.ai.dto.admin.RecentTurnDto;
-import com.eaju.ai.persistence.entity.ChatConversationEntity;
 import com.eaju.ai.persistence.entity.ChatTurnEntity;
 import com.eaju.ai.persistence.repository.ApiKeyRepository;
-import com.eaju.ai.persistence.repository.ChatConversationRepository;
 import com.eaju.ai.persistence.repository.ChatTurnRepository;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -18,7 +16,6 @@ import org.springframework.util.StringUtils;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.Optional;
 
 @Service
 public class ApiKeyAuditService {
@@ -27,16 +24,13 @@ public class ApiKeyAuditService {
 
     private final ApiKeyRepository apiKeyRepository;
     private final ChatTurnRepository chatTurnRepository;
-    private final ChatConversationRepository conversationRepository;
     private final ObjectMapper objectMapper;
 
     public ApiKeyAuditService(ApiKeyRepository apiKeyRepository,
                               ChatTurnRepository chatTurnRepository,
-                              ChatConversationRepository conversationRepository,
                               ObjectMapper objectMapper) {
         this.apiKeyRepository = apiKeyRepository;
         this.chatTurnRepository = chatTurnRepository;
-        this.conversationRepository = conversationRepository;
         this.objectMapper = objectMapper;
     }
 
@@ -114,29 +108,18 @@ public class ApiKeyAuditService {
     /**
      * 按轮次还原会话消息并附带时间戳，专供管理端消息查看。
      * 每轮取 requestMessages 的最后一条（本轮新增用户消息）+ 助手回复，均带 createdAt。
+     * 管理端不校验会话是否已删除，直接按 sessionId 读取所有轮次。
      */
     @Transactional(readOnly = true)
     public List<ChatMessageDto> loadMessagesWithTimestamps(Long integrationRecordId, String sessionId) {
         if (integrationRecordId == null || !StringUtils.hasText(sessionId)) {
             throw new IllegalArgumentException("参数无效");
         }
-        com.eaju.ai.persistence.entity.ApiKeyEntity entity = apiKeyRepository.findById(integrationRecordId)
+        apiKeyRepository.findById(integrationRecordId)
                 .orElseThrow(() -> new IllegalArgumentException("集成不存在"));
         String sid = sessionId.trim();
-        Optional<ChatConversationEntity> conv;
-        if (entity.getType() == 2) {
-            // WEB_EMBED：会话按 integration_id 关联
-            conv = conversationRepository.findByIntegrationIdAndSessionIdAndDeletedAtIsNull(integrationRecordId, sid);
-        } else {
-            // API_KEY：会话按 api_key_id 关联
-            conv = conversationRepository.findByApiKeyIdAndSessionIdAndDeletedAtIsNull(integrationRecordId, sid);
-        }
-        if (!conv.isPresent()) {
-            throw new IllegalArgumentException("会话不存在或无权访问");
-        }
-        String userId = conv.get().getUserId();
-        List<ChatTurnEntity> turns =
-                chatTurnRepository.findBySessionIdAndUserIdOrderByCreatedAtAsc(sessionId.trim(), userId);
+        // 管理端直接按 sessionId 加载，不受会话软删除影响
+        List<ChatTurnEntity> turns = chatTurnRepository.findBySessionIdOrderByCreatedAtAsc(sid);
         if (turns.isEmpty()) {
             return Collections.emptyList();
         }

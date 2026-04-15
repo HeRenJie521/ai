@@ -9,7 +9,8 @@
       "Bash(rm *)",
       "Bash(cp *)",
       "Bash(python3 *)",
-      "Bash(sed *)"
+      "Bash(sed *)",
+      "Bash(find *)"
     ]
   },
   "$version": 3

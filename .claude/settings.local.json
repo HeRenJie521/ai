@@ -10,7 +10,11 @@
       "Bash(java -version)",
       "Bash(npx vite:*)",
       "Bash(jobs -l)",
-      "Bash(npx vue-tsc:*)"
+      "Bash(npx vue-tsc:*)",
+      "Bash(mvn dependency:resolve -q)",
+      "Read(//usr/local/bin/**)",
+      "Read(//Users/hrj/**)",
+      "Bash(jar tf *)"
     ]
   }
 }

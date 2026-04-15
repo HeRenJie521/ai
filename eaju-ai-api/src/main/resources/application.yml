@@ -5,6 +5,17 @@ server:
       charset: UTF-8
       enabled: true
       force: true
+  tomcat:
+    # Tomcat 性能优化
+    max-threads: ${SERVER_MAX_THREADS:200}
+    min-spare-threads: ${SERVER_MIN_SPARE_THREADS:20}
+    max-connections: ${SERVER_MAX_CONNECTIONS:10000}
+    accept-count: ${SERVER_ACCEPT_COUNT:100}
+    connection-timeout: ${SERVER_CONNECTION_TIMEOUT:20000}
+    # 启用压缩
+    compression: "on"
+    compressable-mime-types: "application/json,application/xml,text/html,text/xml,text/plain,application/javascript,text/css"
+    compression-min-size: 1024
 
 spring:
   application:
@@ -18,6 +29,14 @@ spring:
   autoconfigure:
     exclude:
       - org.springframework.boot.autoconfigure.security.servlet.UserDetailsServiceAutoConfiguration
+  # Jackson 性能优化
+  jackson:
+    default-property-inclusion: non_null
+    serialization:
+      write-dates-as-timestamps: false
+      fail-on-empty-beans: false
+    deserialization:
+      fail-on-unknown-properties: false
 
 springdoc:
   api-docs:
@@ -26,6 +45,21 @@ springdoc:
     path: /swagger-ui.html
 
 app:
+  # HTTP 客户端配置
+  http-client:
+    connect-timeout-ms: ${HTTP_CONNECT_TIMEOUT:10000}
+    read-timeout-ms: ${HTTP_READ_TIMEOUT:120000}
+    connection-request-timeout-ms: ${HTTP_CONNECTION_REQUEST_TIMEOUT:5000}
+    max-total: ${HTTP_MAX_TOTAL:100}
+    max-per-route: ${HTTP_MAX_PER_ROUTE:20}
+    validate-after-inactivity-ms: 1000
+    time-to-live-minutes: 10
+  # 线程池配置
+  thread-pool:
+    core-size: ${THREAD_POOL_CORE:8}
+    max-size: ${THREAD_POOL_MAX:32}
+    queue-capacity: ${THREAD_POOL_QUEUE:1000}
+    keep-alive-seconds: 60
   auth:
     # DMS 登录：GET ?method=appUserLogin&data={"phone","password","type"}
     dms-base-url: ${APP_AUTH_DMS_BASE_URL:http://superapp.51eanj.com:82/eaju_app_service/eajudms/DmsInterface}
