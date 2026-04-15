@@ -73,6 +73,41 @@ public class ChatConversationService {
      * Redis 无缓存时，逐轮还原完整消息列表并附带时间戳。
      * 每轮取 requestMessages 的最后一条（本轮新增用户消息）+ 助手回复，均带 createdAt。
      */
+    /**
+     * 管理员查看消息历史：不校验归属和删除状态，直接按 sessionId 读取所有 turn。
+     */
+    @Transactional(readOnly = true)
+    public List<ChatMessageDto> loadMessagesForAdmin(String sessionId) {
+        if (!StringUtils.hasText(sessionId)) {
+            throw new IllegalArgumentException("参数无效");
+        }
+        List<ChatTurnEntity> turns = chatTurnRepository.findBySessionIdOrderByCreatedAtAsc(sessionId.trim());
+        if (turns.isEmpty()) {
+            return Collections.emptyList();
+        }
+        List<ChatMessageDto> result = new ArrayList<>();
+        for (ChatTurnEntity turn : turns) {
+            String ts = turn.getCreatedAt() != null ? turn.getCreatedAt().toString() : null;
+            List<ChatMessageDto> reqMsgs = parseRequestMessages(turn.getRequestMessagesJson());
+            if (!reqMsgs.isEmpty()) {
+                ChatMessageDto userMsg = reqMsgs.get(reqMsgs.size() - 1);
+                if ("user".equals(userMsg.getRole())) {
+                    userMsg.setCreatedAt(ts);
+                    result.add(userMsg);
+                }
+            }
+            ChatMessageDto assistant = new ChatMessageDto();
+            assistant.setRole("assistant");
+            assistant.setContent(StringUtils.hasText(turn.getAssistantContent()) ? turn.getAssistantContent() : "");
+            if (StringUtils.hasText(turn.getReasoningContent())) {
+                assistant.setReasoningContent(turn.getReasoningContent());
+            }
+            assistant.setCreatedAt(ts);
+            result.add(assistant);
+        }
+        return result;
+    }
+
     private List<ChatMessageDto> rebuildMessagesFromTurns(String userId, String sessionId) {
         List<ChatTurnEntity> turns = chatTurnRepository.findBySessionIdAndUserIdOrderByCreatedAtAsc(sessionId, userId);
         if (turns.isEmpty()) {

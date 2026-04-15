@@ -179,9 +179,10 @@ public class AdminConversationController {
      */
     @GetMapping("/{sessionId}/messages")
     public List<ChatMessageDto> messages(@PathVariable String sessionId) {
-        ChatConversationEntity e = conversationRepository.findBySessionId(sessionId)
+        // 管理员可查看任意会话（包括已逻辑删除的），直接按 sessionId 读取
+        conversationRepository.findBySessionId(sessionId)
                 .orElseThrow(() -> new IllegalArgumentException("会话不存在"));
-        return chatConversationService.loadMessagesForUser(e.getUserId(), sessionId);
+        return chatConversationService.loadMessagesForAdmin(sessionId);
     }
 
     private ConversationAdminDto toAdminDto(ChatConversationEntity e, Map<Long, String> apiKeyNameMap) {

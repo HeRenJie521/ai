@@ -57,6 +57,9 @@ const conversations = ref<ConversationItem[]>([])
 const showSidebar = ref(false)
 const deletingSessionId = ref<string | null>(null)
 
+// ---- 平台检测 ----
+const isMobile = /Android|iPhone|iPad|iPod|HarmonyOS|HMOS/i.test(navigator.userAgent)
+
 // ---- 语音录音 ----
 type Platform = 'android' | 'ios' | 'harmony' | 'wechat' | 'web'
 const isRecording = ref(false)
@@ -65,6 +68,17 @@ const voiceHint = ref('')
 let recognition: any = null
 let mediaRecorder: MediaRecorder | null = null
 let voiceBridgeCleanup: (() => void) | null = null
+
+/** 兼容非安全上下文（HTTP IP 访问）的 UUID v4 生成 */
+function generateUUID(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID()
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0
+    return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16)
+  })
+}
 
 // ---- localStorage 持久化 ----
 function sessionKey() { return `embed_sid_${iid}` }
@@ -226,7 +240,7 @@ async function sendMessage() {
 
   const isNewSession = !sessionId.value
   if (isNewSession) {
-    sessionId.value = crypto.randomUUID()
+    sessionId.value = generateUUID()
     saveSessionId(sessionId.value)
   }
 
@@ -409,8 +423,22 @@ function startWebSpeechRecognition() {
   return true
 }
 
+/** 是否在安全上下文（HTTPS 或 localhost）中运行 */
+function isSecureContext(): boolean {
+  return window.isSecureContext === true ||
+    location.protocol === 'https:' ||
+    location.hostname === 'localhost' ||
+    location.hostname === '127.0.0.1'
+}
+
 /** MediaRecorder 兜底（无 STT，仅录音提示） */
 async function startMediaRecorderFallback() {
+  // getUserMedia 在非安全上下文（HTTP + IP）下不可用
+  if (!isSecureContext() || !navigator.mediaDevices?.getUserMedia) {
+    voiceHint.value = '语音需要 HTTPS 或在 App 内使用'
+    setTimeout(() => { voiceHint.value = '' }, 3000)
+    return
+  }
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
     isRecording.value = true
@@ -655,7 +683,7 @@ function onMdAreaClick(ev: MouseEvent) {
           <textarea
             v-model="input"
             class="composer-textarea"
-            placeholder="输入消息，Enter 发送，Shift+Enter 换行..."
+            :placeholder="isMobile ? '请输入内容...' : '输入消息，Enter 发送，Shift+Enter 换行...'"
             rows="2"
             :disabled="sending"
             @keydown="handleKeydown"
@@ -1026,10 +1054,24 @@ details[open] .thinking-summary::before { content: '▼ '; }
 /* ===== 移动端适配 ===== */
 @media (max-width: 640px) {
   .topbar { padding: 8px 10px; }
+  .topbar-logo { font-size: 17px; }
   .msg-list { padding: 12px 8px; }
-  .bubble { max-width: 88%; font-size: 14px; }
+  .bubble { max-width: 90%; font-size: 16px; padding: 10px 14px; }
+  .msg-md { font-size: 16px; }
   .composer { padding: 8px; }
+  .composer-textarea { font-size: 16px; }
+  .voice-hint { font-size: 15px; }
   .send-btn span { display: none; }
-  .send-btn { padding: 6px 12px; }
+  .send-btn { padding: 6px 12px; font-size: 15px; }
+  .sidebar-title { font-size: 16px; }
+  .new-conv-btn { font-size: 15px; }
+  .conv-title { font-size: 15px; }
+  .conv-time { font-size: 12px; }
+  .thinking-label { font-size: 14px; }
+  .thinking-summary { font-size: 13px; }
+  .thinking-body { font-size: 13px; }
+  .sidebar-empty { font-size: 15px; }
+  .conv-del-confirm { font-size: 13px; }
+  .conv-del-yes, .conv-del-no { font-size: 13px; }
 }
 </style>
