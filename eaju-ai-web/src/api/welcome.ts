@@ -3,6 +3,8 @@ import http from './http'
 export interface WelcomeConfig {
   welcomeText: string | null
   suggestions: string[] | null
+  /** AI 应用配置的默认模型 ID，供嵌入页面初始化模型选择 */
+  modelId: string | null
 }
 
 /**

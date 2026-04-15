@@ -39,6 +39,7 @@ import {
 import { useAuthStore } from '@/stores/auth'
 import ConversationsView from './ConversationsView.vue'
 import ApiKeysView from './ApiKeysView.vue'
+import AiAppsView from './AiAppsView.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -46,12 +47,14 @@ const message = useMessage()
 const auth = useAuthStore()
 
 // 根据路由路径确定当前页面
-const currentPage = computed<'llm' | 'conversations' | 'api-keys'>(() => {
+const currentPage = computed<'llm' | 'conversations' | 'api-keys' | 'ai-apps'>(() => {
   const path = route.path
   if (path === '/settings/conversations') {
     return 'conversations'
   } else if (path === '/settings/api-keys') {
     return 'api-keys'
+  } else if (path === '/settings/ai-apps') {
+    return 'ai-apps'
   } else {
     return 'llm'
   }
@@ -554,7 +557,7 @@ function back() {
   router.push('/chat')
 }
 
-function goTo(page: 'llm' | 'conversations' | 'api-keys') {
+function goTo(page: 'llm' | 'conversations' | 'api-keys' | 'ai-apps') {
   router.push(`/settings/${page}`)
 }
 
@@ -579,9 +582,13 @@ function avatarLetter(row: LlmAdminRow): string {
           <span class="menu-icon">💬</span>
           <span class="menu-label">会话管理</span>
         </div>
+        <div v-if="auth.isAdmin" class="menu-item" :class="{ active: currentPage === 'ai-apps' }" @click="goTo('ai-apps')">
+          <span class="menu-icon">🤖</span>
+          <span class="menu-label">AI 应用</span>
+        </div>
         <div v-if="auth.isAdmin" class="menu-item" :class="{ active: currentPage === 'api-keys' }" @click="goTo('api-keys')">
           <span class="menu-icon">🔑</span>
-          <span class="menu-label">集成管理</span>
+          <span class="menu-label">API Key 管理</span>
         </div>
       </div>
     </div>
@@ -950,6 +957,11 @@ function avatarLetter(row: LlmAdminRow): string {
     <!-- 会话管理 -->
     <div v-if="currentPage === 'conversations'" class="settings-content-inner-full">
       <ConversationsView />
+    </div>
+
+    <!-- AI 应用管理 -->
+    <div v-if="currentPage === 'ai-apps'" class="settings-content-inner-full">
+      <AiAppsView />
     </div>
 
     <!-- 集成管理 -->

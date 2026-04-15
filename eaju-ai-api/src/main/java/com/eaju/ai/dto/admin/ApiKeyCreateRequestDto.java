@@ -12,41 +12,21 @@ public class ApiKeyCreateRequestDto {
      */
     private int type = 1;
 
-    /** WEB_EMBED 专属：默认对话模型（如 deepseek-chat），type=2 时必填 */
-    private String defaultModel;
-
-    /** WEB_EMBED 专属：允许嵌入的来源域名，逗号分隔，为空表示不限 */
+    /** 允许嵌入的来源域名，逗号分隔，为空表示不限（WEB_EMBED 专属） */
     private String allowedOrigins;
 
-    public String getName() {
-        return name;
-    }
+    /** 关联的 AI 应用 ID */
+    private Long appId;
 
-    public void setName(String name) {
-        this.name = name;
-    }
+    public String getName() { return name; }
+    public void setName(String name) { this.name = name; }
 
-    public int getType() {
-        return type;
-    }
+    public int getType() { return type; }
+    public void setType(int type) { this.type = type; }
 
-    public void setType(int type) {
-        this.type = type;
-    }
+    public String getAllowedOrigins() { return allowedOrigins; }
+    public void setAllowedOrigins(String allowedOrigins) { this.allowedOrigins = allowedOrigins; }
 
-    public String getDefaultModel() {
-        return defaultModel;
-    }
-
-    public void setDefaultModel(String defaultModel) {
-        this.defaultModel = defaultModel;
-    }
-
-    public String getAllowedOrigins() {
-        return allowedOrigins;
-    }
-
-    public void setAllowedOrigins(String allowedOrigins) {
-        this.allowedOrigins = allowedOrigins;
-    }
+    public Long getAppId() { return appId; }
+    public void setAppId(Long appId) { this.appId = appId; }
 }

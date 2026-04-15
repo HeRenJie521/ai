@@ -36,71 +36,44 @@ public class ApiKeyService {
     }
 
     /**
-     * 创建 API_KEY 类型集成（保持原有行为）。
-     * @return 实体与明文 secret（仅此时返回）
-     */
-    @Transactional
-    public CreatedApiKey create(String name) {
-        return create(name, 1, null, null);
-    }
-
-    /**
      * 创建集成（支持 API_KEY 与 WEB_EMBED 两种类型）。
      *
-     * @param type          1=API_KEY  2=WEB_EMBED
-     * @param defaultModel  WEB_EMBED 默认模型（type=2 时必填）
-     * @param allowedOrigins 允许嵌入的来源域名（逗号分隔，null 表示不限）
-     * @return 实体与明文凭证（仅此时返回）
+     * @param type           1=API_KEY  2=WEB_EMBED
+     * @param allowedOrigins WEB_EMBED 允许嵌入的来源域名（逗号分隔，null 表示不限）
+     * @param appId          关联的 AI 应用 ID（可选）
      */
     @Transactional
-    public CreatedApiKey create(String name, int type, String defaultModel, String allowedOrigins) {
+    public CreatedApiKey create(String name, int type, String allowedOrigins, Long appId) {
         if (!StringUtils.hasText(name)) {
             throw new IllegalArgumentException("名称不能为空");
-        }
-        if (type == 2 && !StringUtils.hasText(defaultModel)) {
-            throw new IllegalArgumentException("嵌入网站集成必须指定默认模型");
         }
         ApiKeyEntity e = new ApiKeyEntity();
         e.setName(name.trim());
         e.setType(type);
         e.setEnabled(true);
+        e.setAppId(appId);
 
         if (type == 2) {
-            // WEB_EMBED：emb_ + 27 hex chars = 32 位固定长度，与 API_KEY 格式对齐
+            // WEB_EMBED：emb_ + 28 hex chars
             String plain = "emb_" + randomHex(14).substring(0, 28);
             e.setSecretHash(sha256Hex(plain));
             e.setSecretPrefix(plain);
-            e.setDefaultModel(defaultModel.trim());
             if (StringUtils.hasText(allowedOrigins)) {
                 e.setAllowedOrigins(allowedOrigins.trim());
             }
-            apiKeyRepository.save(e);
-            return new CreatedApiKey(e, plain, null);
         } else {
-            // API_KEY：PREFIX(5) + 27 hex chars = 32 位固定长度
+            // API_KEY：PREFIX(5) + 27 hex chars
             String plain = PREFIX + randomHex(14).substring(0, 27);
             e.setSecretHash(sha256Hex(plain));
             e.setSecretPrefix(plain);
-            apiKeyRepository.save(e);
-            return new CreatedApiKey(e, plain, null);
         }
-    }
-
-    @Transactional
-    public ApiKeyEntity update(Long id, String name, Boolean enabled) {
-        return update(id, name, enabled, null, null);
-    }
-
-    @Transactional
-    public ApiKeyEntity update(Long id, String name, Boolean enabled, String welcomeText, String suggestions) {
-        return update(id, name, enabled, null, null, welcomeText, suggestions, null, null, null);
+        apiKeyRepository.save(e);
+        return new CreatedApiKey(e, e.getSecretPrefix());
     }
 
     @Transactional
     public ApiKeyEntity update(Long id, String name, Boolean enabled,
-                               String defaultModel, String allowedOrigins,
-                               String welcomeText, String suggestions,
-                               String systemRole, String systemTask, String systemConstraints) {
+                               String allowedOrigins, Long appId) {
         ApiKeyEntity e = apiKeyRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("API Key 不存在"));
         if (StringUtils.hasText(name)) {
@@ -109,26 +82,11 @@ public class ApiKeyService {
         if (enabled != null) {
             e.setEnabled(enabled);
         }
-        if (defaultModel != null) {
-            e.setDefaultModel(StringUtils.hasText(defaultModel) ? defaultModel.trim() : null);
-        }
         if (allowedOrigins != null) {
             e.setAllowedOrigins(StringUtils.hasText(allowedOrigins) ? allowedOrigins.trim() : null);
         }
-        if (welcomeText != null) {
-            e.setWelcomeText(welcomeText);
-        }
-        if (suggestions != null) {
-            e.setSuggestions(suggestions);
-        }
-        if (systemRole != null) {
-            e.setSystemRole(systemRole);
-        }
-        if (systemTask != null) {
-            e.setSystemTask(systemTask);
-        }
-        if (systemConstraints != null) {
-            e.setSystemConstraints(systemConstraints);
+        if (appId != null) {
+            e.setAppId(appId);
         }
         return apiKeyRepository.save(e);
     }
@@ -179,17 +137,12 @@ public class ApiKeyService {
         private final ApiKeyEntity entity;
         private final String plainSecret;
 
-        public CreatedApiKey(ApiKeyEntity entity, String plainSecret, String ignored) {
+        public CreatedApiKey(ApiKeyEntity entity, String plainSecret) {
             this.entity = entity;
             this.plainSecret = plainSecret;
         }
 
-        public ApiKeyEntity getEntity() {
-            return entity;
-        }
-
-        public String getPlainSecret() {
-            return plainSecret;
-        }
+        public ApiKeyEntity getEntity() { return entity; }
+        public String getPlainSecret() { return plainSecret; }
     }
 }

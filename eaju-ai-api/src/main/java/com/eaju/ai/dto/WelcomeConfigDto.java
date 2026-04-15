@@ -15,6 +15,10 @@ public class WelcomeConfigDto {
     @JsonProperty("suggestions")
     private List<String> suggestions;
 
+    /** AI 应用配置的默认模型 ID，供嵌入页面初始化模型选择 */
+    @JsonProperty("modelId")
+    private String modelId;
+
     public WelcomeConfigDto() {
     }
 
@@ -37,5 +41,13 @@ public class WelcomeConfigDto {
 
     public void setSuggestions(List<String> suggestions) {
         this.suggestions = suggestions;
+    }
+
+    public String getModelId() {
+        return modelId;
+    }
+
+    public void setModelId(String modelId) {
+        this.modelId = modelId;
     }
 }

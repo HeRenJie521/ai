@@ -7,7 +7,9 @@ import com.eaju.ai.dto.admin.ApiKeyPatchRequestDto;
 import com.eaju.ai.dto.admin.ApiKeyResponseDto;
 import com.eaju.ai.dto.admin.ApiKeyUsageDto;
 import com.eaju.ai.dto.conversation.ConversationResponseDto;
+import com.eaju.ai.persistence.entity.AiAppEntity;
 import com.eaju.ai.persistence.entity.ApiKeyEntity;
+import com.eaju.ai.persistence.repository.AiAppRepository;
 import com.eaju.ai.service.ApiKeyAuditService;
 import com.eaju.ai.service.ApiKeyService;
 import com.eaju.ai.service.ChatConversationService;
@@ -24,6 +26,7 @@ import org.springframework.web.bind.annotation.RestController;
 import javax.validation.Valid;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 @RestController
 @RequestMapping("/api/admin/api-keys")
@@ -33,19 +36,22 @@ public class AdminApiKeyController {
     private final ApiKeyService apiKeyService;
     private final ApiKeyAuditService apiKeyAuditService;
     private final ChatConversationService chatConversationService;
+    private final AiAppRepository aiAppRepository;
 
     public AdminApiKeyController(
             ApiKeyService apiKeyService,
             ApiKeyAuditService apiKeyAuditService,
-            ChatConversationService chatConversationService) {
+            ChatConversationService chatConversationService,
+            AiAppRepository aiAppRepository) {
         this.apiKeyService = apiKeyService;
         this.apiKeyAuditService = apiKeyAuditService;
         this.chatConversationService = chatConversationService;
+        this.aiAppRepository = aiAppRepository;
     }
 
     @GetMapping
     public List<ApiKeyResponseDto> list() {
-        List<ApiKeyResponseDto> out = new ArrayList<ApiKeyResponseDto>();
+        List<ApiKeyResponseDto> out = new ArrayList<>();
         for (ApiKeyEntity e : apiKeyService.listAll()) {
             out.add(toRow(e));
         }
@@ -55,7 +61,7 @@ public class AdminApiKeyController {
     @PostMapping
     public ApiKeyCreateResponseDto create(@Valid @RequestBody ApiKeyCreateRequestDto body) {
         ApiKeyService.CreatedApiKey created = apiKeyService.create(
-                body.getName(), body.getType(), body.getDefaultModel(), body.getAllowedOrigins());
+                body.getName(), body.getType(), body.getAllowedOrigins(), body.getAppId());
         ApiKeyEntity e = created.getEntity();
         ApiKeyCreateResponseDto dto = new ApiKeyCreateResponseDto();
         copyToRow(e, dto);
@@ -64,11 +70,10 @@ public class AdminApiKeyController {
     }
 
     @PatchMapping("/{id}")
-    public ApiKeyResponseDto patch(@PathVariable("id") Long id, @RequestBody ApiKeyPatchRequestDto body) {
+    public ApiKeyResponseDto patch(@PathVariable("id") Long id,
+                                   @RequestBody ApiKeyPatchRequestDto body) {
         ApiKeyEntity e = apiKeyService.update(id, body.getName(), body.getEnabled(),
-                body.getDefaultModel(), body.getAllowedOrigins(),
-                body.getWelcomeText(), body.getSuggestions(),
-                body.getSystemRole(), body.getSystemTask(), body.getSystemConstraints());
+                body.getAllowedOrigins(), body.getAppId());
         return toRow(e);
     }
 
@@ -100,24 +105,24 @@ public class AdminApiKeyController {
         return apiKeyAuditService.loadMessagesWithTimestamps(id, sessionId);
     }
 
-    private static ApiKeyResponseDto toRow(ApiKeyEntity e) {
+    private ApiKeyResponseDto toRow(ApiKeyEntity e) {
         ApiKeyResponseDto dto = new ApiKeyResponseDto();
         copyToRow(e, dto);
         return dto;
     }
 
-    private static void copyToRow(ApiKeyEntity e, ApiKeyResponseDto dto) {
+    private void copyToRow(ApiKeyEntity e, ApiKeyResponseDto dto) {
         dto.setId(e.getId());
         dto.setName(e.getName());
         dto.setSecretPrefix(e.getSecretPrefix());
         dto.setEnabled(e.isEnabled());
         dto.setCreatedAt(e.getCreatedAt() != null ? e.getCreatedAt().toString() : null);
         dto.setType(e.getType());
-        dto.setDefaultModel(e.getDefaultModel());
-        dto.setWelcomeText(e.getWelcomeText());
-        dto.setSuggestions(e.getSuggestions());
-        dto.setSystemRole(e.getSystemRole());
-        dto.setSystemTask(e.getSystemTask());
-        dto.setSystemConstraints(e.getSystemConstraints());
+        dto.setAllowedOrigins(e.getAllowedOrigins());
+        dto.setAppId(e.getAppId());
+        if (e.getAppId() != null) {
+            Optional<AiAppEntity> app = aiAppRepository.findByIdAndDeletedIsFalse(e.getAppId());
+            app.ifPresent(a -> dto.setAppName(a.getName()));
+        }
     }
 }

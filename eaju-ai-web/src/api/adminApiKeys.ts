@@ -12,16 +12,12 @@ export interface ApiKeyRow {
   createdAt: string | null
   /** 1=API_KEY  2=WEB_EMBED */
   type: IntegrationType
-  defaultModel: string | null
+  /** WEB_EMBED 允许嵌入的来源域名 */
   allowedOrigins: string | null
-  /** WEB_EMBED 开场白文本 */
-  welcomeText: string | null
-  /** WEB_EMBED 推荐问题 JSON 字符串 */
-  suggestions: string | null
-  /** WEB_EMBED Agent Prompt */
-  systemRole: string | null
-  systemTask: string | null
-  systemConstraints: string | null
+  /** 关联的 AI 应用 ID */
+  appId: number | null
+  /** 关联的 AI 应用名称（只读，展示用） */
+  appName: string | null
 }
 
 export interface ApiKeyCreated extends ApiKeyRow {
@@ -32,10 +28,10 @@ export interface ApiKeyCreated extends ApiKeyRow {
 export interface CreateIntegrationPayload {
   name: string
   type: IntegrationType
-  /** WEB_EMBED 时必填 */
-  defaultModel?: string
   /** WEB_EMBED 允许的来源域名（可选） */
   allowedOrigins?: string
+  /** 关联的 AI 应用 ID */
+  appId?: number
 }
 
 export async function adminListApiKeys(): Promise<ApiKeyRow[]> {
@@ -50,7 +46,12 @@ export async function adminCreateApiKey(payload: CreateIntegrationPayload): Prom
 
 export async function adminPatchApiKey(
   id: number,
-  body: Partial<{ name: string; enabled: boolean; welcomeText: string; suggestions: string; systemRole: string; systemTask: string; systemConstraints: string }>,
+  body: Partial<{
+    name: string
+    enabled: boolean
+    allowedOrigins: string
+    appId: number
+  }>,
 ): Promise<ApiKeyRow> {
   const { data } = await http.patch<ApiKeyRow>(`/api/admin/api-keys/${id}`, body)
   return data

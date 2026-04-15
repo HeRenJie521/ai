@@ -1,7 +1,9 @@
 package com.eaju.ai.web;
 
 import com.eaju.ai.dto.WelcomeConfigDto;
+import com.eaju.ai.persistence.entity.AiAppEntity;
 import com.eaju.ai.persistence.entity.ApiKeyEntity;
+import com.eaju.ai.persistence.repository.AiAppRepository;
 import com.eaju.ai.persistence.repository.ApiKeyRepository;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -17,17 +19,21 @@ import java.util.Optional;
 
 /**
  * 开场引导配置接口
- * 供嵌入网站获取开场白和推荐问题配置
+ * 供嵌入网站获取开场白、推荐问题和默认模型配置（从关联的 AI 应用加载）
  */
 @RestController
 @RequestMapping("/api/chat")
 public class WelcomeConfigController {
 
     private final ApiKeyRepository apiKeyRepository;
+    private final AiAppRepository aiAppRepository;
     private final ObjectMapper objectMapper;
 
-    public WelcomeConfigController(ApiKeyRepository apiKeyRepository, ObjectMapper objectMapper) {
+    public WelcomeConfigController(ApiKeyRepository apiKeyRepository,
+                                    AiAppRepository aiAppRepository,
+                                    ObjectMapper objectMapper) {
         this.apiKeyRepository = apiKeyRepository;
+        this.aiAppRepository = aiAppRepository;
         this.objectMapper = objectMapper;
     }
 
@@ -35,30 +41,36 @@ public class WelcomeConfigController {
      * 获取开场引导配置
      * GET /api/chat/welcome?id={integrationId}
      *
-     * @param id 集成 ID（api_key.id）
-     * @return 开场引导配置
+     * @param id 集成 ID（api_key.id，type=2）
      */
     @GetMapping("/welcome")
     public ResponseEntity<WelcomeConfigDto> getWelcomeConfig(@RequestParam("id") Long id) {
-        Optional<ApiKeyEntity> opt = apiKeyRepository.findByIdAndTypeAndEnabledIsTrueAndDeletedIsFalse(id, 2);
-        if (!opt.isPresent()) {
+        Optional<ApiKeyEntity> integrationOpt =
+                apiKeyRepository.findByIdAndTypeAndEnabledIsTrueAndDeletedIsFalse(id, 2);
+        if (!integrationOpt.isPresent()) {
             return ResponseEntity.notFound().build();
         }
 
-        ApiKeyEntity entity = opt.get();
-        WelcomeConfigDto dto = new WelcomeConfigDto();
-        dto.setWelcomeText(entity.getWelcomeText());
+        ApiKeyEntity integration = integrationOpt.get();
+        if (integration.getAppId() == null) {
+            // 集成尚未关联 AI 应用，返回空配置
+            return ResponseEntity.ok(new WelcomeConfigDto());
+        }
 
-        // 解析 suggestions JSON
-        List<String> suggestions = parseSuggestions(entity.getSuggestions());
-        dto.setSuggestions(suggestions);
+        Optional<AiAppEntity> appOpt = aiAppRepository.findByIdAndDeletedIsFalse(integration.getAppId());
+        if (!appOpt.isPresent()) {
+            return ResponseEntity.ok(new WelcomeConfigDto());
+        }
+
+        AiAppEntity app = appOpt.get();
+        WelcomeConfigDto dto = new WelcomeConfigDto();
+        dto.setWelcomeText(app.getWelcomeText());
+        dto.setSuggestions(parseSuggestions(app.getSuggestions()));
+        dto.setModelId(app.getModelId());
 
         return ResponseEntity.ok(dto);
     }
 
-    /**
-     * 解析推荐问题 JSON
-     */
     private List<String> parseSuggestions(String suggestionsJson) {
         if (suggestionsJson == null || suggestionsJson.trim().isEmpty()) {
             return Collections.emptyList();

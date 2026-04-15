@@ -11,113 +11,39 @@ public class ApiKeyResponseDto {
     /** 1=API_KEY  2=WEB_EMBED */
     private int type = 1;
 
-    /** WEB_EMBED 默认模型 */
-    private String defaultModel;
+    /** WEB_EMBED 允许嵌入的来源域名 */
+    private String allowedOrigins;
 
-    /** WEB_EMBED 开场白文本 */
-    private String welcomeText;
+    /** 关联的 AI 应用 ID */
+    private Long appId;
 
-    /** WEB_EMBED 推荐问题 JSON 字符串 */
-    private String suggestions;
+    /** 关联的 AI 应用名称（冗余展示用） */
+    private String appName;
 
-    private String systemRole;
-    private String systemTask;
-    private String systemConstraints;
+    public Long getId() { return id; }
+    public void setId(Long id) { this.id = id; }
 
-    public Long getId() {
-        return id;
-    }
+    public String getName() { return name; }
+    public void setName(String name) { this.name = name; }
 
-    public void setId(Long id) {
-        this.id = id;
-    }
+    public String getSecretPrefix() { return secretPrefix; }
+    public void setSecretPrefix(String secretPrefix) { this.secretPrefix = secretPrefix; }
 
-    public String getName() {
-        return name;
-    }
+    public boolean isEnabled() { return enabled; }
+    public void setEnabled(boolean enabled) { this.enabled = enabled; }
 
-    public void setName(String name) {
-        this.name = name;
-    }
+    public String getCreatedAt() { return createdAt; }
+    public void setCreatedAt(String createdAt) { this.createdAt = createdAt; }
 
-    public String getSecretPrefix() {
-        return secretPrefix;
-    }
+    public int getType() { return type; }
+    public void setType(int type) { this.type = type; }
 
-    public void setSecretPrefix(String secretPrefix) {
-        this.secretPrefix = secretPrefix;
-    }
+    public String getAllowedOrigins() { return allowedOrigins; }
+    public void setAllowedOrigins(String allowedOrigins) { this.allowedOrigins = allowedOrigins; }
 
-    public boolean isEnabled() {
-        return enabled;
-    }
+    public Long getAppId() { return appId; }
+    public void setAppId(Long appId) { this.appId = appId; }
 
-    public void setEnabled(boolean enabled) {
-        this.enabled = enabled;
-    }
-
-    public String getCreatedAt() {
-        return createdAt;
-    }
-
-    public void setCreatedAt(String createdAt) {
-        this.createdAt = createdAt;
-    }
-
-    public int getType() {
-        return type;
-    }
-
-    public void setType(int type) {
-        this.type = type;
-    }
-
-    public String getDefaultModel() {
-        return defaultModel;
-    }
-
-    public void setDefaultModel(String defaultModel) {
-        this.defaultModel = defaultModel;
-    }
-
-    public String getWelcomeText() {
-        return welcomeText;
-    }
-
-    public void setWelcomeText(String welcomeText) {
-        this.welcomeText = welcomeText;
-    }
-
-    public String getSuggestions() {
-        return suggestions;
-    }
-
-    public void setSuggestions(String suggestions) {
-        this.suggestions = suggestions;
-    }
-
-    public String getSystemRole() {
-        return systemRole;
-    }
-
-    public void setSystemRole(String systemRole) {
-        this.systemRole = systemRole;
-    }
-
-    public String getSystemTask() {
-        return systemTask;
-    }
-
-    public void setSystemTask(String systemTask) {
-        this.systemTask = systemTask;
-    }
-
-    public String getSystemConstraints() {
-        return systemConstraints;
-    }
-
-    public void setSystemConstraints(String systemConstraints) {
-        this.systemConstraints = systemConstraints;
-    }
-
+    public String getAppName() { return appName; }
+    public void setAppName(String appName) { this.appName = appName; }
 }

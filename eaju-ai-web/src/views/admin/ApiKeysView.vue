@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { h, onMounted, ref, watch, computed } from 'vue'
+import { h, onMounted, ref, computed } from 'vue'
 import type { DataTableColumns } from 'naive-ui'
 import {
   NButton,
@@ -11,16 +11,11 @@ import {
   NFormItem,
   NInput,
   NModal,
-  NRadioGroup,
-  NRadio,
   NSelect,
   NSpace,
   NSpin,
-  NSwitch,
   NTag,
   NText,
-  NTabs,
-  NTabPane,
   useDialog,
   useMessage,
 } from 'naive-ui'
@@ -35,7 +30,7 @@ import {
   type ApiKeyUsage,
   type RecentTurnRow,
 } from '@/api/adminApiKeys'
-import { listLlmProviders, type LlmProviderOption } from '@/api/llmProviders'
+import { adminListAiApps, type AiAppRow } from '@/api/adminAiApps'
 import type { ChatMessage } from '@/api/conversations'
 
 const message = useMessage()
@@ -44,62 +39,25 @@ const dialog = useDialog()
 const loading = ref(false)
 const rows = ref<ApiKeyRow[]>([])
 
-// ---- 新建集成 ----
+// ---- AI 应用列表 ----
+const aiApps = ref<AiAppRow[]>([])
+const aiAppOptions = computed(() =>
+  aiApps.value.map((a) => ({ label: a.name, value: a.id })),
+)
+
+// ---- 新建 API Key ----
 const showCreate = ref(false)
 const createName = ref('')
-const createType = ref<1 | 2>(1)
-const createDefaultModel = ref<string | null>(null)
-const createAllowedOrigins = ref('')
-
-// 可选模型列表（用于嵌入网站默认模型下拉）
-const llmProviders = ref<LlmProviderOption[]>([])
-const modelOptions = computed(() => {
-  const opts: { label: string; value: string }[] = []
-  for (const p of llmProviders.value) {
-    if (p.modes && Object.keys(p.modes).length > 0) {
-      // value 存储 mode key（逻辑名），传给后端 mode 参数
-      for (const modeKey of Object.keys(p.modes)) {
-        opts.push({ label: `${p.displayName} · ${modeKey}`, value: modeKey })
-      }
-    } else {
-      opts.push({ label: p.displayName, value: p.code })
-    }
-  }
-  return opts
-})
 
 // ---- 创建成功弹窗 ----
 const secretModal = ref('')
-const secretTitle = ref('')
 const showSecretModal = ref(false)
-const isEmbedModal = ref(false)
-const embedBaseUrl = computed(() => {
-  return window.location.origin + '/embed'
-})
 
 // ---- 编辑 ----
 const editId = ref<number | null>(null)
-const editType = ref<1 | 2>(1)
 const editName = ref('')
 const editEnabled = ref(true)
-const editDefaultModel = ref<string | null>(null)
-const editAllowedOrigins = ref('')
-
-// ---- 开场白配置弹窗 ----
-const showWelcomeConfig = ref(false)
-const welcomeConfigId = ref<number | null>(null)
-const welcomeConfigName = ref('')
-const welcomeText = ref('')
-const suggestionItems = ref<string[]>([])
-const newSuggestion = ref('')
-
-// ---- 提示词配置弹窗 ----
-const showPromptConfig = ref(false)
-const promptConfigId = ref<number | null>(null)
-const promptConfigName = ref('')
-const promptRole = ref('')
-const promptTask = ref('')
-const promptConstraints = ref('')
+const editAppId = ref<number | null>(null)
 
 // ---- 用量抽屉 ----
 const usageOpen = ref(false)
@@ -126,26 +84,19 @@ async function load() {
   }
 }
 
-async function loadLlmProviders() {
+async function loadAiApps() {
   try {
-    llmProviders.value = await listLlmProviders()
+    aiApps.value = await adminListAiApps()
   } catch { /* 忽略 */ }
 }
 
 onMounted(() => {
   void load()
-  void loadLlmProviders()
-})
-
-watch(showSecretModal, (v) => {
-  if (!v) secretModal.value = ''
+  void loadAiApps()
 })
 
 function openCreate() {
   createName.value = ''
-  createType.value = 1
-  createDefaultModel.value = null
-  createAllowedOrigins.value = ''
   showCreate.value = true
 }
 
@@ -155,33 +106,11 @@ async function submitCreate() {
     message.warning('请填写名称')
     return
   }
-  if (createType.value === 2 && !createDefaultModel.value) {
-    message.warning('嵌入网站集成必须选择默认模型')
-    return
-  }
   try {
-    const created = await adminCreateApiKey({
-      name,
-      type: createType.value,
-      defaultModel: createType.value === 2 ? createDefaultModel.value ?? undefined : undefined,
-      allowedOrigins: createAllowedOrigins.value.trim() || undefined,
-    })
+    const created = await adminCreateApiKey({ name, type: 1 })
     showCreate.value = false
-
-    if (createType.value === 2) {
-      // 嵌入网站：展示嵌入密钥和嵌入代码（密钥仅创建时可见）
-      isEmbedModal.value = true
-      secretTitle.value = '嵌入配置已生成'
-      secretModal.value = created.plainSecret ?? ''
-      createdIntegrationId.value = created.id
-      showSecretModal.value = true
-    } else {
-      // API Key：展示密钥
-      isEmbedModal.value = false
-      secretTitle.value = '请立即保存集成密钥'
-      secretModal.value = created.plainSecret ?? ''
-      showSecretModal.value = true
-    }
+    secretModal.value = created.plainSecret ?? ''
+    showSecretModal.value = true
     message.success('已创建')
     await load()
   } catch (e: unknown) {
@@ -190,78 +119,11 @@ async function submitCreate() {
   }
 }
 
-// 当前弹窗展示的集成 ID（用于生成嵌入代码）
-const createdIntegrationId = ref<number | null>(null)
-const embedCodePc = computed(() => {
-  const id = createdIntegrationId.value
-  if (!id) return ''
-  // Token 仅在创建时可见，已创建的集成显示占位符提示用户替换
-  const token = secretModal.value || '{凭证-创建时自动填入}'
-  return `<iframe
-  src="${embedBaseUrl.value}?iid=${id}&uid={手机号}&username={姓名}&token=${token}"
-  width="100%"
-  height="100%"
-  style="height: 100vh; border:none; border-radius:12px; box-shadow:0 4px 24px rgba(0,0,0,.1);"
-  allow="clipboard-write">
-</iframe>`
-})
-
-const embedCodeMobile = computed(() => {
-  const id = createdIntegrationId.value
-  if (!id) return ''
-  const token = secretModal.value || '{凭证-创建时自动填入}'
-  return `<iframe
-  src="${embedBaseUrl.value}?iid=${id}&uid={手机号}&username={姓名}&token=${token}"
-  width="100%"
-  style="height: 100svh; border:none; display:block;"
-  allow="clipboard-write">
-</iframe>`
-})
-
-async function copyText(text: string) {
-  try {
-    // 优先使用现代 Clipboard API
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      await navigator.clipboard.writeText(text)
-      message.success('已复制')
-      return
-    }
-    // 降级方案：使用传统 execCommand（兼容 HTTP 环境）
-    const textarea = document.createElement('textarea')
-    textarea.value = text
-    textarea.style.position = 'fixed'
-    textarea.style.opacity = '0'
-    document.body.appendChild(textarea)
-    textarea.select()
-    document.execCommand('copy')
-    document.body.removeChild(textarea)
-    message.success('已复制')
-  } catch {
-    message.error('复制失败')
-  }
-}
-
-function closeSecretReveal() {
-  showSecretModal.value = false
-  createdIntegrationId.value = null
-}
-
 function openEdit(r: ApiKeyRow) {
   editId.value = r.id
-  editType.value = r.type
   editName.value = r.name
   editEnabled.value = r.enabled
-  editDefaultModel.value = r.defaultModel
-  editAllowedOrigins.value = r.allowedOrigins ?? ''
-}
-
-/** 查看已有嵌入网站集成的嵌入代码（不展示 Token，Token 只在创建时显示一次） */
-function openEmbedCode(r: ApiKeyRow) {
-  createdIntegrationId.value = r.id
-  isEmbedModal.value = true
-  secretTitle.value = `嵌入方式 · ${r.name}`
-  secretModal.value = '' // Token 已不可见，只展示代码和签名说明
-  showSecretModal.value = true
+  editAppId.value = r.appId
 }
 
 async function submitEdit() {
@@ -276,10 +138,7 @@ async function submitEdit() {
     await adminPatchApiKey(id, {
       name,
       enabled: editEnabled.value,
-      ...(editType.value === 2 ? {
-        defaultModel: editDefaultModel.value ?? undefined,
-        allowedOrigins: editAllowedOrigins.value || undefined,
-      } : {}),
+      appId: editAppId.value ?? undefined,
     })
     message.success('已保存')
     editId.value = null
@@ -287,89 +146,6 @@ async function submitEdit() {
   } catch (e: unknown) {
     const err = e as { response?: { data?: { message?: string } }; message?: string }
     message.error(err.response?.data?.message || err.message || '保存失败')
-  }
-}
-
-// ---- 提示词配置管理 ----
-function openPromptConfig(r: ApiKeyRow) {
-  promptConfigId.value = r.id
-  promptConfigName.value = r.name
-  promptRole.value = r.systemRole || ''
-  promptTask.value = r.systemTask || ''
-  promptConstraints.value = r.systemConstraints || ''
-  showPromptConfig.value = true
-}
-
-async function savePromptConfig() {
-  const id = promptConfigId.value
-  if (id == null) return
-  try {
-    await adminPatchApiKey(id, {
-      systemRole: promptRole.value,
-      systemTask: promptTask.value,
-      systemConstraints: promptConstraints.value,
-    })
-    message.success('已保存')
-    showPromptConfig.value = false
-    await load()
-  } catch (e: unknown) {
-    const err = e as { response?: { data?: { message?: string } }; message?: string }
-    message.error(err.response?.data?.message || err.message || '保存失败')
-  }
-}
-
-// ---- 开场白配置管理 ----
-function openWelcomeConfig(r: ApiKeyRow) {
-  welcomeConfigId.value = r.id
-  welcomeConfigName.value = r.name
-  welcomeText.value = r.welcomeText || ''
-  suggestionItems.value = r.suggestions ? JSON.parse(r.suggestions) : []
-  newSuggestion.value = ''
-  showWelcomeConfig.value = true
-}
-
-async function saveWelcomeConfig() {
-  const id = welcomeConfigId.value
-  if (id == null) return
-
-  const suggestionsJson = suggestionItems.value.length > 0 ? JSON.stringify(suggestionItems.value) : null
-
-  try {
-    await adminPatchApiKey(id, {
-      welcomeText: welcomeText.value || undefined,
-      suggestions: suggestionsJson || undefined,
-    })
-    message.success('已保存')
-    showWelcomeConfig.value = false
-    await load()
-  } catch (e: unknown) {
-    const err = e as { response?: { data?: { message?: string } }; message?: string }
-    message.error(err.response?.data?.message || err.message || '保存失败')
-  }
-}
-
-function addSuggestion() {
-  const text = newSuggestion.value.trim()
-  if (!text) {
-    message.warning('请输入推荐问题')
-    return
-  }
-  if (suggestionItems.value.length >= 10) {
-    message.warning('最多添加 10 个推荐问题')
-    return
-  }
-  suggestionItems.value.push(text)
-  newSuggestion.value = ''
-}
-
-function removeSuggestion(index: number) {
-  suggestionItems.value.splice(index, 1)
-}
-
-function handleSuggestionKeydown(e: KeyboardEvent) {
-  if (e.key === 'Enter') {
-    e.preventDefault()
-    addSuggestion()
   }
 }
 
@@ -386,8 +162,8 @@ async function toggleEnabled(r: ApiKeyRow) {
 
 function confirmDelete(r: ApiKeyRow) {
   dialog.warning({
-    title: '删除集成',
-    content: `确定删除「${r.name}」？相关用量记录保留，但集成将立即失效。`,
+    title: '删除 API Key',
+    content: `确定删除「${r.name}」？相关用量记录保留，但该 Key 将立即失效。`,
     positiveText: '删除',
     negativeText: '取消',
     onPositiveClick: async () => {
@@ -443,6 +219,27 @@ async function openSessionMessages(keyId: number, sessionId: string) {
   }
 }
 
+async function copyText(text: string) {
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(text)
+      message.success('已复制')
+      return
+    }
+    const textarea = document.createElement('textarea')
+    textarea.value = text
+    textarea.style.position = 'fixed'
+    textarea.style.opacity = '0'
+    document.body.appendChild(textarea)
+    textarea.select()
+    document.execCommand('copy')
+    document.body.removeChild(textarea)
+    message.success('已复制')
+  } catch {
+    message.error('复制失败')
+  }
+}
+
 function fmtTime(val: string | null): string {
   if (!val) return '—'
   const d = new Date(val)
@@ -455,19 +252,8 @@ const columns: DataTableColumns<ApiKeyRow> = [
   {
     title: '名称',
     key: 'name',
-    width: 150,
+    width: 180,
     ellipsis: { tooltip: true },
-  },
-  {
-    title: '类型',
-    key: 'type',
-    width: 90,
-    render: (r) =>
-      h(
-        NTag,
-        { size: 'small', bordered: false, type: r.type === 2 ? 'info' : 'default' },
-        () => (r.type === 2 ? '嵌入网站' : 'API Key'),
-      ),
   },
   {
     title: '凭证',
@@ -475,12 +261,8 @@ const columns: DataTableColumns<ApiKeyRow> = [
     width: 320,
     render: (r) => {
       const text = r.secretPrefix ?? '—'
-
       if (text === '—') return h('span', { style: 'color:#bbb' }, '—')
-
-      // 隐藏中间部分，只显示前8位和后4位
       const maskedText = text.length > 12 ? `${text.slice(0, 8)}••••••••${text.slice(-4)}` : text
-
       return h('div', { style: 'display:flex; align-items:center;' }, [
         h('span', { style: 'font-family:monospace; font-size:13px; white-space:nowrap;', title: text }, maskedText),
         h(
@@ -504,11 +286,14 @@ const columns: DataTableColumns<ApiKeyRow> = [
     },
   },
   {
-    title: '默认模型',
-    key: 'defaultModel',
-    width: 150,
+    title: '关联 AI 应用',
+    key: 'appName',
+    width: 160,
     ellipsis: { tooltip: true },
-    render: (r) => r.defaultModel ?? '—',
+    render: (r) =>
+      r.appName
+        ? h(NTag, { size: 'small', bordered: false, type: 'primary' }, () => r.appName)
+        : h('span', { style: 'color:#bbb' }, '未绑定'),
   },
   {
     title: '状态',
@@ -528,32 +313,11 @@ const columns: DataTableColumns<ApiKeyRow> = [
   {
     title: '操作',
     key: 'actions',
-    width: 480,
+    width: 280,
     render: (r) =>
       h(NSpace, { size: 8, wrap: false }, () => [
         h(NButton, { size: 'small', onClick: () => openUsage(r) }, { default: () => '用量' }),
         h(NButton, { size: 'small', onClick: () => openEdit(r) }, { default: () => '编辑' }),
-        ...(r.type === 2
-          ? [h(
-              NButton,
-              { size: 'small', type: 'primary', ghost: true, onClick: () => openWelcomeConfig(r) },
-              { default: () => '开场白' },
-            )]
-          : []),
-        ...(r.type === 2
-          ? [h(
-              NButton,
-              { size: 'small', type: 'warning', ghost: true, onClick: () => openPromptConfig(r) },
-              { default: () => '提示词' },
-            )]
-          : []),
-        ...(r.type === 2
-          ? [h(
-              NButton,
-              { size: 'small', type: 'info', ghost: true, onClick: () => openEmbedCode(r) },
-              { default: () => '嵌入方式' },
-            )]
-          : []),
         h(
           NButton,
           { size: 'small', type: r.enabled ? 'warning' : 'success', ghost: true, onClick: () => toggleEnabled(r) },
@@ -604,12 +368,7 @@ function groupBySession(turns: RecentTurnRow[]): SessionGroup[] {
 function sessionColumns(keyId: number): DataTableColumns<SessionGroup> {
   return [
     { title: '用户ID', key: 'userId', width: 130, ellipsis: { tooltip: true }, render: (r) => r.userId ?? '—' },
-    {
-      title: '会话ID',
-      key: 'sessionId',
-      width: 100,
-      render: (r) => r.sessionId.slice(0, 8) + '…',
-    },
+    { title: '会话ID', key: 'sessionId', width: 100, render: (r) => r.sessionId.slice(0, 8) + '…' },
     { title: '次数', key: 'turnCount', width: 60 },
     { title: '模型', key: 'models', width: 140, ellipsis: { tooltip: true } },
     { title: 'Token', key: 'totalTokens', width: 80 },
@@ -622,12 +381,7 @@ function sessionColumns(keyId: number): DataTableColumns<SessionGroup> {
       render: (r) =>
         h(
           NButton,
-          {
-            size: 'tiny',
-            type: 'primary',
-            ghost: true,
-            onClick: () => void openSessionMessages(keyId, r.sessionId),
-          },
+          { size: 'tiny', type: 'primary', ghost: true, onClick: () => void openSessionMessages(keyId, r.sessionId) },
           { default: () => '查看消息' },
         ),
     },
@@ -638,63 +392,33 @@ function sessionColumns(keyId: number): DataTableColumns<SessionGroup> {
 <template>
   <div class="inner">
     <header class="toolbar">
-      <n-text strong class="page-title">集成管理</n-text>
+      <n-text strong class="page-title">API Key 管理</n-text>
       <n-space :size="12" wrap>
-        <n-button type="primary" @click="openCreate">新建集成</n-button>
+        <n-button type="primary" @click="openCreate">新建 API Key</n-button>
       </n-space>
     </header>
 
-    <n-card :bordered="false" class="card" title="集成列表">
+    <n-card :bordered="false" class="card" title="API Key 列表">
       <n-data-table :columns="columns" :data="rows" :loading="loading" :row-key="(r: ApiKeyRow) => r.id" />
     </n-card>
   </div>
 
-  <!-- ============ 新建集成弹窗 ============ -->
+  <!-- ============ 新建 API Key 弹窗 ============ -->
   <n-modal
     v-model:show="showCreate"
     preset="card"
-    title="新建集成"
-    style="width: min(480px, 96vw)"
+    title="新建 API Key"
+    style="width: min(420px, 96vw)"
     :mask-closable="false"
   >
     <n-form label-placement="top">
-      <!-- 集成类型 -->
-      <n-form-item label="集成类型">
-        <n-radio-group v-model:value="createType">
-          <n-space>
-            <n-radio :value="1">API Key（直接调用 REST API）</n-radio>
-            <n-radio :value="2">嵌入网站（iframe 聊天窗口）</n-radio>
-          </n-space>
-        </n-radio-group>
-      </n-form-item>
-
-      <!-- 名称 -->
       <n-form-item label="名称（便于识别用途）">
         <n-input
           v-model:value="createName"
-          placeholder="如 官网嵌入 / 合作方 A"
-          @keyup.enter="createType === 1 ? submitCreate() : undefined"
+          placeholder="如 生产环境 / 合作方 A"
+          @keyup.enter="submitCreate"
         />
       </n-form-item>
-
-      <!-- WEB_EMBED 专属 -->
-      <template v-if="createType === 2">
-        <n-form-item label="默认对话模型" required>
-          <n-select
-            v-model:value="createDefaultModel"
-            :options="modelOptions"
-            placeholder="请选择默认模型"
-            filterable
-          />
-        </n-form-item>
-        <n-form-item label="允许嵌入的来源域名（可选，逗号分隔）">
-          <n-input
-            v-model:value="createAllowedOrigins"
-            placeholder="如 https://example.com, https://partner.com"
-          />
-          <template #feedback>为空则不限制来源</template>
-        </n-form-item>
-      </template>
     </n-form>
     <template #footer>
       <n-space justify="end">
@@ -704,12 +428,31 @@ function sessionColumns(keyId: number): DataTableColumns<SessionGroup> {
     </template>
   </n-modal>
 
+  <!-- ============ 密钥弹窗（仅显示一次）============ -->
+  <n-modal
+    v-model:show="showSecretModal"
+    preset="card"
+    title="请立即保存 API Key"
+    style="width: min(520px, 96vw)"
+  >
+    <n-text depth="3" style="display: block; margin-bottom: 12px">
+      完整密钥仅显示一次，请复制到安全位置。调用时在请求头加入：<code>X-API-Key: …</code>
+    </n-text>
+    <n-input type="textarea" :value="secretModal" readonly :autosize="{ minRows: 2, maxRows: 4 }" />
+    <template #footer>
+      <n-space justify="end">
+        <n-button type="primary" @click="void copyText(secretModal)">复制</n-button>
+        <n-button @click="showSecretModal = false">关闭</n-button>
+      </n-space>
+    </template>
+  </n-modal>
+
   <!-- ============ 编辑弹窗 ============ -->
   <n-modal
     :show="editId != null"
     preset="card"
-    title="编辑集成"
-    style="width: min(520px, 96vw)"
+    title="编辑 API Key"
+    style="width: min(480px, 96vw)"
     :mask-closable="false"
     @update:show="(v: boolean) => { if (!v) editId = null }"
   >
@@ -717,217 +460,21 @@ function sessionColumns(keyId: number): DataTableColumns<SessionGroup> {
       <n-form-item label="名称">
         <n-input v-model:value="editName" />
       </n-form-item>
-      <template v-if="editType === 2">
-        <n-form-item label="默认对话模型">
-          <n-select
-            v-model:value="editDefaultModel"
-            :options="modelOptions"
-            placeholder="请选择默认模型"
-            filterable
-            clearable
-          />
-        </n-form-item>
-        <n-form-item label="允许嵌入的来源域名（逗号分隔，留空不限制）">
-          <n-input
-            v-model:value="editAllowedOrigins"
-            placeholder="如 https://example.com, https://partner.com"
-          />
-        </n-form-item>
-      </template>
+      <n-form-item label="关联 AI 应用（可选）">
+        <n-select
+          v-model:value="editAppId"
+          :options="aiAppOptions"
+          placeholder="请选择 AI 应用（决定提示词、模型等能力）"
+          filterable
+          clearable
+        />
+        <template #feedback>关联后，使用此 Key 的请求将自动加载对应 AI 应用的系统提示词配置</template>
+      </n-form-item>
     </n-form>
     <template #footer>
       <n-space justify="end">
         <n-button @click="editId = null">取消</n-button>
         <n-button type="primary" @click="submitEdit">保存</n-button>
-      </n-space>
-    </template>
-  </n-modal>
-
-  <!-- ============ 开场白配置弹窗 ============ -->
-  <n-modal
-    v-model:show="showWelcomeConfig"
-    preset="card"
-    :title="`开场白配置 · ${welcomeConfigName}`"
-    style="width: min(600px, 96vw)"
-    :mask-closable="false"
-  >
-    <n-form label-placement="top">
-      <n-form-item label="开场白文本（可选）">
-        <n-input
-          v-model:value="welcomeText"
-          type="textarea"
-          placeholder="例如：你好，我是 AI 助手，有什么可以帮助您的吗？"
-          :autosize="{ minRows: 3, maxRows: 6 }"
-        />
-        <template #feedback>
-          用户打开聊天页面且无对话记录时显示
-        </template>
-      </n-form-item>
-      <n-form-item label="推荐问题（最多 10 个）">
-        <div style="width: 100%; display: flex; flex-direction: column; gap: 12px;">
-          <!-- 已添加的问题列表 -->
-          <div v-if="suggestionItems.length > 0" class="suggestion-list">
-            <div
-              v-for="(item, index) in suggestionItems"
-              :key="index"
-              class="suggestion-item"
-            >
-              <span class="suggestion-text">{{ item }}</span>
-              <n-button
-                size="tiny"
-                type="error"
-                ghost
-                @click="removeSuggestion(index)"
-              >
-                删除
-              </n-button>
-            </div>
-          </div>
-          <div v-else class="suggestion-empty">
-            暂无推荐问题，请添加
-          </div>
-          <!-- 添加问题输入框 -->
-          <div style="display: flex; gap: 8px; width: 100%;">
-            <n-input
-              v-model:value="newSuggestion"
-              style="flex: 1;"
-              placeholder="输入推荐问题，按 Enter 添加"
-              @keydown="handleSuggestionKeydown"
-            />
-            <n-button type="primary" @click="addSuggestion">
-              添加
-            </n-button>
-          </div>
-        </div>
-        <template #feedback>
-          用户点击推荐问题后自动发送，按 Enter 快速添加
-        </template>
-      </n-form-item>
-    </n-form>
-    <template #footer>
-      <n-space justify="end">
-        <n-button @click="showWelcomeConfig = false">取消</n-button>
-        <n-button type="primary" @click="saveWelcomeConfig">保存</n-button>
-      </n-space>
-    </template>
-  </n-modal>
-  <!-- ============ 提示词配置弹窗 ============ -->
-  <n-modal
-    v-model:show="showPromptConfig"
-    preset="card"
-    :title="`提示词配置 · ${promptConfigName}`"
-    style="width: min(640px, 96vw)"
-    :mask-closable="false"
-  >
-    <n-form label-placement="top">
-      <n-form-item label="角色设定">
-        <n-input
-          v-model:value="promptRole"
-          type="textarea"
-          placeholder="例如：你是一名专业的客服助手，熟悉公司产品与服务。"
-          :autosize="{ minRows: 3, maxRows: 6 }"
-        />
-      </n-form-item>
-      <n-form-item label="任务指令">
-        <n-input
-          v-model:value="promptTask"
-          type="textarea"
-          placeholder="例如：帮助用户解决售前、售后问题，引导用户下单。"
-          :autosize="{ minRows: 3, maxRows: 6 }"
-        />
-      </n-form-item>
-      <n-form-item label="限制条件">
-        <n-input
-          v-model:value="promptConstraints"
-          type="textarea"
-          placeholder="例如：不得讨论竞争对手；不得透露内部价格体系；回答简洁，不超过 200 字。"
-          :autosize="{ minRows: 3, maxRows: 6 }"
-        />
-        <template #feedback>
-          三个字段均为空时不下发 system prompt；部分为空时只拼接有值的部分
-        </template>
-      </n-form-item>
-    </n-form>
-    <template #footer>
-      <n-space justify="end">
-        <n-button @click="showPromptConfig = false">取消</n-button>
-        <n-button type="primary" @click="savePromptConfig">保存</n-button>
-      </n-space>
-    </template>
-  </n-modal>
-
-  <!-- ============ API Key 密钥弹窗 ============ -->
-  <n-modal
-    v-if="!isEmbedModal"
-    v-model:show="showSecretModal"
-    preset="card"
-    :title="secretTitle"
-    style="width: min(520px, 96vw)"
-  >
-    <n-text depth="3" style="display: block; margin-bottom: 12px">
-      完整集成密钥仅显示一次，请复制到安全位置。请求开放接口时在请求头加入：
-      <code>X-API-Key: …</code>
-    </n-text>
-    <n-input type="textarea" :value="secretModal" readonly :autosize="{ minRows: 3, maxRows: 8 }" />
-    <template #footer>
-      <n-space justify="end">
-        <n-button type="primary" @click="void copyText(secretModal)">复制密钥</n-button>
-        <n-button @click="closeSecretReveal">关闭</n-button>
-      </n-space>
-    </template>
-  </n-modal>
-
-  <!-- ============ WEB_EMBED 嵌入配置弹窗 ============ -->
-  <n-modal
-    v-if="isEmbedModal"
-    v-model:show="showSecretModal"
-    preset="card"
-    :title="secretTitle"
-    style="width: min(680px, 96vw)"
-    :on-after-leave="closeSecretReveal"
-  >
-    <n-alert type="warning" :bordered="false" style="margin-bottom: 16px">
-      <template v-if="secretModal">
-        嵌入代码已自动生成，<code>{手机号}</code> 需要替换为实际用户手机号。
-      </template>
-      <template v-else>
-        凭证仅在创建时可见，请将下方代码中的 <code>{凭证-创建时自动填入}</code> 替换为创建时生成的完整凭证。
-      </template>
-    </n-alert>
-
-    <n-tabs type="line" animated>
-      <!-- Tab 1: PC 端代码 -->
-      <n-tab-pane name="pc" tab="PC 端">
-        <n-input
-          type="textarea"
-          :value="embedCodePc"
-          readonly
-          :autosize="{ minRows: 7, maxRows: 12 }"
-          style="font-family: monospace; font-size: 12px"
-        />
-        <n-space style="margin-top: 8px">
-          <n-button type="primary" @click="void copyText(embedCodePc)">复制</n-button>
-        </n-space>
-      </n-tab-pane>
-
-      <!-- Tab 2: 移动端代码 -->
-      <n-tab-pane name="mobile" tab="移动端">
-        <n-input
-          type="textarea"
-          :value="embedCodeMobile"
-          readonly
-          :autosize="{ minRows: 7, maxRows: 12 }"
-          style="font-family: monospace; font-size: 12px"
-        />
-        <n-space style="margin-top: 8px">
-          <n-button type="primary" @click="void copyText(embedCodeMobile)">复制</n-button>
-        </n-space>
-      </n-tab-pane>
-    </n-tabs>
-
-    <template #footer>
-      <n-space justify="end">
-        <n-button @click="showSecretModal = false">关闭</n-button>
       </n-space>
     </template>
   </n-modal>
@@ -1023,42 +570,6 @@ function sessionColumns(keyId: number): DataTableColumns<SessionGroup> {
   border: 1px solid #e5e7eb !important;
   border-radius: 12px;
 }
-
-/* 凭证列：文本 + 复制按钮 */
-.credential-cell {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-}
-.credential-text {
-  font-family: ui-monospace, 'Cascadia Code', 'SF Mono', Consolas, monospace;
-  font-size: 13px;
-  color: #374151;
-  letter-spacing: 0.5px;
-  /* 固定宽度，确保按钮位置固定 */
-  width: 220px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  flex-shrink: 0;
-}
-
-/* 密钥不可见提示 */
-.token-hidden-tip {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 14px;
-  background: #fffbeb;
-  border: 1px solid #fde68a;
-  border-radius: 8px;
-  color: #92400e;
-  font-size: 13px;
-}
-
-
-/* 消息查看 */
 .msg-preview {
   max-height: 70vh;
   overflow-y: auto;
@@ -1104,44 +615,5 @@ code { font-size: 12px; }
 .msg-modal-session {
   font-size: 12px; color: #999; font-family: ui-monospace, monospace;
   word-break: break-all; min-width: 0;
-}
-
-/* 开场白配置弹窗 - 推荐问题列表 */
-.suggestion-list {
-  max-height: 300px;
-  overflow-y: auto;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  padding: 8px;
-  background: #f9fafb;
-}
-.suggestion-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 8px 12px;
-  margin-bottom: 6px;
-  background: #fff;
-  border-radius: 6px;
-  border: 1px solid #e5e7eb;
-}
-.suggestion-item:last-child {
-  margin-bottom: 0;
-}
-.suggestion-text {
-  flex: 1;
-  font-size: 13px;
-  color: #1f2937;
-  margin-right: 12px;
-  word-break: break-word;
-}
-.suggestion-empty {
-  padding: 24px;
-  text-align: center;
-  color: #9ca3af;
-  font-size: 13px;
-  border: 1px dashed #d1d5db;
-  border-radius: 8px;
-  margin-bottom: 8px;
 }
 </style>

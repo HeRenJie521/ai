@@ -3,7 +3,9 @@ package com.eaju.ai.service;
 import com.eaju.ai.dto.auth.LoginResponseDto;
 import com.eaju.ai.dto.auth.LoginSessionSnapshot;
 import com.eaju.ai.dto.embed.EmbedLoginRequestDto;
+import com.eaju.ai.persistence.entity.AiAppEntity;
 import com.eaju.ai.persistence.entity.ApiKeyEntity;
+import com.eaju.ai.persistence.repository.AiAppRepository;
 import com.eaju.ai.persistence.repository.ApiKeyRepository;
 import com.eaju.ai.security.JwtIssueResult;
 import com.eaju.ai.security.JwtTokenProvider;
@@ -20,6 +22,7 @@ import java.security.NoSuchAlgorithmException;
  * 嵌入网站（WEB_EMBED）免密单点登录服务。
  * <p>
  * 验证逻辑：对传入的 token 做 SHA-256，与集成存储的 secretHash 比对，一致即放行。
+ * 默认模型从集成关联的 AI 应用（ai_app.model_id）读取。
  */
 @Service
 public class EmbedAuthService {
@@ -28,13 +31,16 @@ public class EmbedAuthService {
     private static final int TYPE_WEB_EMBED = 2;
 
     private final ApiKeyRepository apiKeyRepository;
+    private final AiAppRepository aiAppRepository;
     private final JwtTokenProvider jwtTokenProvider;
     private final LoginSessionCacheService loginSessionCacheService;
 
     public EmbedAuthService(ApiKeyRepository apiKeyRepository,
+                            AiAppRepository aiAppRepository,
                             JwtTokenProvider jwtTokenProvider,
                             LoginSessionCacheService loginSessionCacheService) {
         this.apiKeyRepository = apiKeyRepository;
+        this.aiAppRepository = aiAppRepository;
         this.jwtTokenProvider = jwtTokenProvider;
         this.loginSessionCacheService = loginSessionCacheService;
     }
@@ -73,6 +79,16 @@ public class EmbedAuthService {
 
         log.info("EmbedLogin 成功: integrationId={}, userId={}", integration.getId(), userId);
 
+        // 从关联的 AI 应用获取默认模型
+        String defaultModel = null;
+        if (integration.getAppId() != null) {
+            java.util.Optional<AiAppEntity> appOpt =
+                    aiAppRepository.findByIdAndDeletedIsFalse(integration.getAppId());
+            if (appOpt.isPresent()) {
+                defaultModel = appOpt.get().getModelId();
+            }
+        }
+
         LoginResponseDto dto = new LoginResponseDto();
         dto.setToken(issued.getToken());
         dto.setJti(issued.getJti());
@@ -81,7 +97,7 @@ public class EmbedAuthService {
         dto.setPhone(userId);
         dto.setUsername(displayName);
         dto.setAdmin(false);
-        dto.setDefaultModel(integration.getDefaultModel());
+        dto.setDefaultModel(defaultModel);
         dto.setIntegrationName(integration.getName());
         return dto;
     }

@@ -7,7 +7,9 @@ import com.eaju.ai.llm.LlmProviderConfigSnapshot;
 import com.eaju.ai.llm.OpenAiLlmExecutor;
 import com.eaju.ai.llm.support.OpenAiStreamAccumulator;
 import com.eaju.ai.persistence.ChatRecordService;
+import com.eaju.ai.persistence.entity.AiAppEntity;
 import com.eaju.ai.persistence.entity.ApiKeyEntity;
+import com.eaju.ai.persistence.repository.AiAppRepository;
 import com.eaju.ai.persistence.repository.ApiKeyRepository;
 import com.eaju.ai.session.ChatSessionService;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -36,6 +38,7 @@ public class ChatService {
     private final ChatRecordService chatRecordService;
     private final ObjectMapper objectMapper;
     private final ApiKeyRepository apiKeyRepository;
+    private final AiAppRepository aiAppRepository;
 
     public ChatService(LlmProviderConfigService llmProviderConfigService,
                        OpenAiLlmExecutor openAiLlmExecutor,
@@ -43,7 +46,8 @@ public class ChatService {
                        ChatSessionService chatSessionService,
                        ChatRecordService chatRecordService,
                        ObjectMapper objectMapper,
-                       ApiKeyRepository apiKeyRepository) {
+                       ApiKeyRepository apiKeyRepository,
+                       AiAppRepository aiAppRepository) {
         this.llmProviderConfigService = llmProviderConfigService;
         this.openAiLlmExecutor = openAiLlmExecutor;
         this.chatStreamExecutor = chatStreamExecutor;
@@ -51,6 +55,7 @@ public class ChatService {
         this.chatRecordService = chatRecordService;
         this.objectMapper = objectMapper;
         this.apiKeyRepository = apiKeyRepository;
+        this.aiAppRepository = aiAppRepository;
     }
 
     public ChatResponseDto chat(ChatRequestDto request) {
@@ -107,20 +112,29 @@ public class ChatService {
     }
 
     /**
-     * 若当前请求来自 WEB_EMBED 集成且配置了结构化 Agent Prompt，则将 system message 注入到发给 LLM 的消息列表首位。
-     * 返回的新 DTO 仅用于调用 LLM，不会写入 Redis 会话历史，确保每轮请求都带最新配置而不会重复积累。
+     * 若当前请求来自集成且关联了 AI 应用，则将 system message 注入到发给 LLM 的消息列表首位。
+     * 通过 integration.app_id → ai_app 加载系统提示词。
+     * 返回的新 DTO 仅用于调用 LLM，不会写入 Redis 会话历史，确保每轮请求都带最新配置。
      */
     private ChatRequestDto withSystemPrompt(ChatRequestDto original, ChatRequestDto effective) {
         Long integrationId = original.getInternalIntegrationId();
         if (integrationId == null) {
             return effective;
         }
-        java.util.Optional<ApiKeyEntity> opt = apiKeyRepository.findByIdAndDeletedIsFalse(integrationId);
-        if (!opt.isPresent()) {
+        java.util.Optional<ApiKeyEntity> integrationOpt = apiKeyRepository.findByIdAndDeletedIsFalse(integrationId);
+        if (!integrationOpt.isPresent()) {
             return effective;
         }
-        ApiKeyEntity integration = opt.get();
-        String systemContent = buildSystemContent(integration);
+        ApiKeyEntity integration = integrationOpt.get();
+        if (integration.getAppId() == null) {
+            return effective;
+        }
+        java.util.Optional<AiAppEntity> appOpt = aiAppRepository.findByIdAndDeletedIsFalse(integration.getAppId());
+        if (!appOpt.isPresent()) {
+            return effective;
+        }
+        AiAppEntity app = appOpt.get();
+        String systemContent = buildSystemContent(app);
         if (!StringUtils.hasText(systemContent)) {
             return effective;
         }
@@ -138,11 +152,11 @@ public class ChatService {
         return forLlm;
     }
 
-    private static String buildSystemContent(ApiKeyEntity integration) {
+    private static String buildSystemContent(AiAppEntity app) {
         StringBuilder sb = new StringBuilder();
-        String role = integration.getSystemRole();
-        String task = integration.getSystemTask();
-        String constraints = integration.getSystemConstraints();
+        String role = app.getSystemRole();
+        String task = app.getSystemTask();
+        String constraints = app.getSystemConstraints();
         if (StringUtils.hasText(role)) {
             sb.append("【角色设定】\n").append(role.trim());
         }

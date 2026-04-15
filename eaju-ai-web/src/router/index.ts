@@ -39,6 +39,12 @@ const router = createRouter({
       meta: { auth: true, admin: true },
     },
     {
+      path: '/settings/ai-apps',
+      name: 'settings-ai-apps',
+      component: () => import('@/views/admin/SystemSettingsView.vue'),
+      meta: { auth: true, admin: true },
+    },
+    {
       path: '/settings/conversations',
       name: 'settings-conversations',
       component: () => import('@/views/admin/SystemSettingsView.vue'),
