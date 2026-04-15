@@ -571,7 +571,7 @@ function avatarLetter(row: LlmAdminRow): string {
         <n-button text @click="back" class="back-btn">← 返回对话</n-button>
       </div>
       <div class="sidebar-menu">
-        <div class="menu-item" :class="{ active: currentPage === 'llm' }" @click="goTo('llm')">
+        <div v-if="auth.isAdmin" class="menu-item" :class="{ active: currentPage === 'llm' }" @click="goTo('llm')">
           <span class="menu-icon">⚙</span>
           <span class="menu-label">模型管理</span>
         </div>

@@ -54,7 +54,10 @@ public class AuthService {
         }
         for (String p : raw.split(",")) {
             if (StringUtils.hasText(p)) {
-                set.add(p.trim());
+                String normalized = normalizePhone(p);
+                if (StringUtils.hasText(normalized)) {
+                    set.add(normalized);
+                }
             }
         }
         return set;
@@ -85,8 +88,7 @@ public class AuthService {
             phoneFromApi = phone;
         }
         String displayName = resolveDisplayName(root, phoneFromApi);
-        final String canonical = phoneFromApi;
-        boolean admin = adminPhones.stream().anyMatch(a -> a.equals(canonical) || a.equalsIgnoreCase(canonical));
+        boolean admin = adminPhones.contains(normalizePhone(phone));
 
         JwtIssueResult issued = jwtTokenProvider.createToken(phoneFromApi, displayName, admin);
         LoginSessionSnapshot snap = new LoginSessionSnapshot();
@@ -381,6 +383,13 @@ public class AuthService {
             }
         }
         return null;
+    }
+
+    private static String normalizePhone(String raw) {
+        if (!StringUtils.hasText(raw)) {
+            return "";
+        }
+        return raw.replaceAll("\\D", "");
     }
 
     private static String resolveDisplayName(JsonNode root, String fallbackPhone) {

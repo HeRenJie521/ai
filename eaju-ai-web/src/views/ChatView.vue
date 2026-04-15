@@ -75,11 +75,18 @@ function onMarkdownAreaClick(ev: MouseEvent) {
   )
 }
 
-const userMenuOptions: DropdownOption[] = [
-  { label: '系统设置', key: 'settings' },
-  { type: 'divider', key: 'd1' },
-  { label: '退出登录', key: 'logout' },
-]
+const userMenuOptions = computed<DropdownOption[]>(() => {
+  if (auth.isAdmin) {
+    return [
+      { label: '系统设置', key: 'settings' },
+      { type: 'divider', key: 'd1' },
+      { label: '退出登录', key: 'logout' },
+    ]
+  }
+  return [
+    { label: '退出登录', key: 'logout' },
+  ]
+})
 
 const settingsOpen = ref(false)
 
@@ -700,6 +707,9 @@ function fmtMsgTime(iso: string | null | undefined): string {
 
 function onUserMenuSelect(key: string) {
   if (key === 'settings') {
+    if (!auth.isAdmin) {
+      return
+    }
     router.push('/settings/llm')
   } else if (key === 'logout') {
     void logout()
@@ -717,9 +727,9 @@ function goSettingsPage(page: 'llm' | 'api-keys' | 'api-docs') {
   <!-- 不用 Naive NLayout：其内部滚动容器会破坏纵向 flex，导致输入框悬在中间、底部留白 -->
   <div class="layout-root">
 
-    <!-- 系统设置面板 -->
+    <!-- 系统设置面板（仅管理员可见） -->
     <Transition name="settings-slide">
-      <div v-if="settingsOpen" class="settings-overlay">
+      <div v-if="settingsOpen && auth.isAdmin" class="settings-overlay">
         <div class="settings-panel">
           <div class="settings-panel-head">
             <span class="settings-panel-title">系统设置</span>

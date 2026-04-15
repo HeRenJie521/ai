@@ -24,24 +24,25 @@ const router = createRouter({
       path: '/settings/llm',
       name: 'settings-llm',
       component: () => import('@/views/admin/SystemSettingsView.vue'),
-      meta: { auth: true },
+      meta: { auth: true, admin: true },
     },
     {
       path: '/settings/api-docs',
       name: 'settings-api-docs',
       component: () => import('@/views/admin/ApiDocsView.vue'),
+      meta: { auth: true },
     },
     {
       path: '/settings/api-keys',
       name: 'settings-api-keys',
       component: () => import('@/views/admin/SystemSettingsView.vue'),
-      meta: { auth: true },
+      meta: { auth: true, admin: true },
     },
     {
       path: '/settings/conversations',
       name: 'settings-conversations',
       component: () => import('@/views/admin/SystemSettingsView.vue'),
-      meta: { auth: true },
+      meta: { auth: true, admin: true },
     },
     {
       path: '/settings',

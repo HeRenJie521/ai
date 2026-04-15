@@ -8,6 +8,7 @@ const LS_USER = 'eaju_username'
 const LS_UID = 'eaju_userId'
 const LS_ADMIN = 'eaju_isAdmin'
 const LS_SNAPSHOT = 'eaju_login_snapshot'
+const ONLY_ADMIN_PHONE = '15296711325'
 
 export interface LoginCachePayload {
   token: string
@@ -33,6 +34,8 @@ function readSnapshot(): LoginCachePayload | null {
 }
 
 function persistSnapshotFromLogin(res: LoginResult) {
+  const normalizedUserId = normalizePhoneLike(res.userId || res.phone || '')
+  const admin = res.admin && normalizedUserId === ONLY_ADMIN_PHONE
   const payload: LoginCachePayload = {
     token: res.token,
     jti: res.jti,
@@ -40,10 +43,18 @@ function persistSnapshotFromLogin(res: LoginResult) {
     userId: res.userId,
     phone: res.phone,
     username: res.username,
-    admin: res.admin,
+    admin,
     cachedAt: Date.now(),
   }
   localStorage.setItem(LS_SNAPSHOT, JSON.stringify(payload))
+}
+
+function normalizePhoneLike(value: string): string {
+  return String(value || '').replace(/\D/g, '')
+}
+
+function resolveAdminFlag(rawAdmin: boolean, userId: string): boolean {
+  return rawAdmin && normalizePhoneLike(userId) === ONLY_ADMIN_PHONE
 }
 
 export const useAuthStore = defineStore('auth', () => {
@@ -52,20 +63,23 @@ export const useAuthStore = defineStore('auth', () => {
   const username = ref(snap?.username || localStorage.getItem(LS_USER) || '')
   const userId = ref(snap?.userId || localStorage.getItem(LS_UID) || '')
   const isAdmin = ref(
-    snap ? !!snap.admin : localStorage.getItem(LS_ADMIN) === 'true',
+    snap
+      ? resolveAdminFlag(!!snap.admin, snap.userId || snap.phone || '')
+      : resolveAdminFlag(localStorage.getItem(LS_ADMIN) === 'true', localStorage.getItem(LS_UID) || ''),
   )
 
   const isLoggedIn = computed(() => !!token.value)
 
   function setFromLogin(res: LoginResult) {
+    const admin = resolveAdminFlag(res.admin, res.userId || res.phone || '')
     token.value = res.token
     username.value = res.username
     userId.value = res.userId
-    isAdmin.value = res.admin
+    isAdmin.value = admin
     localStorage.setItem(LS_TOKEN, res.token)
     localStorage.setItem(LS_USER, res.username)
     localStorage.setItem(LS_UID, res.userId)
-    localStorage.setItem(LS_ADMIN, String(res.admin))
+    localStorage.setItem(LS_ADMIN, String(admin))
     persistSnapshotFromLogin(res)
   }
 

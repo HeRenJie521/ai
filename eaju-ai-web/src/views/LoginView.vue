@@ -12,10 +12,11 @@ const auth = useAuthStore()
 
 const phone = ref('')
 const password = ref('')
-const loading = ref(false)
+const submitting = ref(false)
 
 async function onSubmit() {
-  loading.value = true
+  if (submitting.value) return
+  submitting.value = true
   try {
     const res = await loginApi({
       phone: phone.value.trim(),
@@ -29,7 +30,7 @@ async function onSubmit() {
     const err = e as { response?: { data?: { error?: string } } }
     message.error(err.response?.data?.error || '登录失败')
   } finally {
-    loading.value = false
+    submitting.value = false
   }
 }
 </script>
@@ -49,10 +50,9 @@ async function onSubmit() {
             placeholder="密码"
             show-password-on="click"
             autocomplete="current-password"
-            @keyup.enter="onSubmit"
           />
         </n-form-item>
-        <n-button type="primary" block :loading="loading" attr-type="submit" @click="onSubmit">
+        <n-button type="primary" block :loading="submitting" :disabled="submitting" attr-type="submit">
           登录
         </n-button>
       </n-form>

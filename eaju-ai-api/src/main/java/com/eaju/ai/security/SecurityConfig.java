@@ -54,8 +54,7 @@ public class SecurityConfig {
                 .antMatchers("/api/embed/login").permitAll()
                 .antMatchers("/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs", "/v3/api-docs/**")
                 .permitAll()
-                // 大模型提供方配置：已登录用户均可维护（其余 /api/admin/** 仍仅管理员）
-                .antMatchers("/api/admin/llm-providers", "/api/admin/llm-providers/**").authenticated()
+                // 所有 /api/admin/** 仅管理员可访问
                 .antMatchers("/api/admin/**").hasAuthority("ROLE_ADMIN")
                 .anyRequest().authenticated();
         http.addFilterBefore(apiKeyAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
