@@ -65,7 +65,7 @@ public class AdminApiKeyController {
 
     @PatchMapping("/{id}")
     public ApiKeyResponseDto patch(@PathVariable("id") Long id, @RequestBody ApiKeyPatchRequestDto body) {
-        ApiKeyEntity e = apiKeyService.update(id, body.getName(), body.getEnabled());
+        ApiKeyEntity e = apiKeyService.update(id, body.getName(), body.getEnabled(), body.getWelcomeText(), body.getSuggestions());
         return toRow(e);
     }
 
@@ -111,5 +111,7 @@ public class AdminApiKeyController {
         dto.setCreatedAt(e.getCreatedAt() != null ? e.getCreatedAt().toString() : null);
         dto.setType(e.getType());
         dto.setDefaultModel(e.getDefaultModel());
+        dto.setWelcomeText(e.getWelcomeText());
+        dto.setSuggestions(e.getSuggestions());
     }
 }

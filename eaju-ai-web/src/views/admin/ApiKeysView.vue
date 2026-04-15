@@ -81,6 +81,8 @@ const embedBaseUrl = computed(() => {
 const editId = ref<number | null>(null)
 const editName = ref('')
 const editEnabled = ref(true)
+const editWelcomeText = ref('')
+const editSuggestions = ref('')
 
 // ---- 用量抽屉 ----
 const usageOpen = ref(false)
@@ -231,6 +233,8 @@ function openEdit(r: ApiKeyRow) {
   editId.value = r.id
   editName.value = r.name
   editEnabled.value = r.enabled
+  editWelcomeText.value = r.welcomeText || ''
+  editSuggestions.value = r.suggestions ? JSON.stringify(r.suggestions, null, 2) : ''
 }
 
 /** 查看已有嵌入网站集成的嵌入代码（不展示 Token，Token 只在创建时显示一次） */
@@ -250,8 +254,30 @@ async function submitEdit() {
     message.warning('请填写名称')
     return
   }
+  
+  // 验证 suggestions JSON 格式
+  let suggestionsJson: string | undefined = undefined
+  if (editSuggestions.value.trim()) {
+    try {
+      const parsed = JSON.parse(editSuggestions.value)
+      if (!Array.isArray(parsed)) {
+        message.warning('推荐问题必须是数组格式')
+        return
+      }
+      suggestionsJson = JSON.stringify(parsed)
+    } catch {
+      message.warning('推荐问题 JSON 格式错误')
+      return
+    }
+  }
+  
   try {
-    await adminPatchApiKey(id, { name, enabled: editEnabled.value })
+    await adminPatchApiKey(id, {
+      name,
+      enabled: editEnabled.value,
+      welcomeText: editWelcomeText.value || undefined,
+      suggestions: suggestionsJson,
+    })
     message.success('已保存')
     editId.value = null
     await load()
@@ -554,7 +580,7 @@ function turnColumns(keyId: number): DataTableColumns<RecentTurnRow> {
     :show="editId != null"
     preset="card"
     title="编辑集成"
-    style="width: min(420px, 96vw)"
+    style="width: min(580px, 96vw)"
     :mask-closable="false"
     @update:show="(v: boolean) => { if (!v) editId = null }"
   >
@@ -565,6 +591,32 @@ function turnColumns(keyId: number): DataTableColumns<RecentTurnRow> {
       <n-form-item label="启用">
         <n-switch v-model:value="editEnabled" />
       </n-form-item>
+      
+      <!-- 开场引导配置（仅嵌入网站类型显示） -->
+      <template v-if="rows.find(r => r.id === editId)?.type === 2">
+        <n-form-item label="开场白文本（可选）">
+          <n-input
+            v-model:value="editWelcomeText"
+            type="textarea"
+            placeholder="例如：你好，我是AI助手，有什么可以帮助您的吗？"
+            :autosize="{ minRows: 3, maxRows: 6 }"
+          />
+          <template #feedback>
+            用户打开聊天页面且无对话记录时显示
+          </template>
+        </n-form-item>
+        <n-form-item label="推荐问题（可选，JSON数组格式）">
+          <n-input
+            v-model:value="editSuggestions"
+            type="textarea"
+            placeholder='例如：["问题1", "问题2", "问题3"]'
+            :autosize="{ minRows: 4, maxRows: 8 }"
+          />
+          <template #feedback>
+            格式：["问题1", "问题2"]，用户点击后自动发送
+          </template>
+        </n-form-item>
+      </template>
     </n-form>
     <template #footer>
       <n-space justify="end">

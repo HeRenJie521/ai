@@ -10,7 +10,9 @@
       "Bash(cp *)",
       "Bash(python3 *)",
       "Bash(sed *)",
-      "Bash(find *)"
+      "Bash(find *)",
+      "Bash(npm install *)",
+      "Bash(npm audit)"
     ]
   },
   "$version": 3

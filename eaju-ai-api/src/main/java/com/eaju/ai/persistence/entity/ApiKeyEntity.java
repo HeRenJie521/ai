@@ -53,6 +53,14 @@ public class ApiKeyEntity {
     @Column(name = "allowed_origins", length = 1000)
     private String allowedOrigins;
 
+    /** WEB_EMBED：开场白文本 */
+    @Column(name = "welcome_text", columnDefinition = "TEXT")
+    private String welcomeText;
+
+    /** WEB_EMBED：推荐问题 JSON 数组 */
+    @Column(name = "suggestions", columnDefinition = "JSONB")
+    private String suggestions;
+
     @PrePersist
     public void prePersist() {
         Instant n = Instant.now();
@@ -153,6 +161,22 @@ public class ApiKeyEntity {
 
     public void setAllowedOrigins(String allowedOrigins) {
         this.allowedOrigins = allowedOrigins;
+    }
+
+    public String getWelcomeText() {
+        return welcomeText;
+    }
+
+    public void setWelcomeText(String welcomeText) {
+        this.welcomeText = welcomeText;
+    }
+
+    public String getSuggestions() {
+        return suggestions;
+    }
+
+    public void setSuggestions(String suggestions) {
+        this.suggestions = suggestions;
     }
 
 }

@@ -88,6 +88,11 @@ public class ApiKeyService {
 
     @Transactional
     public ApiKeyEntity update(Long id, String name, Boolean enabled) {
+        return update(id, name, enabled, null, null);
+    }
+
+    @Transactional
+    public ApiKeyEntity update(Long id, String name, Boolean enabled, String welcomeText, String suggestions) {
         ApiKeyEntity e = apiKeyRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("API Key 不存在"));
         if (StringUtils.hasText(name)) {
@@ -95,6 +100,12 @@ public class ApiKeyService {
         }
         if (enabled != null) {
             e.setEnabled(enabled);
+        }
+        if (welcomeText != null) {
+            e.setWelcomeText(welcomeText);
+        }
+        if (suggestions != null) {
+            e.setSuggestions(suggestions);
         }
         return apiKeyRepository.save(e);
     }

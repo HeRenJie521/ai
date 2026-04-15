@@ -14,6 +14,12 @@ public class ApiKeyResponseDto {
     /** WEB_EMBED 默认模型 */
     private String defaultModel;
 
+    /** WEB_EMBED 开场白文本 */
+    private String welcomeText;
+
+    /** WEB_EMBED 推荐问题 JSON 字符串 */
+    private String suggestions;
+
     public Long getId() {
         return id;
     }
@@ -68,6 +74,22 @@ public class ApiKeyResponseDto {
 
     public void setDefaultModel(String defaultModel) {
         this.defaultModel = defaultModel;
+    }
+
+    public String getWelcomeText() {
+        return welcomeText;
+    }
+
+    public void setWelcomeText(String welcomeText) {
+        this.welcomeText = welcomeText;
+    }
+
+    public String getSuggestions() {
+        return suggestions;
+    }
+
+    public void setSuggestions(String suggestions) {
+        this.suggestions = suggestions;
     }
 
 }
