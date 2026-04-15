@@ -1,6 +1,6 @@
 -- =============================================================================
 -- 智蚁 AI API - 完整数据库部署脚本
--- 版本：1.2.0（最终完整版）
+-- 版本：1.3.0（含结构化 Agent Prompt 字段）
 -- 数据库：PostgreSQL 12+
 -- 执行方式：psql -U postgres -h 主机地址 -d 数据库名 -f deploy.sql
 -- =============================================================================
@@ -148,12 +148,12 @@ CREATE TABLE IF NOT EXISTS llm_provider_config (
     updated_at              TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX IF NOT EXISTS idx_llm_provider_config_enabled_sort
-    ON llm_provider_config (enabled, sort_order);
-
 COMMENT ON TABLE llm_provider_config IS 'OpenAI 兼容 Chat Completions 的提供方配置';
 COMMENT ON COLUMN llm_provider_config.code IS '与 POST /chat 请求体 provider 对应';
 COMMENT ON COLUMN llm_provider_config.modes_json IS '逻辑 mode -> 上游 model id，JSON 对象';
+CREATE INDEX IF NOT EXISTS idx_llm_provider_config_enabled_sort
+    ON llm_provider_config (enabled, sort_order);
+
 COMMENT ON COLUMN llm_provider_config.inference_defaults_json IS '默认推理参数 JSON';
 
 -- =============================================================================

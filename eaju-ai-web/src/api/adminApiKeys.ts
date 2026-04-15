@@ -13,6 +13,7 @@ export interface ApiKeyRow {
   /** 1=API_KEY  2=WEB_EMBED */
   type: IntegrationType
   defaultModel: string | null
+  allowedOrigins: string | null
   /** WEB_EMBED 开场白文本 */
   welcomeText: string | null
   /** WEB_EMBED 推荐问题 JSON 字符串 */

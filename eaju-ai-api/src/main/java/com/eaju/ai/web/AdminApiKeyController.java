@@ -66,6 +66,7 @@ public class AdminApiKeyController {
     @PatchMapping("/{id}")
     public ApiKeyResponseDto patch(@PathVariable("id") Long id, @RequestBody ApiKeyPatchRequestDto body) {
         ApiKeyEntity e = apiKeyService.update(id, body.getName(), body.getEnabled(),
+                body.getDefaultModel(), body.getAllowedOrigins(),
                 body.getWelcomeText(), body.getSuggestions(),
                 body.getSystemRole(), body.getSystemTask(), body.getSystemConstraints());
         return toRow(e);

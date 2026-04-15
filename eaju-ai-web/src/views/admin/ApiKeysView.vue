@@ -79,8 +79,11 @@ const embedBaseUrl = computed(() => {
 
 // ---- 编辑 ----
 const editId = ref<number | null>(null)
+const editType = ref<1 | 2>(1)
 const editName = ref('')
 const editEnabled = ref(true)
+const editDefaultModel = ref<string | null>(null)
+const editAllowedOrigins = ref('')
 
 // ---- 开场白配置弹窗 ----
 const showWelcomeConfig = ref(false)
@@ -245,8 +248,11 @@ function closeSecretReveal() {
 
 function openEdit(r: ApiKeyRow) {
   editId.value = r.id
+  editType.value = r.type
   editName.value = r.name
   editEnabled.value = r.enabled
+  editDefaultModel.value = r.defaultModel
+  editAllowedOrigins.value = r.allowedOrigins ?? ''
 }
 
 /** 查看已有嵌入网站集成的嵌入代码（不展示 Token，Token 只在创建时显示一次） */
@@ -267,7 +273,14 @@ async function submitEdit() {
     return
   }
   try {
-    await adminPatchApiKey(id, { name, enabled: editEnabled.value })
+    await adminPatchApiKey(id, {
+      name,
+      enabled: editEnabled.value,
+      ...(editType.value === 2 ? {
+        defaultModel: editDefaultModel.value ?? undefined,
+        allowedOrigins: editAllowedOrigins.value || undefined,
+      } : {}),
+    })
     message.success('已保存')
     editId.value = null
     await load()
@@ -696,7 +709,7 @@ function sessionColumns(keyId: number): DataTableColumns<SessionGroup> {
     :show="editId != null"
     preset="card"
     title="编辑集成"
-    style="width: min(420px, 96vw)"
+    style="width: min(520px, 96vw)"
     :mask-closable="false"
     @update:show="(v: boolean) => { if (!v) editId = null }"
   >
@@ -704,6 +717,23 @@ function sessionColumns(keyId: number): DataTableColumns<SessionGroup> {
       <n-form-item label="名称">
         <n-input v-model:value="editName" />
       </n-form-item>
+      <template v-if="editType === 2">
+        <n-form-item label="默认对话模型">
+          <n-select
+            v-model:value="editDefaultModel"
+            :options="modelOptions"
+            placeholder="请选择默认模型"
+            filterable
+            clearable
+          />
+        </n-form-item>
+        <n-form-item label="允许嵌入的来源域名（逗号分隔，留空不限制）">
+          <n-input
+            v-model:value="editAllowedOrigins"
+            placeholder="如 https://example.com, https://partner.com"
+          />
+        </n-form-item>
+      </template>
     </n-form>
     <template #footer>
       <n-space justify="end">

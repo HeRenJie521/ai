@@ -4,7 +4,13 @@ public class ApiKeyPatchRequestDto {
 
     private String name;
     private Boolean enabled;
-    
+
+    /** WEB_EMBED 默认对话模型 */
+    private String defaultModel;
+
+    /** WEB_EMBED 允许嵌入的来源域名，逗号分隔 */
+    private String allowedOrigins;
+
     /** WEB_EMBED 开场白文本 */
     private String welcomeText;
     
@@ -29,6 +35,22 @@ public class ApiKeyPatchRequestDto {
 
     public void setEnabled(Boolean enabled) {
         this.enabled = enabled;
+    }
+
+    public String getDefaultModel() {
+        return defaultModel;
+    }
+
+    public void setDefaultModel(String defaultModel) {
+        this.defaultModel = defaultModel;
+    }
+
+    public String getAllowedOrigins() {
+        return allowedOrigins;
+    }
+
+    public void setAllowedOrigins(String allowedOrigins) {
+        this.allowedOrigins = allowedOrigins;
     }
 
     public String getWelcomeText() {

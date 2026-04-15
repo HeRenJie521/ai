@@ -93,11 +93,12 @@ public class ApiKeyService {
 
     @Transactional
     public ApiKeyEntity update(Long id, String name, Boolean enabled, String welcomeText, String suggestions) {
-        return update(id, name, enabled, welcomeText, suggestions, null, null, null);
+        return update(id, name, enabled, null, null, welcomeText, suggestions, null, null, null);
     }
 
     @Transactional
     public ApiKeyEntity update(Long id, String name, Boolean enabled,
+                               String defaultModel, String allowedOrigins,
                                String welcomeText, String suggestions,
                                String systemRole, String systemTask, String systemConstraints) {
         ApiKeyEntity e = apiKeyRepository.findById(id)
@@ -107,6 +108,12 @@ public class ApiKeyService {
         }
         if (enabled != null) {
             e.setEnabled(enabled);
+        }
+        if (defaultModel != null) {
+            e.setDefaultModel(StringUtils.hasText(defaultModel) ? defaultModel.trim() : null);
+        }
+        if (allowedOrigins != null) {
+            e.setAllowedOrigins(StringUtils.hasText(allowedOrigins) ? allowedOrigins.trim() : null);
         }
         if (welcomeText != null) {
             e.setWelcomeText(welcomeText);
