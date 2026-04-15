@@ -4,13 +4,23 @@
  *
  * iframe URL 格式（由集成方后端生成）：
  *   https://chat.example.com/embed?iid=42&uid=13800000000&token=emb_xxxxxxxxxxxxxxxx
+ *
+ * 语音 JSBridge 协议（Native App → WebView postMessage）：
+ *   { type: 'VOICE_PERMISSION_DENIED' }         麦克风权限被拒绝
+ *   { type: 'VOICE_RESULT', text: '...', isFinal: true }  识别结果（isFinal=true 时结束录音）
+ *   { type: 'VOICE_STOPPED' }                   原生侧主动停止录音
+ *
+ * WebView → Native App postMessage（可通过 window.parent.postMessage 或 AppBridge）：
+ *   { type: 'START_VOICE_RECOGNITION' }
+ *   { type: 'STOP_VOICE_RECOGNITION' }
  */
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { embedLoginApi } from '@/api/auth'
 import { listLlmProviders, type LlmProviderOption } from '@/api/llmProviders'
 import {
+  deleteConversation,
   listConversations,
   loadConversationMessages,
   type ChatMessage,
@@ -28,6 +38,7 @@ const errorMsg = ref('')
 
 // 集成参数（挂载后填充）
 let iid = 0
+const integrationName = ref('AI 助手')
 
 // ---- 聊天核心 ----
 const providers = ref<LlmProviderOption[]>([])
@@ -38,12 +49,22 @@ const messages = ref<ChatMessage[]>([])
 const input = ref('')
 const sending = ref(false)
 const sessionId = ref<string | null>(null)
-const thinkingOn = ref(false)      // Issue 5: 默认关闭
+const thinkingOn = ref(false)
 const msgScrollRef = ref<HTMLElement | null>(null)
 
 // ---- 会话列表 ----
 const conversations = ref<ConversationItem[]>([])
 const showSidebar = ref(false)
+const deletingSessionId = ref<string | null>(null)
+
+// ---- 语音录音 ----
+type Platform = 'android' | 'ios' | 'harmony' | 'wechat' | 'web'
+const isRecording = ref(false)
+const voiceHint = ref('')
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let recognition: any = null
+let mediaRecorder: MediaRecorder | null = null
+let voiceBridgeCleanup: (() => void) | null = null
 
 // ---- localStorage 持久化 ----
 function sessionKey() { return `embed_sid_${iid}` }
@@ -61,7 +82,6 @@ function clearSessionId() {
 const currentProvider = computed(() =>
   providers.value.find(p => p.code === selectedProvider.value) ?? null,
 )
-
 const showThinkingToggle = computed(() => {
   const p = currentProvider.value
   if (!p?.supportsThinking) return false
@@ -71,7 +91,6 @@ const showThinkingToggle = computed(() => {
   if (!cap) return false
   return cap.deepThinking === true
 })
-
 watch(showThinkingToggle, show => { if (!show) thinkingOn.value = false })
 
 // ---- 初始化 ----
@@ -87,11 +106,11 @@ onMounted(async () => {
     return
   }
 
-  // SSO 静默登录
   try {
     const result = await embedLoginApi({ integrationId: iid, userId: uid, token })
     authStore.setFromLogin(result)
     if (result.defaultModel) integrationDefaultModel.value = result.defaultModel
+    if (result.integrationName) integrationName.value = result.integrationName
   } catch (e: unknown) {
     const err = e as { response?: { data?: { message?: string } }; message?: string }
     status.value = 'error'
@@ -99,13 +118,11 @@ onMounted(async () => {
     return
   }
 
-  // 加载模型列表
   try {
     providers.value = await listLlmProviders()
     selectDefaultModel()
   } catch { /* 忽略 */ }
 
-  // 恢复上次会话（Issue 1: 同一用户不重新生成 session）
   const savedSid = restoreSessionId()
   if (savedSid) {
     try {
@@ -113,18 +130,20 @@ onMounted(async () => {
       sessionId.value = savedSid
       messages.value = msgs
     } catch {
-      // 会话已失效，清除记录
       clearSessionId()
     }
   }
 
-  // 加载会话列表
   try {
     conversations.value = await listConversations()
   } catch { /* 忽略 */ }
 
   status.value = 'ready'
   await scrollToBottom()
+})
+
+onUnmounted(() => {
+  stopVoice()
 })
 
 function selectDefaultModel() {
@@ -173,6 +192,7 @@ async function selectConversation(conv: ConversationItem) {
   sessionId.value = conv.sessionId
   saveSessionId(conv.sessionId)
   showSidebar.value = false
+  deletingSessionId.value = null
   try {
     const msgs = await loadConversationMessages(conv.sessionId)
     messages.value = msgs
@@ -180,12 +200,30 @@ async function selectConversation(conv: ConversationItem) {
   await scrollToBottom()
 }
 
+// ---- 删除会话 ----
+function askDeleteConversation(conv: ConversationItem, e: Event) {
+  e.stopPropagation()
+  deletingSessionId.value = conv.sessionId
+}
+
+async function confirmDelete(sid: string) {
+  try {
+    await deleteConversation(sid)
+    conversations.value = conversations.value.filter(c => c.sessionId !== sid)
+    if (sessionId.value === sid) {
+      messages.value = []
+      sessionId.value = null
+      clearSessionId()
+    }
+  } catch { /* 忽略 */ }
+  deletingSessionId.value = null
+}
+
 // ---- 发送消息 ----
 async function sendMessage() {
   const text = input.value.trim()
   if (!text || sending.value) return
 
-  // Issue 1 fix: 客户端生成 sessionId，避免服务端每次重新生成
   const isNewSession = !sessionId.value
   if (isNewSession) {
     sessionId.value = crypto.randomUUID()
@@ -205,7 +243,7 @@ async function sendMessage() {
       messages: messages.value.slice(0, assistantIdx),
       stream: true,
       sessionId: sessionId.value,
-      thinkingMode: thinkingOn.value,   // 明确传 false 时后端会向上游发 thinking:{type:"disabled"}
+      thinkingMode: thinkingOn.value,
     }
     if (selectedMode.value) payload.mode = selectedMode.value
 
@@ -226,7 +264,6 @@ async function sendMessage() {
     const reader = resp.body.getReader()
     const decoder = new TextDecoder()
     let buffer = ''
-
     while (true) {
       const { done, value } = await reader.read()
       if (done) break
@@ -250,7 +287,6 @@ async function sendMessage() {
         } catch { /* skip */ }
       }
     }
-    // 新会话首次发送后刷新会话列表
     if (isNewSession) {
       try { conversations.value = await listConversations() } catch { /* 忽略 */ }
     }
@@ -269,6 +305,193 @@ function handleKeydown(e: KeyboardEvent) {
   }
 }
 
+// ---- 语音录音 ----
+function detectPlatform(): Platform {
+  const ua = navigator.userAgent.toLowerCase()
+  if (ua.includes('micromessenger')) return 'wechat'
+  if (ua.includes('harmonyos') || ua.includes('hmos')) return 'harmony'
+  if (/(iphone|ipad|ipod)/.test(ua)) return 'ios'
+  if (/android/.test(ua)) return 'android'
+  return 'web'
+}
+
+/** 通过 JSBridge/postMessage 与 Native App 通信的语音录音 */
+function startVoiceViaBridge(platform: Platform) {
+  isRecording.value = true
+  voiceHint.value = '正在录音...'
+
+  const handler = (e: MessageEvent) => {
+    let data: Record<string, unknown>
+    try { data = typeof e.data === 'string' ? JSON.parse(e.data) : e.data } catch { return }
+    if (!data || typeof data !== 'object') return
+
+    if (data.type === 'VOICE_PERMISSION_DENIED') {
+      isRecording.value = false
+      voiceHint.value = '麦克风权限已拒绝'
+      setTimeout(() => { voiceHint.value = '' }, 2500)
+      cleanup()
+    } else if (data.type === 'VOICE_RESULT' && data.text) {
+      // 累加到输入框（interim 结果可能触发多次）
+      if (data.isFinal) {
+        input.value = (input.value + String(data.text)).trim()
+        isRecording.value = false
+        voiceHint.value = ''
+        cleanup()
+      } else {
+        // 暂时展示 interim 结果
+        voiceHint.value = String(data.text)
+      }
+    } else if (data.type === 'VOICE_STOPPED') {
+      isRecording.value = false
+      voiceHint.value = ''
+      cleanup()
+    }
+  }
+
+  function cleanup() {
+    window.removeEventListener('message', handler)
+    voiceBridgeCleanup = null
+  }
+  voiceBridgeCleanup = cleanup
+  window.addEventListener('message', handler)
+
+  // 发送开始录音指令
+  const msg = JSON.stringify({ type: 'START_VOICE_RECOGNITION' })
+  if (platform === 'wechat') {
+    // 小程序 web-view 通过 parent.postMessage 传给小程序侧
+    window.parent?.postMessage(msg, '*')
+  } else if (platform === 'ios') {
+    // iOS WKWebView JSBridge
+    const win = window as unknown as { webkit?: { messageHandlers?: { AppBridge?: { postMessage: (v: unknown) => void } } } }
+    win.webkit?.messageHandlers?.AppBridge?.postMessage({ action: 'startVoice' })
+  } else {
+    // Android / HarmonyOS AppBridge
+    const win = window as unknown as { AppBridge?: { startVoiceRecognition?: () => void } }
+    win.AppBridge?.startVoiceRecognition?.()
+  }
+}
+
+/** Web Speech API (Chrome / Edge / Android Chrome 均支持) */
+function startWebSpeechRecognition() {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const w = window as any
+  const SpeechRec = w.SpeechRecognition ?? w.webkitSpeechRecognition
+  if (!SpeechRec) return false
+
+  recognition = new SpeechRec()
+  recognition.lang = 'zh-CN'
+  recognition.continuous = false
+  recognition.interimResults = true
+
+  recognition.onstart = () => { isRecording.value = true; voiceHint.value = '正在聆听...' }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  recognition.onresult = (e: any) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const transcript = Array.from(e.results as any[])
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .map((r: any) => r[0].transcript)
+      .join('')
+    if (e.results[e.results.length - 1]?.isFinal) {
+      input.value = transcript
+      voiceHint.value = ''
+    } else {
+      voiceHint.value = transcript
+    }
+  }
+  recognition.onend = () => { isRecording.value = false; voiceHint.value = '' }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  recognition.onerror = (e: any) => {
+    isRecording.value = false
+    voiceHint.value = e.error === 'not-allowed' ? '麦克风权限被拒绝' : '语音识别失败'
+    setTimeout(() => { voiceHint.value = '' }, 2500)
+  }
+  recognition.start()
+  return true
+}
+
+/** MediaRecorder 兜底（无 STT，仅录音提示） */
+async function startMediaRecorderFallback() {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+    isRecording.value = true
+    voiceHint.value = '录音中，再次点击停止'
+    const chunks: BlobPart[] = []
+    mediaRecorder = new MediaRecorder(stream)
+    mediaRecorder.ondataavailable = (e) => chunks.push(e.data)
+    mediaRecorder.onstop = () => {
+      stream.getTracks().forEach(t => t.stop())
+      isRecording.value = false
+      voiceHint.value = ''
+    }
+    mediaRecorder.start()
+  } catch (e: unknown) {
+    const err = e as { name?: string }
+    isRecording.value = false
+    voiceHint.value = err?.name === 'NotAllowedError' ? '麦克风权限被拒绝' : '无法访问麦克风'
+    setTimeout(() => { voiceHint.value = '' }, 2500)
+  }
+}
+
+async function toggleVoice() {
+  if (isRecording.value) {
+    stopVoice()
+    return
+  }
+  const platform = detectPlatform()
+
+  // 微信小程序 webview
+  if (platform === 'wechat') {
+    startVoiceViaBridge('wechat')
+    return
+  }
+  // iOS WKWebView Bridge
+  const win = window as unknown as {
+    webkit?: { messageHandlers?: { AppBridge?: unknown } }
+    AppBridge?: unknown
+  }
+  if (platform === 'ios' && win.webkit?.messageHandlers?.AppBridge) {
+    startVoiceViaBridge('ios')
+    return
+  }
+  // Android / HarmonyOS Bridge
+  if ((platform === 'android' || platform === 'harmony') && win.AppBridge) {
+    startVoiceViaBridge(platform)
+    return
+  }
+  // Web Speech API（优先）
+  if (startWebSpeechRecognition()) return
+  // MediaRecorder 兜底
+  await startMediaRecorderFallback()
+}
+
+function stopVoice() {
+  if (recognition) {
+    try { recognition.stop() } catch { /* ignore */ }
+    recognition = null
+  }
+  if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+    try { mediaRecorder.stop() } catch { /* ignore */ }
+    mediaRecorder = null
+  }
+  if (voiceBridgeCleanup) {
+    const platform = detectPlatform()
+    const msg = JSON.stringify({ type: 'STOP_VOICE_RECOGNITION' })
+    if (platform === 'wechat') {
+      window.parent?.postMessage(msg, '*')
+    } else if (platform === 'ios') {
+      const w = window as unknown as { webkit?: { messageHandlers?: { AppBridge?: { postMessage: (v: unknown) => void } } } }
+      w.webkit?.messageHandlers?.AppBridge?.postMessage({ action: 'stopVoice' })
+    } else {
+      const w = window as unknown as { AppBridge?: { stopVoiceRecognition?: () => void } }
+      w.AppBridge?.stopVoiceRecognition?.()
+    }
+    voiceBridgeCleanup()
+  }
+  isRecording.value = false
+  voiceHint.value = ''
+}
+
+// ---- 滚动 ----
 async function scrollToBottom() {
   await nextTick()
   const el = msgScrollRef.value
@@ -289,7 +512,6 @@ function fmtTime(val: string | null | undefined): string {
   return val.replace('T', ' ').slice(0, 16)
 }
 
-// 代码块复制按钮处理
 function onMdAreaClick(ev: MouseEvent) {
   const t = ev.target as HTMLElement | null
   if (!t?.closest('.md-copy-btn')) return
@@ -304,12 +526,6 @@ function onMdAreaClick(ev: MouseEvent) {
     )
   }
 }
-
-const providerLabel = computed(() => {
-  const p = providers.value.find(p => p.code === selectedProvider.value)
-  if (!p) return selectedMode.value || selectedProvider.value
-  return selectedMode.value ? `${p.displayName} · ${selectedMode.value}` : p.displayName
-})
 </script>
 
 <template>
@@ -332,8 +548,10 @@ const providerLabel = computed(() => {
     <!-- 聊天界面 -->
     <template v-else>
 
-      <!-- 会话列表侧边栏（遮罩） -->
+      <!-- 侧边栏遮罩 -->
       <div v-if="showSidebar" class="sidebar-overlay" @click="showSidebar = false" />
+
+      <!-- 历史会话侧边栏 -->
       <aside :class="['sidebar', { 'sidebar--open': showSidebar }]">
         <div class="sidebar-header">
           <span class="sidebar-title">历史会话</span>
@@ -343,34 +561,57 @@ const providerLabel = computed(() => {
             </svg>
           </button>
         </div>
+
+        <!-- 新建会话按钮 -->
+        <button class="new-conv-btn" @click="newConversation">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+            <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+          </svg>
+          新建会话
+        </button>
+
         <div class="sidebar-list">
-          <button
+          <div
             v-for="conv in conversations"
             :key="conv.sessionId"
             :class="['conv-item', { 'conv-item--active': conv.sessionId === sessionId }]"
-            @click="selectConversation(conv)"
           >
-            <span class="conv-title">{{ conv.title || '无标题' }}</span>
-            <span class="conv-time">{{ fmtTime(conv.lastMessageAt) }}</span>
-          </button>
+            <!-- 确认删除状态 -->
+            <template v-if="deletingSessionId === conv.sessionId">
+              <span class="conv-del-confirm">确认删除？</span>
+              <div class="conv-del-actions">
+                <button class="conv-del-yes" @click="confirmDelete(conv.sessionId)">删除</button>
+                <button class="conv-del-no" @click="deletingSessionId = null">取消</button>
+              </div>
+            </template>
+            <!-- 正常展示 -->
+            <template v-else>
+              <div class="conv-main" @click="selectConversation(conv)">
+                <span class="conv-title">{{ conv.title || '无标题' }}</span>
+                <span class="conv-time">{{ fmtTime(conv.lastMessageAt) }}</span>
+              </div>
+              <button class="conv-del-btn" title="删除会话" @click="askDeleteConversation(conv, $event)">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="3 6 5 6 21 6"/>
+                  <path d="M19 6l-1 14H6L5 6"/>
+                  <path d="M10 11v6M14 11v6"/>
+                  <path d="M9 6V4h6v2"/>
+                </svg>
+              </button>
+            </template>
+          </div>
           <p v-if="conversations.length === 0" class="sidebar-empty">暂无历史会话</p>
         </div>
       </aside>
 
-      <!-- 顶部栏 -->
+      <!-- 顶部栏：仅展示 集成名称 + 历史会话 入口 -->
       <header class="topbar">
         <button class="icon-btn" title="历史会话" @click="showSidebar = true">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
           </svg>
         </button>
-        <span class="topbar-logo">AI 助手</span>
-        <span v-if="selectedMode" class="model-tag">{{ providerLabel }}</span>
-        <button class="icon-btn new-btn" title="新会话" @click="newConversation">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-          </svg>
-        </button>
+        <span class="topbar-logo">{{ integrationName }}</span>
       </header>
 
       <!-- 消息区域 -->
@@ -383,38 +624,33 @@ const providerLabel = computed(() => {
         </div>
 
         <template v-for="(msg, i) in messages" :key="i">
-          <!-- 用户消息 -->
           <div v-if="msg.role === 'user'" class="msg msg--user">
             <div class="bubble bubble--user">
               <span style="white-space: pre-wrap; word-break: break-word;">{{ msg.content }}</span>
             </div>
           </div>
-
-          <!-- 助手消息 -->
           <div v-else class="msg msg--ai">
             <div class="bubble bubble--ai">
-              <!-- 思考过程 -->
               <details v-if="msg.reasoningContent" class="thinking-block">
                 <summary class="thinking-summary">思考过程</summary>
                 <pre class="thinking-body">{{ msg.reasoningContent }}</pre>
               </details>
-              <!-- 打字动画（流式输出开始前） -->
               <span v-if="!msg.content && sending && i === messages.length - 1" class="typing">
                 <span /><span /><span />
               </span>
-              <!-- Markdown 渲染（Issue 2） -->
-              <div
-                v-else
-                class="msg-md"
-                v-html="renderChatMarkdown(msg.content)"
-              />
+              <div v-else class="msg-md" v-html="renderChatMarkdown(msg.content)" />
             </div>
           </div>
         </template>
       </div>
 
-      <!-- 输入区域（Issue 3: 与 ChatView 风格一致） -->
+      <!-- 输入区域 -->
       <footer class="composer">
+        <!-- 语音提示条 -->
+        <div v-if="voiceHint" class="voice-hint">
+          <span class="voice-hint-dot" :class="{ 'voice-hint-dot--pulse': isRecording }" />
+          {{ voiceHint }}
+        </div>
         <div class="composer-box">
           <textarea
             v-model="input"
@@ -425,7 +661,7 @@ const providerLabel = computed(() => {
             @keydown="handleKeydown"
           />
           <div class="composer-toolbar">
-            <!-- 深度思考开关（Issue 5: 默认关闭） -->
+            <!-- 深度思考开关 -->
             <div v-if="showThinkingToggle" class="thinking-toggle">
               <span class="thinking-label">深度思考</span>
               <button
@@ -436,6 +672,23 @@ const providerLabel = computed(() => {
               </button>
             </div>
             <div style="flex: 1" />
+            <!-- 语音按钮 -->
+            <button
+              :class="['voice-btn', { 'voice-btn--recording': isRecording }]"
+              :title="isRecording ? '停止录音' : '语音输入'"
+              :disabled="sending"
+              @click="toggleVoice"
+            >
+              <svg v-if="!isRecording" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+                <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                <line x1="12" y1="19" x2="12" y2="23"/>
+                <line x1="8" y1="23" x2="16" y2="23"/>
+              </svg>
+              <svg v-else width="17" height="17" viewBox="0 0 24 24" fill="currentColor">
+                <rect x="6" y="6" width="12" height="12" rx="2"/>
+              </svg>
+            </button>
             <!-- 发送按钮 -->
             <button
               class="send-btn"
@@ -459,7 +712,6 @@ const providerLabel = computed(() => {
 <style scoped>
 * { box-sizing: border-box; }
 
-/* ===== 根容器 ===== */
 .embed-root {
   display: flex;
   flex-direction: column;
@@ -473,22 +725,15 @@ const providerLabel = computed(() => {
 
 /* ===== 加载 / 错误 ===== */
 .state-center {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 14px;
-  color: #6b7280;
-  font-size: 14px;
+  flex: 1; display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 14px; color: #6b7280; font-size: 14px;
 }
 .state-error { color: #ef4444; }
 .spinner {
   width: 30px; height: 30px;
-  border: 3px solid #e5e7eb;
-  border-top-color: #3b82f6;
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
+  border: 3px solid #e5e7eb; border-top-color: #3b82f6;
+  border-radius: 50%; animation: spin 0.8s linear infinite;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 .state-hint { font-size: 13px; color: #9ca3af; }
@@ -496,58 +741,99 @@ const providerLabel = computed(() => {
 /* ===== 侧边栏 ===== */
 .sidebar-overlay {
   position: fixed; inset: 0; z-index: 40;
-  background: rgba(0, 0, 0, 0.3);
+  background: rgba(0,0,0,.3);
 }
 .sidebar {
   position: fixed; top: 0; left: 0; bottom: 0; z-index: 50;
-  width: 260px;
-  background: #fff;
+  width: 260px; background: #fff;
   border-right: 1px solid #e5e7eb;
   display: flex; flex-direction: column;
-  transform: translateX(-100%);
-  transition: transform 0.22s ease;
+  transform: translateX(-100%); transition: transform 0.22s ease;
 }
 .sidebar--open { transform: translateX(0); }
 
 .sidebar-header {
   display: flex; align-items: center; justify-content: space-between;
-  padding: 14px 16px;
-  border-bottom: 1px solid #f0f0f0;
+  padding: 14px 16px; border-bottom: 1px solid #f0f0f0; flex-shrink: 0;
 }
 .sidebar-title { font-weight: 600; font-size: 14px; color: #111827; }
-.sidebar-list {
-  flex: 1; overflow-y: auto; padding: 8px 0;
+
+/* 新建会话按钮（侧边栏顶部） */
+.new-conv-btn {
+  display: flex; align-items: center; gap: 7px;
+  width: calc(100% - 24px); margin: 10px 12px 4px;
+  padding: 9px 14px; border-radius: 10px;
+  border: 1.5px dashed #93c5fd; background: #eff6ff;
+  color: #2563eb; font-size: 13px; font-weight: 500;
+  cursor: pointer; transition: background 0.12s, border-color 0.12s;
 }
+.new-conv-btn:hover { background: #dbeafe; border-color: #60a5fa; }
+
+.sidebar-list { flex: 1; overflow-y: auto; padding: 4px 0 8px; }
+
 .conv-item {
-  width: 100%; text-align: left;
-  display: flex; flex-direction: column; gap: 2px;
-  padding: 10px 16px;
-  border: none; background: none; cursor: pointer;
-  transition: background 0.12s;
+  display: flex; align-items: center;
+  padding: 0 8px 0 4px; min-height: 52px;
+  border-radius: 8px; margin: 0 6px 2px;
+  cursor: pointer; transition: background 0.12s;
 }
 .conv-item:hover { background: #f5f6f8; }
 .conv-item--active { background: #eff6ff; }
+
+.conv-main {
+  flex: 1; min-width: 0;
+  display: flex; flex-direction: column; gap: 2px;
+  padding: 10px 6px 10px 10px;
+}
 .conv-title {
   font-size: 13px; color: #111827;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .conv-time { font-size: 11px; color: #9ca3af; }
+
+/* 会话删除按钮 */
+.conv-del-btn {
+  flex-shrink: 0; opacity: 0;
+  width: 28px; height: 28px;
+  border: none; background: none; cursor: pointer;
+  border-radius: 6px; color: #9ca3af;
+  display: flex; align-items: center; justify-content: center;
+  transition: opacity 0.12s, background 0.12s, color 0.12s;
+}
+.conv-item:hover .conv-del-btn { opacity: 1; }
+.conv-del-btn:hover { background: #fee2e2; color: #ef4444; }
+
+/* 删除确认行 */
+.conv-del-confirm {
+  font-size: 12px; color: #ef4444; font-weight: 500;
+  padding: 0 0 0 10px; flex: 1; user-select: none;
+}
+.conv-del-actions {
+  display: flex; gap: 6px; padding: 8px 6px;
+}
+.conv-del-yes {
+  padding: 4px 10px; border-radius: 6px;
+  border: none; background: #ef4444; color: #fff;
+  font-size: 12px; cursor: pointer;
+}
+.conv-del-yes:hover { background: #dc2626; }
+.conv-del-no {
+  padding: 4px 10px; border-radius: 6px;
+  border: 1px solid #e5e7eb; background: #fff; color: #374151;
+  font-size: 12px; cursor: pointer;
+}
+.conv-del-no:hover { background: #f3f4f6; }
+
 .sidebar-empty { padding: 24px 16px; font-size: 13px; color: #9ca3af; text-align: center; }
 
 /* ===== 顶部栏 ===== */
 .topbar {
   display: flex; align-items: center; gap: 10px;
-  padding: 10px 14px;
-  background: #fff;
-  border-bottom: 1px solid #e5e7eb;
-  flex-shrink: 0;
+  padding: 10px 14px; background: #fff;
+  border-bottom: 1px solid #e5e7eb; flex-shrink: 0;
 }
 .topbar-logo { font-weight: 700; font-size: 15px; color: #111827; flex: 1; }
-.model-tag {
-  font-size: 11px; color: #6b7280;
-  background: #f3f4f6; padding: 2px 8px; border-radius: 99px;
-  max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
+
 .icon-btn {
   display: flex; align-items: center; justify-content: center;
   width: 32px; height: 32px; flex-shrink: 0;
@@ -556,8 +842,6 @@ const providerLabel = computed(() => {
   transition: background 0.12s, color 0.12s;
 }
 .icon-btn:hover { background: #f3f4f6; color: #111827; }
-.new-btn { color: #3b82f6; }
-.new-btn:hover { background: #eff6ff; color: #2563eb; }
 
 /* ===== 消息列表 ===== */
 .msg-list {
@@ -568,33 +852,26 @@ const providerLabel = computed(() => {
 .msg-empty {
   flex: 1; display: flex; flex-direction: column;
   align-items: center; justify-content: center;
-  gap: 10px; color: #9ca3af; font-size: 14px;
-  padding: 40px 0;
+  gap: 10px; color: #9ca3af; font-size: 14px; padding: 40px 0;
 }
 .msg { display: flex; }
 .msg--user { justify-content: flex-end; }
 .msg--ai  { justify-content: flex-start; }
 .bubble {
-  max-width: 82%;
-  padding: 9px 13px;
-  border-radius: 16px;
-  font-size: 14px;
-  line-height: 1.6;
+  max-width: 82%; padding: 9px 13px; border-radius: 16px;
+  font-size: 14px; line-height: 1.6;
 }
 .bubble--user {
-  background: #2563eb; color: #fff;
-  border-bottom-right-radius: 4px;
+  background: #2563eb; color: #fff; border-bottom-right-radius: 4px;
 }
 .bubble--ai {
   background: #fff; color: #111827;
-  border: 1px solid #e5e7eb;
-  border-bottom-left-radius: 4px;
+  border: 1px solid #e5e7eb; border-bottom-left-radius: 4px;
 }
 
 /* 思考过程 */
 .thinking-block {
-  margin-bottom: 8px;
-  border: 1px solid #e5e7eb; border-radius: 8px;
+  margin-bottom: 8px; border: 1px solid #e5e7eb; border-radius: 8px;
   background: #f9fafb; overflow: hidden;
 }
 .thinking-summary {
@@ -606,17 +883,12 @@ const providerLabel = computed(() => {
 .thinking-summary::before { content: '▶ '; font-size: 10px; }
 details[open] .thinking-summary::before { content: '▼ '; }
 .thinking-body {
-  padding: 8px 12px 12px; margin: 0;
-  font-size: 12px; color: #6b7280;
-  white-space: pre-wrap; line-height: 1.6;
-  border-top: 1px solid #e5e7eb;
-  font-family: inherit;
+  padding: 8px 12px 12px; margin: 0; font-size: 12px; color: #6b7280;
+  white-space: pre-wrap; line-height: 1.6; border-top: 1px solid #e5e7eb; font-family: inherit;
 }
 
 /* 打字动画 */
-.typing {
-  display: inline-flex; gap: 4px; align-items: center; padding: 4px 0;
-}
+.typing { display: inline-flex; gap: 4px; align-items: center; padding: 4px 0; }
 .typing span {
   width: 6px; height: 6px; background: #9ca3af;
   border-radius: 50%; animation: blink 1.2s ease-in-out infinite;
@@ -625,62 +897,73 @@ details[open] .thinking-summary::before { content: '▼ '; }
 .typing span:nth-child(3) { animation-delay: 0.4s; }
 @keyframes blink { 0%,80%,100% { opacity: 0.25; } 40% { opacity: 1; } }
 
-/* ===== 输入区域（Issue 3: 与 ChatView 风格一致） ===== */
-.composer {
-  flex-shrink: 0;
-  padding: 10px 12px;
-  background: #f5f6f8;
+/* ===== 输入区域 ===== */
+.composer { flex-shrink: 0; padding: 10px 12px; background: #f5f6f8; }
+
+/* 语音提示条 */
+.voice-hint {
+  display: flex; align-items: center; gap: 7px;
+  padding: 5px 12px 8px; font-size: 13px; color: #374151;
 }
+.voice-hint-dot {
+  width: 8px; height: 8px; border-radius: 50%; background: #9ca3af; flex-shrink: 0;
+}
+.voice-hint-dot--pulse {
+  background: #ef4444;
+  animation: pulse-dot 1s ease-in-out infinite;
+}
+@keyframes pulse-dot { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.5; transform: scale(1.3); } }
+
 .composer-box {
-  background: #fff;
-  border: 1.5px solid #e5e7eb;
-  border-radius: 14px;
-  overflow: hidden;
-  transition: border-color 0.15s, box-shadow 0.15s;
+  background: #fff; border: 1.5px solid #e5e7eb; border-radius: 14px;
+  overflow: hidden; transition: border-color 0.15s, box-shadow 0.15s;
 }
 .composer-box:focus-within {
-  border-color: #93c5fd;
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+  border-color: #93c5fd; box-shadow: 0 0 0 3px rgba(59,130,246,.1);
 }
 .composer-textarea {
-  width: 100%; resize: none;
-  border: none; outline: none;
-  padding: 12px 14px 8px;
-  font-size: 14px; font-family: inherit; line-height: 1.55;
+  width: 100%; resize: none; border: none; outline: none;
+  padding: 12px 14px 8px; font-size: 14px; font-family: inherit; line-height: 1.55;
   color: #111827; background: transparent;
-  min-height: 52px; max-height: 160px;
-  overflow-y: auto;
+  min-height: 52px; max-height: 160px; overflow-y: auto;
 }
 .composer-textarea::placeholder { color: #9ca3af; }
 .composer-textarea:disabled { opacity: 0.6; cursor: not-allowed; }
 .composer-toolbar {
-  display: flex; align-items: center; gap: 8px;
-  padding: 6px 10px 10px;
+  display: flex; align-items: center; gap: 8px; padding: 6px 10px 10px;
 }
 
 /* 深度思考开关 */
-.thinking-toggle {
-  display: flex; align-items: center; gap: 6px;
-}
-.thinking-label {
-  font-size: 12px; color: #6b7280; user-select: none;
-}
+.thinking-toggle { display: flex; align-items: center; gap: 6px; }
+.thinking-label { font-size: 12px; color: #6b7280; user-select: none; }
 .toggle-btn {
   position: relative; width: 32px; height: 18px;
   border: none; padding: 0; cursor: pointer;
-  border-radius: 9px; background: #d1d5db;
-  transition: background 0.2s;
-  flex-shrink: 0;
+  border-radius: 9px; background: #d1d5db; transition: background 0.2s; flex-shrink: 0;
 }
 .toggle-btn--on { background: #3b82f6; }
 .toggle-knob {
   position: absolute; top: 2px; left: 2px;
-  width: 14px; height: 14px;
-  border-radius: 50%; background: #fff;
-  transition: left 0.2s;
-  box-shadow: 0 1px 3px rgba(0,0,0,.15);
+  width: 14px; height: 14px; border-radius: 50%; background: #fff;
+  transition: left 0.2s; box-shadow: 0 1px 3px rgba(0,0,0,.15);
 }
 .toggle-btn--on .toggle-knob { left: 16px; }
+
+/* 语音按钮 */
+.voice-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 34px; height: 34px; border: none; border-radius: 50%;
+  background: #f3f4f6; color: #4b5563; cursor: pointer; flex-shrink: 0;
+  transition: background 0.15s, color 0.15s, box-shadow 0.15s;
+}
+.voice-btn:hover:not(:disabled) { background: #e5e7eb; color: #111827; }
+.voice-btn--recording {
+  background: #fee2e2; color: #ef4444;
+  box-shadow: 0 0 0 3px rgba(239,68,68,.2);
+  animation: voice-pulse 1.2s ease-in-out infinite;
+}
+.voice-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+@keyframes voice-pulse { 0%,100% { box-shadow: 0 0 0 3px rgba(239,68,68,.2); } 50% { box-shadow: 0 0 0 6px rgba(239,68,68,.08); } }
 
 /* 发送按钮 */
 .send-btn {
@@ -688,21 +971,17 @@ details[open] .thinking-summary::before { content: '▼ '; }
   padding: 6px 16px; border: none; border-radius: 8px;
   background: #2563eb; color: #fff;
   font-size: 13px; font-weight: 500; cursor: pointer;
-  transition: background 0.15s;
-  flex-shrink: 0;
+  transition: background 0.15s; flex-shrink: 0;
 }
 .send-btn:hover:not(:disabled) { background: #1d4ed8; }
 .send-btn:disabled { background: #93c5fd; cursor: not-allowed; }
 .btn-spinner {
   width: 14px; height: 14px;
-  border: 2px solid rgba(255,255,255,0.4);
-  border-top-color: #fff;
-  border-radius: 50%;
-  animation: spin 0.7s linear infinite;
-  flex-shrink: 0;
+  border: 2px solid rgba(255,255,255,.4); border-top-color: #fff;
+  border-radius: 50%; animation: spin 0.7s linear infinite; flex-shrink: 0;
 }
 
-/* ===== Markdown 渲染（Issue 2） ===== */
+/* ===== Markdown 渲染 ===== */
 .msg-md { word-break: break-word; line-height: 1.65; font-size: 14px; }
 .msg-md :deep(p) { margin: 0 0 0.55em; }
 .msg-md :deep(p:last-child) { margin-bottom: 0; }
@@ -728,13 +1007,11 @@ details[open] .thinking-summary::before { content: '▼ '; }
   gap: 8px; padding: 5px 10px; background: #f3f4f6;
   border-bottom: 1px solid #e5e7eb; font-size: 12px;
 }
-.msg-md :deep(.md-code-lang) {
-  color: #6b7280; font-family: ui-monospace, monospace;
-}
+.msg-md :deep(.md-code-lang) { color: #6b7280; font-family: ui-monospace, monospace; }
 .msg-md :deep(.md-copy-btn) {
-  flex-shrink: 0; margin: 0; padding: 2px 8px;
-  font-size: 12px; color: #374151; background: #fff;
-  border: 1px solid #d1d5db; border-radius: 5px; cursor: pointer;
+  flex-shrink: 0; margin: 0; padding: 2px 8px; font-size: 12px;
+  color: #374151; background: #fff; border: 1px solid #d1d5db;
+  border-radius: 5px; cursor: pointer;
 }
 .msg-md :deep(.md-copy-btn:hover) { background: #f9fafb; border-color: #9ca3af; }
 .msg-md :deep(.md-code-pre) {

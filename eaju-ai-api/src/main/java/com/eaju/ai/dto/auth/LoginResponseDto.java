@@ -79,4 +79,15 @@ public class LoginResponseDto {
     public void setDefaultModel(String defaultModel) {
         this.defaultModel = defaultModel;
     }
+
+    /** WEB_EMBED 登录时携带集成名称，用于前端展示 AI 助手名称；普通登录为 null */
+    private String integrationName;
+
+    public String getIntegrationName() {
+        return integrationName;
+    }
+
+    public void setIntegrationName(String integrationName) {
+        this.integrationName = integrationName;
+    }
 }

@@ -26,6 +26,10 @@ public class ConversationController {
 
     @GetMapping
     public List<ConversationResponseDto> list(Authentication authentication) {
+        Long integrationId = CallerPrincipal.integrationId(authentication);
+        if (integrationId != null) {
+            return chatConversationService.listForIntegration(integrationId);
+        }
         Long apiKeyId = CallerPrincipal.apiKeyId(authentication);
         if (apiKeyId != null) {
             return chatConversationService.listForApiKey(apiKeyId);
@@ -51,6 +55,11 @@ public class ConversationController {
 
     @DeleteMapping("/{sessionId}")
     public void delete(Authentication authentication, @PathVariable("sessionId") String sessionId) {
+        Long integrationId = CallerPrincipal.integrationId(authentication);
+        if (integrationId != null) {
+            chatConversationService.deleteForIntegration(integrationId, sessionId);
+            return;
+        }
         Long apiKeyId = CallerPrincipal.apiKeyId(authentication);
         if (apiKeyId != null) {
             chatConversationService.deleteForApiKey(apiKeyId, sessionId);

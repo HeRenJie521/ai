@@ -81,6 +81,7 @@ public class EmbedAuthService {
         dto.setUsername(userId);
         dto.setAdmin(false);
         dto.setDefaultModel(integration.getDefaultModel());
+        dto.setIntegrationName(integration.getName());
         return dto;
     }
 

@@ -15,6 +15,8 @@ export interface LoginResult {
   admin: boolean
   /** WEB_EMBED 登录时返回，用于聊天页自动选中该模型 */
   defaultModel?: string | null
+  /** WEB_EMBED 登录时返回集成名称，用于 AI 助手标题 */
+  integrationName?: string | null
 }
 
 export async function loginApi(payload: LoginPayload): Promise<LoginResult> {
@@ -57,5 +59,6 @@ export async function embedLoginApi(payload: EmbedLoginPayload): Promise<LoginRe
     username: String(data.username ?? uid),
     admin: data.admin === true,
     defaultModel: data.defaultModel ? String(data.defaultModel) : null,
+    integrationName: data.integrationName ? String(data.integrationName) : null,
   }
 }

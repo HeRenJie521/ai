@@ -255,6 +255,32 @@ public class ChatConversationService {
         conversationRepository.softDeleteByUserIdAndSessionId(e.getUserId(), sid, Instant.now());
     }
 
+    @Transactional(readOnly = true)
+    public List<ConversationResponseDto> listForIntegration(Long integrationId) {
+        List<ConversationResponseDto> out = new ArrayList<ConversationResponseDto>();
+        if (integrationId == null) {
+            return out;
+        }
+        for (ChatConversationEntity e :
+                conversationRepository.findByIntegrationIdAndDeletedAtIsNullOrderByLastMessageAtDesc(integrationId)) {
+            out.add(toDto(e));
+        }
+        return out;
+    }
+
+    @Transactional
+    public void deleteForIntegration(Long integrationId, String sessionId) {
+        if (integrationId == null || !StringUtils.hasText(sessionId)) {
+            throw new IllegalArgumentException("参数无效");
+        }
+        String sid = sessionId.trim();
+        if (!conversationRepository.findByIntegrationIdAndSessionIdAndDeletedAtIsNull(integrationId, sid).isPresent()) {
+            throw new IllegalArgumentException("会话不存在或无权删除");
+        }
+        chatSessionService.deleteSession(sid);
+        conversationRepository.softDeleteByIntegrationIdAndSessionId(integrationId, sid, Instant.now());
+    }
+
     private static String deriveTitleFromMessages(List<ChatMessageDto> messages) {
         if (messages == null || messages.isEmpty()) {
             return null;

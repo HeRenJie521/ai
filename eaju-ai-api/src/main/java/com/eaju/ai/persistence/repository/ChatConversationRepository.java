@@ -58,6 +58,17 @@ public interface ChatConversationRepository extends JpaRepository<ChatConversati
     /** 根据 sessionId 查询会话（包括已删除） */
     Optional<ChatConversationEntity> findBySessionId(String sessionId);
 
+    /** 列表查询：仅返回未删除的 embed 会话（按最新消息倒序） */
+    List<ChatConversationEntity> findByIntegrationIdAndDeletedAtIsNullOrderByLastMessageAtDesc(Long integrationId);
+
     /** 按 integrationId + sessionId 查（仅未删除），用于 WEB_EMBED 会话归属校验 */
     Optional<ChatConversationEntity> findByIntegrationIdAndSessionIdAndDeletedAtIsNull(Long integrationId, String sessionId);
+
+    /** 逻辑删除（embed 维度）：仅删除属于该 integrationId 的会话 */
+    @Modifying
+    @Query("UPDATE ChatConversationEntity c SET c.deletedAt = :now " +
+           "WHERE c.integrationId = :integrationId AND c.sessionId = :sessionId AND c.deletedAt IS NULL")
+    int softDeleteByIntegrationIdAndSessionId(@Param("integrationId") Long integrationId,
+                                              @Param("sessionId") String sessionId,
+                                              @Param("now") Instant now);
 }
