@@ -1,32 +1,54 @@
-# 正式环境：必须通过环境变量提供连接信息，勿在仓库中写死密码
+# =============================================================================
+# 生产环境配置
+# 激活方式：java -jar xxx.jar --spring.profiles.active=prod
+# 注意：部署前请修改下面的数据库、Redis、JWT 等敏感配置！
+# =============================================================================
+
+server:
+  port: 8080
+  servlet:
+    encoding:
+      charset: UTF-8
+      enabled: true
+      force: true
+  tomcat:
+    max-threads: 200
+    min-spare-threads: 20
+    max-connections: 10000
+    accept-count: 100
+    connection-timeout: 20000
+    compression: "on"
+    compressable-mime-types: "application/json,application/xml,text/html,text/xml,text/plain,application/javascript,text/css"
+    compression-min-size: 1024
+
 spring:
   datasource:
-    url: ${SPRING_DATASOURCE_URL}
-    username: ${SPRING_DATASOURCE_USERNAME}
-    password: ${SPRING_DATASOURCE_PASSWORD}
+    # ⚠️ 请修改为实际的生产数据库配置
+    url: jdbc:postgresql://生产数据库主机：5432/eaju_ai
+    username: 生产数据库用户名
+    password: 生产数据库密码
     driver-class-name: org.postgresql.Driver
     hikari:
-      # 连接池配置 - 生产环境优化
-      maximum-pool-size: ${HIKARI_MAX_POOL_SIZE:50}
-      minimum-idle: ${HIKARI_MIN_IDLE:10}
+      maximum-pool-size: 50
+      minimum-idle: 10
       connection-timeout: 30000
       idle-timeout: 600000
       max-lifetime: 1800000
       pool-name: HikariPool-Prod
       connection-test-query: SELECT 1
       initialization-fail-timeout: -1
-      # 生产环境泄漏检测
       leak-detection-threshold: 60000
   redis:
-    host: ${REDIS_HOST}
-    port: ${REDIS_PORT:6379}
-    password: ${REDIS_PASSWORD:}
+    # ⚠️ 请修改为实际的生产 Redis 配置
+    host: 生产 Redis 主机
+    port: 6379
+    password: 生产 Redis 密码
     timeout: 10s
     lettuce:
       pool:
-        max-active: ${REDIS_MAX_ACTIVE:50}
-        max-idle: ${REDIS_MAX_IDLE:20}
-        min-idle: ${REDIS_MIN_IDLE:10}
+        max-active: 50
+        max-idle: 20
+        min-idle: 10
         max-wait: 3000ms
   jpa:
     hibernate:
@@ -42,5 +64,40 @@ spring:
         order_updates: true
         generate_statistics: false
 
-server:
-  port: ${SERVER_PORT:8080}
+logging:
+  level:
+    root: WARN
+    com.eaju.ai: INFO
+    org.springframework.web: WARN
+    org.hibernate.SQL: WARN
+    com.zaxxer.hikari: INFO
+
+app:
+  jwt:
+    # ⚠️ 必须修改为强密钥（至少 32 字节）
+    secret: prod-jwt-secret-change-me-32bytes-minimum!!
+    expiration-hours: 168
+  auth:
+    dms-base-url: http://superapp.51eanj.com:82/eaju_app_service/eajudms/DmsInterface
+    dms-login-method: appUserLogin
+    dms-login-type: "1"
+    # ⚠️ 修改为实际的管理员手机号
+    admin-phones: "15296711325"
+    session-redis-key-prefix: "auth:session:"
+    session-ttl-hours: 0
+  http-client:
+    connect-timeout-ms: 10000
+    read-timeout-ms: 120000
+    connection-request-timeout-ms: 5000
+    max-total: 100
+    max-per-route: 20
+  thread-pool:
+    core-size: 8
+    max-size: 32
+    queue-capacity: 1000
+    keep-alive-seconds: 60
+  chat:
+    redis-key-prefix: "chat:session:"
+    redis-session-ttl-hours: 168
+  file-upload:
+    proxy-url: https://wx.51eanj.com/eaju-open-api/api/file/upload/file
