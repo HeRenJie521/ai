@@ -26,17 +26,27 @@ public class AuthUserPrincipal implements UserDetails {
      */
     private final Long integrationId;
 
+    /**
+     * 应用管理嵌入登录时携带，表示直接通过哪个 AI 应用登录；WEB_EMBED 或普通登录为 null。
+     */
+    private final Long appId;
+
     public AuthUserPrincipal(String phone, String displayName, boolean admin, boolean enabled, String jti) {
-        this(phone, displayName, admin, enabled, jti, null);
+        this(phone, displayName, admin, enabled, jti, null, null);
     }
 
     public AuthUserPrincipal(String phone, String displayName, boolean admin, boolean enabled, String jti, Long integrationId) {
+        this(phone, displayName, admin, enabled, jti, integrationId, null);
+    }
+
+    public AuthUserPrincipal(String phone, String displayName, boolean admin, boolean enabled, String jti, Long integrationId, Long appId) {
         this.phone = phone != null ? phone.trim() : "";
         this.displayName = displayName != null ? displayName : this.phone;
         this.admin = admin;
         this.enabled = enabled;
         this.jti = jti != null ? jti : "";
         this.integrationId = integrationId;
+        this.appId = appId;
     }
 
     public String getPhone() {
@@ -95,9 +105,12 @@ public class AuthUserPrincipal implements UserDetails {
         return enabled;
     }
 
-    /** 会话是否带 jti（旧 token 无 jti 时仅校验 JWT，不查 Redis） */
     public Long getIntegrationId() {
         return integrationId;
+    }
+
+    public Long getAppId() {
+        return appId;
     }
 
     /** 会话是否带 jti（旧 token 无 jti 时仅校验 JWT，不查 Redis） */

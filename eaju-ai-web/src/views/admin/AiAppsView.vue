@@ -8,11 +8,12 @@ import {
   NForm,
   NFormItem,
   NInput,
-  NInputNumber,
   NModal,
   NSpace,
   NSpin,
   NTag,
+  NTabs,
+  NTabPane,
   NText,
   NSelect,
   useDialog,
@@ -57,6 +58,13 @@ const createForm = ref(defaultForm())
 const editId = ref<number | null>(null)
 const editForm = ref(defaultForm())
 
+// ---- 嵌入网站 ----
+const showEmbed = ref(false)
+const embedRow = ref<AiAppRow | null>(null)
+const embedPhone = ref('')
+const embedUsername = ref('')
+const embedActiveTab = ref('pc')
+
 // ---- 推荐问题（新建/编辑共用辅助状态）----
 const newSuggestionCreate = ref('')
 const newSuggestionEdit = ref('')
@@ -67,7 +75,6 @@ function defaultForm() {
   return {
     name: '',
     modelId: null as string | null,
-    temperature: null as number | null,
     welcomeText: '',
     systemRole: '',
     systemTask: '',
@@ -120,7 +127,6 @@ async function submitCreate() {
     await adminCreateAiApp({
       name,
       modelId: createForm.value.modelId || undefined,
-      temperature: createForm.value.temperature ?? undefined,
       welcomeText: createForm.value.welcomeText || undefined,
       suggestions: suggestionsJson,
       systemRole: createForm.value.systemRole || undefined,
@@ -142,7 +148,6 @@ function openEdit(r: AiAppRow) {
   editForm.value = {
     name: r.name,
     modelId: r.modelId,
-    temperature: r.temperature,
     welcomeText: r.welcomeText || '',
     systemRole: r.systemRole || '',
     systemTask: r.systemTask || '',
@@ -168,7 +173,6 @@ async function submitEdit() {
     await adminUpdateAiApp(id, {
       name,
       modelId: editForm.value.modelId || undefined,
-      temperature: editForm.value.temperature ?? undefined,
       welcomeText: editForm.value.welcomeText,
       suggestions: suggestionsJson,
       systemRole: editForm.value.systemRole,
@@ -187,7 +191,7 @@ async function submitEdit() {
 // ---------- 删除 ----------
 function confirmDelete(r: AiAppRow) {
   dialog.warning({
-    title: '删除 AI 应用',
+    title: '删除应用',
     content: `确定删除「${r.name}」？已关联该应用的集成将失去 AI 能力配置。`,
     positiveText: '删除',
     negativeText: '取消',
@@ -201,6 +205,55 @@ function confirmDelete(r: AiAppRow) {
         message.error(err.response?.data?.message || err.message || '删除失败')
       }
     },
+  })
+}
+
+// ---------- 嵌入网站 ----------
+function openEmbed(r: AiAppRow) {
+  embedRow.value = r
+  embedPhone.value = ''
+  embedUsername.value = ''
+  embedActiveTab.value = 'pc'
+  showEmbed.value = true
+}
+
+const embedOrigin = computed(() => window.location.origin)
+
+const embedUrl = computed(() => {
+  const aid = embedRow.value?.id ?? ''
+  const uid = embedPhone.value.trim()
+  const uname = embedUsername.value.trim()
+  const params = new URLSearchParams()
+  params.set('aid', String(aid))
+  if (uid) params.set('uid', uid)
+  if (uname) params.set('username', uname)
+  return `${embedOrigin.value}/embed?${params.toString()}`
+})
+
+const embedCodePc = computed(() => {
+  return `<iframe
+        src="${embedUrl.value}"
+        width="100%"
+        height="100%"
+        style="height: 100vh; border:none; border-radius:12px; box-shadow:0 4px 24px rgba(0,0,0,.1);"
+        allow="clipboard-write">
+</iframe>`
+})
+
+const embedCodeMobile = computed(() => {
+  return `<iframe
+        src="${embedUrl.value}"
+        width="100%"
+        style="height: 100svh; border:none; display:block;"
+        allow="clipboard-write">
+</iframe>`
+})
+
+function copyCode(code: string) {
+  navigator.clipboard.writeText(code).then(() => {
+    message.success('已复制到剪贴板')
+  }).catch(() => {
+    message.error('复制失败，请手动复制')
   })
 }
 
@@ -240,16 +293,9 @@ const columns: DataTableColumns<AiAppRow> = [
     render: (r) => r.modelId ?? h('span', { style: 'color:#bbb' }, '—'),
   },
   {
-    title: '温度',
-    key: 'temperature',
-    width: 80,
-    render: (r) => r.temperature != null ? String(r.temperature) : '—',
-  },
-  {
     title: '开场白',
     key: 'welcomeText',
-    width: 120,
-    ellipsis: { tooltip: true },
+    width: 100,
     render: (r) =>
       r.welcomeText
         ? h(NTag, { size: 'small', bordered: false, type: 'success' }, () => '已配置')
@@ -258,7 +304,7 @@ const columns: DataTableColumns<AiAppRow> = [
   {
     title: '系统提示词',
     key: 'systemRole',
-    width: 120,
+    width: 100,
     render: (r) =>
       r.systemRole || r.systemTask || r.systemConstraints
         ? h(NTag, { size: 'small', bordered: false, type: 'info' }, () => '已配置')
@@ -273,10 +319,15 @@ const columns: DataTableColumns<AiAppRow> = [
   {
     title: '操作',
     key: 'actions',
-    width: 140,
+    width: 200,
     render: (r) =>
       h(NSpace, { size: 8, wrap: false }, () => [
         h(NButton, { size: 'small', onClick: () => openEdit(r) }, { default: () => '编辑' }),
+        h(
+          NButton,
+          { size: 'small', type: 'primary', ghost: true, onClick: () => openEmbed(r) },
+          { default: () => '嵌入网站' },
+        ),
         h(
           NButton,
           { size: 'small', type: 'error', ghost: true, onClick: () => confirmDelete(r) },
@@ -290,7 +341,7 @@ const columns: DataTableColumns<AiAppRow> = [
 <template>
   <div class="inner">
     <header class="toolbar">
-      <n-text strong class="page-title">AI 应用管理</n-text>
+      <n-text strong class="page-title">应用管理</n-text>
       <n-space :size="12" wrap>
         <n-button type="primary" @click="openCreate">新建应用</n-button>
       </n-space>
@@ -312,7 +363,7 @@ const columns: DataTableColumns<AiAppRow> = [
   <n-modal
     v-model:show="showCreate"
     preset="card"
-    title="新建 AI 应用"
+    title="新建应用"
     style="width: min(640px, 96vw)"
     :mask-closable="false"
   >
@@ -327,19 +378,6 @@ const columns: DataTableColumns<AiAppRow> = [
           :options="modelOptions"
           placeholder="请选择默认模型（可选）"
           filterable
-          clearable
-        />
-      </n-form-item>
-
-      <n-form-item label="采样温度（可选，留空使用模型默认值）">
-        <n-input-number
-          v-model:value="createForm.temperature"
-          :min="0"
-          :max="2"
-          :step="0.1"
-          :precision="2"
-          placeholder="如 0.7"
-          style="width: 180px"
           clearable
         />
       </n-form-item>
@@ -418,7 +456,7 @@ const columns: DataTableColumns<AiAppRow> = [
   <n-modal
     :show="editId != null"
     preset="card"
-    title="编辑 AI 应用"
+    title="编辑应用"
     style="width: min(640px, 96vw)"
     :mask-closable="false"
     @update:show="(v: boolean) => { if (!v) editId = null }"
@@ -434,19 +472,6 @@ const columns: DataTableColumns<AiAppRow> = [
           :options="modelOptions"
           placeholder="请选择默认模型（可选）"
           filterable
-          clearable
-        />
-      </n-form-item>
-
-      <n-form-item label="采样温度（可选，留空使用模型默认值）">
-        <n-input-number
-          v-model:value="editForm.temperature"
-          :min="0"
-          :max="2"
-          :step="0.1"
-          :precision="2"
-          placeholder="如 0.7"
-          style="width: 180px"
           clearable
         />
       </n-form-item>
@@ -520,6 +545,55 @@ const columns: DataTableColumns<AiAppRow> = [
       </n-space>
     </template>
   </n-modal>
+
+  <!-- ============ 嵌入网站弹窗 ============ -->
+  <n-modal
+    v-model:show="showEmbed"
+    preset="card"
+    :title="`嵌入网站 — ${embedRow?.name ?? ''}`"
+    style="width: min(680px, 96vw)"
+    :mask-closable="true"
+  >
+    <n-form label-placement="top" style="margin-bottom: 16px;">
+      <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px;">
+        <n-form-item label="应用 ID">
+          <n-input :value="String(embedRow?.id ?? '')" readonly />
+        </n-form-item>
+        <n-form-item label="用户手机号">
+          <n-input v-model:value="embedPhone" placeholder="如 13800138000" />
+        </n-form-item>
+        <n-form-item label="用户姓名">
+          <n-input v-model:value="embedUsername" placeholder="如 张三" />
+        </n-form-item>
+      </div>
+      <n-form-item label="嵌入链接预览">
+        <n-input :value="embedUrl" readonly type="textarea" :autosize="{ minRows: 2, maxRows: 3 }" />
+      </n-form-item>
+    </n-form>
+
+    <n-tabs v-model:value="embedActiveTab" type="line" animated>
+      <n-tab-pane name="pc" tab="嵌入 PC 端">
+        <div class="embed-code-block">
+          <pre class="embed-code">{{ embedCodePc }}</pre>
+          <n-button size="small" type="primary" @click="copyCode(embedCodePc)">复制代码</n-button>
+        </div>
+        <p class="embed-hint">将以上代码粘贴到您网站的 HTML 中，即可在 PC 端展示 480×680 的聊天窗口。</p>
+      </n-tab-pane>
+      <n-tab-pane name="mobile" tab="嵌入移动端">
+        <div class="embed-code-block">
+          <pre class="embed-code">{{ embedCodeMobile }}</pre>
+          <n-button size="small" type="primary" @click="copyCode(embedCodeMobile)">复制代码</n-button>
+        </div>
+        <p class="embed-hint">将以上代码粘贴到您移动端页面中，聊天窗口将自适应全屏展示。</p>
+      </n-tab-pane>
+    </n-tabs>
+
+    <template #footer>
+      <n-space justify="end">
+        <n-button @click="showEmbed = false">关闭</n-button>
+      </n-space>
+    </template>
+  </n-modal>
 </template>
 
 <style scoped>
@@ -574,5 +648,30 @@ const columns: DataTableColumns<AiAppRow> = [
   font-size: 13px;
   border: 1px dashed #d1d5db;
   border-radius: 8px;
+}
+.embed-code-block {
+  position: relative;
+  background: #f3f4f6;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.embed-code {
+  margin: 0;
+  font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-all;
+  color: #1f2937;
+}
+.embed-hint {
+  font-size: 12px;
+  color: #6b7280;
+  margin: 0;
 }
 </style>

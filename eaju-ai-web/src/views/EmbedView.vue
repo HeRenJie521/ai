@@ -17,9 +17,9 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
-import { embedLoginApi } from '@/api/auth'
+import { embedLoginApi, appEmbedLoginApi } from '@/api/auth'
 import { listLlmProviders, type LlmProviderOption } from '@/api/llmProviders'
-import { getWelcomeConfig, type WelcomeConfig } from '@/api/welcome'
+import { getWelcomeConfigByApp, type WelcomeConfig } from '@/api/welcome'
 import {
   deleteConversation,
   listConversations,
@@ -38,7 +38,8 @@ const status = ref<EmbedStatus>('loading')
 const errorMsg = ref('')
 
 // 集成参数（挂载后填充）
-let iid = 0
+let iid = 0       // WEB_EMBED 集成 ID
+let aid = 0       // 应用管理嵌入 AppID
 const integrationName = ref('AI 助手')
 
 // ---- 聊天核心 ----
@@ -87,7 +88,7 @@ function generateUUID(): string {
 }
 
 // ---- localStorage 持久化 ----
-function sessionKey() { return `embed_sid_${iid}` }
+function sessionKey() { return aid ? `embed_app_sid_${aid}` : `embed_sid_${iid}` }
 function saveSessionId(sid: string) {
   try { localStorage.setItem(sessionKey(), sid) } catch { /* ignore */ }
 }
@@ -116,26 +117,51 @@ watch(showThinkingToggle, show => { if (!show) thinkingOn.value = false })
 // ---- 初始化 ----
 onMounted(async () => {
   const params = route.query
-  iid = Number(params.iid)
+  aid = Number(params.aid ?? 0)
+  iid = Number(params.iid ?? 0)
   const uid = String(params.uid ?? '')
-  const token = String(params.token ?? '')
   const username = params.username ? String(params.username) : undefined
 
-  if (!iid || !uid || !token) {
+  if (aid) {
+    // 应用管理嵌入方式：通过 aid + uid 登录，无需 token
+    if (!uid) {
+      status.value = 'error'
+      errorMsg.value = '缺少必要的嵌入参数（aid / uid）'
+      return
+    }
+    try {
+      const result = await appEmbedLoginApi({ appId: aid, userId: uid, username })
+      authStore.setFromLogin(result)
+      if (result.defaultModel) integrationDefaultModel.value = result.defaultModel
+      if (result.integrationName) integrationName.value = result.integrationName
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { message?: string } }; message?: string }
+      status.value = 'error'
+      errorMsg.value = err.response?.data?.message || err.message || '应用登录失败'
+      return
+    }
+  } else if (iid) {
+    // WEB_EMBED 集成方式：通过 iid + uid + token 登录
+    const token = String(params.token ?? '')
+    if (!uid || !token) {
+      status.value = 'error'
+      errorMsg.value = '缺少必要的嵌入参数（iid / uid / token）'
+      return
+    }
+    try {
+      const result = await embedLoginApi({ integrationId: iid, userId: uid, token, username })
+      authStore.setFromLogin(result)
+      if (result.defaultModel) integrationDefaultModel.value = result.defaultModel
+      if (result.integrationName) integrationName.value = result.integrationName
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { message?: string } }; message?: string }
+      status.value = 'error'
+      errorMsg.value = err.response?.data?.message || err.message || 'SSO 登录失败'
+      return
+    }
+  } else {
     status.value = 'error'
-    errorMsg.value = '缺少必要的嵌入参数（iid / uid / token）'
-    return
-  }
-
-  try {
-    const result = await embedLoginApi({ integrationId: iid, userId: uid, token, username })
-    authStore.setFromLogin(result)
-    if (result.defaultModel) integrationDefaultModel.value = result.defaultModel
-    if (result.integrationName) integrationName.value = result.integrationName
-  } catch (e: unknown) {
-    const err = e as { response?: { data?: { message?: string } }; message?: string }
-    status.value = 'error'
-    errorMsg.value = err.response?.data?.message || err.message || 'SSO 登录失败'
+    errorMsg.value = '缺少必要的嵌入参数（aid 或 iid）'
     return
   }
 
@@ -160,10 +186,12 @@ onMounted(async () => {
   } catch { /* 忽略 */ }
 
   // 始终加载开场引导配置（永远显示在第一个位置）
-  try {
-    welcomeConfig.value = await getWelcomeConfig(iid)
-    welcomeLoaded.value = true
-  } catch { /* 忽略，不显示错误 */ }
+  if (aid) {
+    try {
+      welcomeConfig.value = await getWelcomeConfigByApp(aid)
+      welcomeLoaded.value = true
+    } catch { /* 忽略，不显示错误 */ }
+  }
 
   status.value = 'ready'
   await scrollToBottom()
@@ -208,9 +236,11 @@ function newConversation() {
   clearSessionId()
   showSidebar.value = false
   // 新会话时重新加载开场引导
-  getWelcomeConfig(iid).then(config => {
-    welcomeConfig.value = config
-  }).catch(() => { /* 忽略 */ })
+  if (aid) {
+    getWelcomeConfigByApp(aid).then(config => {
+      welcomeConfig.value = config
+    }).catch(() => { /* 忽略 */ })
+  }
 }
 
 // ---- 切换历史会话 ----

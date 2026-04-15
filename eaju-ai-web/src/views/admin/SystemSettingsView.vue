@@ -584,7 +584,7 @@ function avatarLetter(row: LlmAdminRow): string {
         </div>
         <div v-if="auth.isAdmin" class="menu-item" :class="{ active: currentPage === 'ai-apps' }" @click="goTo('ai-apps')">
           <span class="menu-icon">🤖</span>
-          <span class="menu-label">AI 应用</span>
+          <span class="menu-label">应用管理</span>
         </div>
         <div v-if="auth.isAdmin" class="menu-item" :class="{ active: currentPage === 'api-keys' }" @click="goTo('api-keys')">
           <span class="menu-icon">🔑</span>

@@ -8,9 +8,7 @@ import com.eaju.ai.llm.OpenAiLlmExecutor;
 import com.eaju.ai.llm.support.OpenAiStreamAccumulator;
 import com.eaju.ai.persistence.ChatRecordService;
 import com.eaju.ai.persistence.entity.AiAppEntity;
-import com.eaju.ai.persistence.entity.ApiKeyEntity;
 import com.eaju.ai.persistence.repository.AiAppRepository;
-import com.eaju.ai.persistence.repository.ApiKeyRepository;
 import com.eaju.ai.session.ChatSessionService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.BeanUtils;
@@ -37,7 +35,6 @@ public class ChatService {
     private final ChatSessionService chatSessionService;
     private final ChatRecordService chatRecordService;
     private final ObjectMapper objectMapper;
-    private final ApiKeyRepository apiKeyRepository;
     private final AiAppRepository aiAppRepository;
 
     public ChatService(LlmProviderConfigService llmProviderConfigService,
@@ -46,7 +43,6 @@ public class ChatService {
                        ChatSessionService chatSessionService,
                        ChatRecordService chatRecordService,
                        ObjectMapper objectMapper,
-                       ApiKeyRepository apiKeyRepository,
                        AiAppRepository aiAppRepository) {
         this.llmProviderConfigService = llmProviderConfigService;
         this.openAiLlmExecutor = openAiLlmExecutor;
@@ -54,7 +50,6 @@ public class ChatService {
         this.chatSessionService = chatSessionService;
         this.chatRecordService = chatRecordService;
         this.objectMapper = objectMapper;
-        this.apiKeyRepository = apiKeyRepository;
         this.aiAppRepository = aiAppRepository;
     }
 
@@ -117,23 +112,15 @@ public class ChatService {
      * 返回的新 DTO 仅用于调用 LLM，不会写入 Redis 会话历史，确保每轮请求都带最新配置。
      */
     private ChatRequestDto withSystemPrompt(ChatRequestDto original, ChatRequestDto effective) {
-        Long integrationId = original.getInternalIntegrationId();
-        if (integrationId == null) {
+        // 应用管理嵌入：JWT 中直接携带 appId，据此加载 AI 应用配置
+        Long directAppId = original.getInternalAppId();
+        if (directAppId == null) {
             return effective;
         }
-        java.util.Optional<ApiKeyEntity> integrationOpt = apiKeyRepository.findByIdAndDeletedIsFalse(integrationId);
-        if (!integrationOpt.isPresent()) {
+        AiAppEntity app = aiAppRepository.findByIdAndDeletedIsFalse(directAppId).orElse(null);
+        if (app == null) {
             return effective;
         }
-        ApiKeyEntity integration = integrationOpt.get();
-        if (integration.getAppId() == null) {
-            return effective;
-        }
-        java.util.Optional<AiAppEntity> appOpt = aiAppRepository.findByIdAndDeletedIsFalse(integration.getAppId());
-        if (!appOpt.isPresent()) {
-            return effective;
-        }
-        AiAppEntity app = appOpt.get();
         String systemContent = buildSystemContent(app);
         if (!StringUtils.hasText(systemContent)) {
             return effective;

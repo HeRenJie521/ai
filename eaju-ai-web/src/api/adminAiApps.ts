@@ -9,7 +9,6 @@ export interface AiAppRow {
   systemTask: string | null
   systemConstraints: string | null
   modelId: string | null
-  temperature: number | null
   createdAt: string | null
 }
 
@@ -21,7 +20,6 @@ export interface AiAppCreatePayload {
   systemTask?: string
   systemConstraints?: string
   modelId?: string
-  temperature?: number
 }
 
 export interface AiAppUpdatePayload {
@@ -32,7 +30,6 @@ export interface AiAppUpdatePayload {
   systemTask?: string
   systemConstraints?: string
   modelId?: string
-  temperature?: number
 }
 
 export async function adminListAiApps(): Promise<AiAppRow[]> {

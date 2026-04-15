@@ -82,6 +82,26 @@ public class JwtTokenProvider {
         return new JwtIssueResult(token, jti);
     }
 
+    /**
+     * 为应用管理嵌入登录颁发 JWT，附带 appId claim（无需集成凭证）。
+     */
+    public JwtIssueResult createAppEmbedToken(String phone, String displayName, Long appId) {
+        String jti = UUID.randomUUID().toString().replace("-", "");
+        Date now = new Date();
+        Date exp = new Date(now.getTime() + expirationMs);
+        String token = Jwts.builder()
+                .setId(jti)
+                .setSubject(phone)
+                .claim("username", displayName != null ? displayName : phone)
+                .claim("admin", false)
+                .claim("appId", appId)
+                .setIssuedAt(now)
+                .setExpiration(exp)
+                .signWith(secretKey, SignatureAlgorithm.HS256)
+                .compact();
+        return new JwtIssueResult(token, jti);
+    }
+
     public AuthUserPrincipal toPrincipal(Claims claims) {
         String phone = claims.getSubject();
         String username = claims.get("username", String.class);
@@ -92,12 +112,18 @@ public class JwtTokenProvider {
         if (iidRaw instanceof Number) {
             integrationId = ((Number) iidRaw).longValue();
         }
+        Long appId = null;
+        Object aidRaw = claims.get("appId");
+        if (aidRaw instanceof Number) {
+            appId = ((Number) aidRaw).longValue();
+        }
         return new AuthUserPrincipal(
                 phone,
                 username != null ? username : phone,
                 Boolean.TRUE.equals(admin),
                 true,
                 jti,
-                integrationId);
+                integrationId,
+                appId);
     }
 }

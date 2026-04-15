@@ -8,7 +8,6 @@ import javax.persistence.Id;
 import javax.persistence.PrePersist;
 import javax.persistence.PreUpdate;
 import javax.persistence.Table;
-import java.math.BigDecimal;
 import java.time.Instant;
 
 @Entity
@@ -45,10 +44,6 @@ public class AiAppEntity {
     /** 默认对话模型 ID */
     @Column(name = "model_id", length = 256)
     private String modelId;
-
-    /** 采样温度，为空时使用模型默认值 */
-    @Column(name = "temperature", precision = 4, scale = 2)
-    private BigDecimal temperature;
 
     @Column(nullable = false)
     private boolean deleted = false;
@@ -96,9 +91,6 @@ public class AiAppEntity {
 
     public String getModelId() { return modelId; }
     public void setModelId(String modelId) { this.modelId = modelId; }
-
-    public BigDecimal getTemperature() { return temperature; }
-    public void setTemperature(BigDecimal temperature) { this.temperature = temperature; }
 
     public boolean isDeleted() { return deleted; }
     public void setDeleted(boolean deleted) { this.deleted = deleted; }

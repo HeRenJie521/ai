@@ -2,6 +2,7 @@ package com.eaju.ai.service;
 
 import com.eaju.ai.dto.auth.LoginResponseDto;
 import com.eaju.ai.dto.auth.LoginSessionSnapshot;
+import com.eaju.ai.dto.embed.AppEmbedLoginRequestDto;
 import com.eaju.ai.dto.embed.EmbedLoginRequestDto;
 import com.eaju.ai.persistence.entity.AiAppEntity;
 import com.eaju.ai.persistence.entity.ApiKeyEntity;
@@ -79,15 +80,44 @@ public class EmbedAuthService {
 
         log.info("EmbedLogin 成功: integrationId={}, userId={}", integration.getId(), userId);
 
-        // 从关联的 AI 应用获取默认模型
-        String defaultModel = null;
-        if (integration.getAppId() != null) {
-            java.util.Optional<AiAppEntity> appOpt =
-                    aiAppRepository.findByIdAndDeletedIsFalse(integration.getAppId());
-            if (appOpt.isPresent()) {
-                defaultModel = appOpt.get().getModelId();
-            }
+        LoginResponseDto dto = new LoginResponseDto();
+        dto.setToken(issued.getToken());
+        dto.setJti(issued.getJti());
+        dto.setExpiresIn(jwtTokenProvider.getExpirationSeconds());
+        dto.setUserId(userId);
+        dto.setPhone(userId);
+        dto.setUsername(displayName);
+        dto.setAdmin(false);
+        dto.setDefaultModel(null);
+        dto.setIntegrationName(integration.getName());
+        return dto;
+    }
+
+    /**
+     * 应用管理嵌入登录：无需集成凭证，直接通过 appId 登录。
+     * JWT 中携带 appId claim，ChatService 据此直接加载 AI 应用配置。
+     */
+    public LoginResponseDto appEmbedLogin(AppEmbedLoginRequestDto req) {
+        String userId = req.getUserId() != null ? req.getUserId().trim() : "";
+        if (!StringUtils.hasText(userId)) {
+            throw new IllegalArgumentException("用户ID不能为空");
         }
+
+        AiAppEntity app = aiAppRepository.findByIdAndDeletedIsFalse(req.getAppId())
+                .orElseThrow(() -> new IllegalArgumentException("AI应用不存在或已删除"));
+
+        String displayName = StringUtils.hasText(req.getUsername()) ? req.getUsername().trim() : userId;
+        JwtIssueResult issued = jwtTokenProvider.createAppEmbedToken(userId, displayName, app.getId());
+
+        LoginSessionSnapshot snap = new LoginSessionSnapshot();
+        snap.setPhone(userId);
+        snap.setUsername(displayName);
+        snap.setAdmin(false);
+        snap.setIssuedAtEpochMs(System.currentTimeMillis());
+        snap.setDmsResponseExcerpt("{\"embed\":true,\"appId\":" + app.getId() + "}");
+        loginSessionCacheService.save(issued.getJti(), snap);
+
+        log.info("AppEmbedLogin 成功: appId={}, userId={}", app.getId(), userId);
 
         LoginResponseDto dto = new LoginResponseDto();
         dto.setToken(issued.getToken());
@@ -97,8 +127,8 @@ public class EmbedAuthService {
         dto.setPhone(userId);
         dto.setUsername(displayName);
         dto.setAdmin(false);
-        dto.setDefaultModel(defaultModel);
-        dto.setIntegrationName(integration.getName());
+        dto.setDefaultModel(app.getModelId());
+        dto.setIntegrationName(app.getName());
         return dto;
     }
 

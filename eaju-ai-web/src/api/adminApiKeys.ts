@@ -14,10 +14,6 @@ export interface ApiKeyRow {
   type: IntegrationType
   /** WEB_EMBED 允许嵌入的来源域名 */
   allowedOrigins: string | null
-  /** 关联的 AI 应用 ID */
-  appId: number | null
-  /** 关联的 AI 应用名称（只读，展示用） */
-  appName: string | null
 }
 
 export interface ApiKeyCreated extends ApiKeyRow {
@@ -30,8 +26,6 @@ export interface CreateIntegrationPayload {
   type: IntegrationType
   /** WEB_EMBED 允许的来源域名（可选） */
   allowedOrigins?: string
-  /** 关联的 AI 应用 ID */
-  appId?: number
 }
 
 export async function adminListApiKeys(): Promise<ApiKeyRow[]> {
@@ -50,7 +44,6 @@ export async function adminPatchApiKey(
     name: string
     enabled: boolean
     allowedOrigins: string
-    appId: number
   }>,
 ): Promise<ApiKeyRow> {
   const { data } = await http.patch<ApiKeyRow>(`/api/admin/api-keys/${id}`, body)

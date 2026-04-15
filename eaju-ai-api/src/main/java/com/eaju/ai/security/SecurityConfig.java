@@ -52,6 +52,8 @@ public class SecurityConfig {
                 .antMatchers("/api/auth/login").permitAll()
                 // 嵌入网站免密 SSO 登录（由 HMAC 签名保障安全，无需 JWT）
                 .antMatchers("/api/embed/login").permitAll()
+                // 应用管理嵌入登录（无需凭证，直接通过 appId 登录）
+                .antMatchers("/api/embed/app-login").permitAll()
                 .antMatchers("/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs", "/v3/api-docs/**")
                 .permitAll()
                 // 所有 /api/admin/** 仅管理员可访问

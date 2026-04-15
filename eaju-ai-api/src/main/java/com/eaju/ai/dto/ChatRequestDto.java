@@ -75,6 +75,10 @@ public class ChatRequestDto {
     @JsonIgnore
     private Long internalIntegrationId;
 
+    /** 服务端写入：应用管理嵌入登录时直接携带的 AI 应用 id，不落库到请求 JSON */
+    @JsonIgnore
+    private Long internalAppId;
+
     public String getProvider() {
         return provider;
     }
@@ -217,5 +221,13 @@ public class ChatRequestDto {
 
     public void setInternalIntegrationId(Long internalIntegrationId) {
         this.internalIntegrationId = internalIntegrationId;
+    }
+
+    public Long getInternalAppId() {
+        return internalAppId;
+    }
+
+    public void setInternalAppId(Long internalAppId) {
+        this.internalAppId = internalAppId;
     }
 }

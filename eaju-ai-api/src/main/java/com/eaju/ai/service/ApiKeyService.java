@@ -40,10 +40,9 @@ public class ApiKeyService {
      *
      * @param type           1=API_KEY  2=WEB_EMBED
      * @param allowedOrigins WEB_EMBED 允许嵌入的来源域名（逗号分隔，null 表示不限）
-     * @param appId          关联的 AI 应用 ID（可选）
      */
     @Transactional
-    public CreatedApiKey create(String name, int type, String allowedOrigins, Long appId) {
+    public CreatedApiKey create(String name, int type, String allowedOrigins) {
         if (!StringUtils.hasText(name)) {
             throw new IllegalArgumentException("名称不能为空");
         }
@@ -51,7 +50,6 @@ public class ApiKeyService {
         e.setName(name.trim());
         e.setType(type);
         e.setEnabled(true);
-        e.setAppId(appId);
 
         if (type == 2) {
             // WEB_EMBED：emb_ + 28 hex chars
@@ -72,8 +70,7 @@ public class ApiKeyService {
     }
 
     @Transactional
-    public ApiKeyEntity update(Long id, String name, Boolean enabled,
-                               String allowedOrigins, Long appId) {
+    public ApiKeyEntity update(Long id, String name, Boolean enabled, String allowedOrigins) {
         ApiKeyEntity e = apiKeyRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("API Key 不存在"));
         if (StringUtils.hasText(name)) {
@@ -84,9 +81,6 @@ public class ApiKeyService {
         }
         if (allowedOrigins != null) {
             e.setAllowedOrigins(StringUtils.hasText(allowedOrigins) ? allowedOrigins.trim() : null);
-        }
-        if (appId != null) {
-            e.setAppId(appId);
         }
         return apiKeyRepository.save(e);
     }

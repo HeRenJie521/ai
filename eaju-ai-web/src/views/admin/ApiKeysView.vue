@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { h, onMounted, ref, computed } from 'vue'
+import { h, onMounted, ref } from 'vue'
 import type { DataTableColumns } from 'naive-ui'
 import {
   NButton,
@@ -11,7 +11,6 @@ import {
   NFormItem,
   NInput,
   NModal,
-  NSelect,
   NSpace,
   NSpin,
   NTag,
@@ -30,7 +29,6 @@ import {
   type ApiKeyUsage,
   type RecentTurnRow,
 } from '@/api/adminApiKeys'
-import { adminListAiApps, type AiAppRow } from '@/api/adminAiApps'
 import type { ChatMessage } from '@/api/conversations'
 
 const message = useMessage()
@@ -38,12 +36,6 @@ const dialog = useDialog()
 
 const loading = ref(false)
 const rows = ref<ApiKeyRow[]>([])
-
-// ---- AI 应用列表 ----
-const aiApps = ref<AiAppRow[]>([])
-const aiAppOptions = computed(() =>
-  aiApps.value.map((a) => ({ label: a.name, value: a.id })),
-)
 
 // ---- 新建 API Key ----
 const showCreate = ref(false)
@@ -57,7 +49,6 @@ const showSecretModal = ref(false)
 const editId = ref<number | null>(null)
 const editName = ref('')
 const editEnabled = ref(true)
-const editAppId = ref<number | null>(null)
 
 // ---- 用量抽屉 ----
 const usageOpen = ref(false)
@@ -84,15 +75,8 @@ async function load() {
   }
 }
 
-async function loadAiApps() {
-  try {
-    aiApps.value = await adminListAiApps()
-  } catch { /* 忽略 */ }
-}
-
 onMounted(() => {
   void load()
-  void loadAiApps()
 })
 
 function openCreate() {
@@ -123,7 +107,6 @@ function openEdit(r: ApiKeyRow) {
   editId.value = r.id
   editName.value = r.name
   editEnabled.value = r.enabled
-  editAppId.value = r.appId
 }
 
 async function submitEdit() {
@@ -135,11 +118,7 @@ async function submitEdit() {
     return
   }
   try {
-    await adminPatchApiKey(id, {
-      name,
-      enabled: editEnabled.value,
-      appId: editAppId.value ?? undefined,
-    })
+    await adminPatchApiKey(id, { name, enabled: editEnabled.value })
     message.success('已保存')
     editId.value = null
     await load()
@@ -284,16 +263,6 @@ const columns: DataTableColumns<ApiKeyRow> = [
         ),
       ])
     },
-  },
-  {
-    title: '关联 AI 应用',
-    key: 'appName',
-    width: 160,
-    ellipsis: { tooltip: true },
-    render: (r) =>
-      r.appName
-        ? h(NTag, { size: 'small', bordered: false, type: 'primary' }, () => r.appName)
-        : h('span', { style: 'color:#bbb' }, '未绑定'),
   },
   {
     title: '状态',
@@ -459,16 +428,6 @@ function sessionColumns(keyId: number): DataTableColumns<SessionGroup> {
     <n-form v-if="editId != null" label-placement="top">
       <n-form-item label="名称">
         <n-input v-model:value="editName" />
-      </n-form-item>
-      <n-form-item label="关联 AI 应用（可选）">
-        <n-select
-          v-model:value="editAppId"
-          :options="aiAppOptions"
-          placeholder="请选择 AI 应用（决定提示词、模型等能力）"
-          filterable
-          clearable
-        />
-        <template #feedback>关联后，使用此 Key 的请求将自动加载对应 AI 应用的系统提示词配置</template>
       </n-form-item>
     </n-form>
     <template #footer>

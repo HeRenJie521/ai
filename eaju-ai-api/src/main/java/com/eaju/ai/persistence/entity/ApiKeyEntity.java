@@ -49,10 +49,6 @@ public class ApiKeyEntity {
     @Column(name = "allowed_origins", length = 1000)
     private String allowedOrigins;
 
-    /** 关联的 AI 应用 ID */
-    @Column(name = "app_id")
-    private Long appId;
-
     @PrePersist
     public void prePersist() {
         Instant n = Instant.now();
@@ -96,7 +92,4 @@ public class ApiKeyEntity {
 
     public String getAllowedOrigins() { return allowedOrigins; }
     public void setAllowedOrigins(String allowedOrigins) { this.allowedOrigins = allowedOrigins; }
-
-    public Long getAppId() { return appId; }
-    public void setAppId(Long appId) { this.appId = appId; }
 }

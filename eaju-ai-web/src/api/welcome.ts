@@ -8,12 +8,12 @@ export interface WelcomeConfig {
 }
 
 /**
- * 获取开场引导配置
- * @param integrationId 集成 ID
+ * 获取开场引导配置（应用管理嵌入方式）
+ * @param appId AI 应用 ID
  */
-export async function getWelcomeConfig(integrationId: number): Promise<WelcomeConfig> {
-  const { data } = await http.get<WelcomeConfig>('/api/chat/welcome', {
-    params: { id: integrationId },
+export async function getWelcomeConfigByApp(appId: number): Promise<WelcomeConfig> {
+  const { data } = await http.get<WelcomeConfig>('/api/chat/welcome-app', {
+    params: { aid: appId },
   })
   return data
 }

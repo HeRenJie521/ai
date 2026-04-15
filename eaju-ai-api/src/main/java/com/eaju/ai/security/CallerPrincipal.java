@@ -58,4 +58,21 @@ public final class CallerPrincipal {
         }
         return null;
     }
+
+    /**
+     * 应用管理嵌入登录时 JWT 携带的 AI 应用 ID；其他登录方式返回 null。
+     */
+    public static Long appId(Authentication authentication) {
+        if (authentication == null || !authentication.isAuthenticated()) {
+            return null;
+        }
+        if (authentication instanceof AnonymousAuthenticationToken) {
+            return null;
+        }
+        Object p = authentication.getPrincipal();
+        if (p instanceof AuthUserPrincipal) {
+            return ((AuthUserPrincipal) p).getAppId();
+        }
+        return null;
+    }
 }

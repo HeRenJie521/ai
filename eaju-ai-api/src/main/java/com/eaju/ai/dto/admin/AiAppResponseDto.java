@@ -1,7 +1,5 @@
 package com.eaju.ai.dto.admin;
 
-import java.math.BigDecimal;
-
 public class AiAppResponseDto {
 
     private Long id;
@@ -12,7 +10,6 @@ public class AiAppResponseDto {
     private String systemTask;
     private String systemConstraints;
     private String modelId;
-    private BigDecimal temperature;
     private String createdAt;
 
     public Long getId() { return id; }
@@ -38,9 +35,6 @@ public class AiAppResponseDto {
 
     public String getModelId() { return modelId; }
     public void setModelId(String modelId) { this.modelId = modelId; }
-
-    public BigDecimal getTemperature() { return temperature; }
-    public void setTemperature(BigDecimal temperature) { this.temperature = temperature; }
 
     public String getCreatedAt() { return createdAt; }
     public void setCreatedAt(String createdAt) { this.createdAt = createdAt; }

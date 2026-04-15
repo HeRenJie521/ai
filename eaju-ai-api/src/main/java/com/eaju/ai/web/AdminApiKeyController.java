@@ -7,9 +7,7 @@ import com.eaju.ai.dto.admin.ApiKeyPatchRequestDto;
 import com.eaju.ai.dto.admin.ApiKeyResponseDto;
 import com.eaju.ai.dto.admin.ApiKeyUsageDto;
 import com.eaju.ai.dto.conversation.ConversationResponseDto;
-import com.eaju.ai.persistence.entity.AiAppEntity;
 import com.eaju.ai.persistence.entity.ApiKeyEntity;
-import com.eaju.ai.persistence.repository.AiAppRepository;
 import com.eaju.ai.service.ApiKeyAuditService;
 import com.eaju.ai.service.ApiKeyService;
 import com.eaju.ai.service.ChatConversationService;
@@ -26,7 +24,6 @@ import org.springframework.web.bind.annotation.RestController;
 import javax.validation.Valid;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 
 @RestController
 @RequestMapping("/api/admin/api-keys")
@@ -36,17 +33,14 @@ public class AdminApiKeyController {
     private final ApiKeyService apiKeyService;
     private final ApiKeyAuditService apiKeyAuditService;
     private final ChatConversationService chatConversationService;
-    private final AiAppRepository aiAppRepository;
 
     public AdminApiKeyController(
             ApiKeyService apiKeyService,
             ApiKeyAuditService apiKeyAuditService,
-            ChatConversationService chatConversationService,
-            AiAppRepository aiAppRepository) {
+            ChatConversationService chatConversationService) {
         this.apiKeyService = apiKeyService;
         this.apiKeyAuditService = apiKeyAuditService;
         this.chatConversationService = chatConversationService;
-        this.aiAppRepository = aiAppRepository;
     }
 
     @GetMapping
@@ -61,7 +55,7 @@ public class AdminApiKeyController {
     @PostMapping
     public ApiKeyCreateResponseDto create(@Valid @RequestBody ApiKeyCreateRequestDto body) {
         ApiKeyService.CreatedApiKey created = apiKeyService.create(
-                body.getName(), body.getType(), body.getAllowedOrigins(), body.getAppId());
+                body.getName(), body.getType(), body.getAllowedOrigins());
         ApiKeyEntity e = created.getEntity();
         ApiKeyCreateResponseDto dto = new ApiKeyCreateResponseDto();
         copyToRow(e, dto);
@@ -73,7 +67,7 @@ public class AdminApiKeyController {
     public ApiKeyResponseDto patch(@PathVariable("id") Long id,
                                    @RequestBody ApiKeyPatchRequestDto body) {
         ApiKeyEntity e = apiKeyService.update(id, body.getName(), body.getEnabled(),
-                body.getAllowedOrigins(), body.getAppId());
+                body.getAllowedOrigins());
         return toRow(e);
     }
 
@@ -119,10 +113,5 @@ public class AdminApiKeyController {
         dto.setCreatedAt(e.getCreatedAt() != null ? e.getCreatedAt().toString() : null);
         dto.setType(e.getType());
         dto.setAllowedOrigins(e.getAllowedOrigins());
-        dto.setAppId(e.getAppId());
-        if (e.getAppId() != null) {
-            Optional<AiAppEntity> app = aiAppRepository.findByIdAndDeletedIsFalse(e.getAppId());
-            app.ifPresent(a -> dto.setAppName(a.getName()));
-        }
     }
 }
