@@ -23,6 +23,18 @@ public class AiToolSaveRequestDto {
 
     private String contentType;
 
+    /** DMS 接口方法名，如 miniAppMenuFunctionQuery */
+    private String methodName;
+
+    /**
+     * data 对象参数配置，JSON 数组：
+     * [{"key":"userId","valueType":"context","fieldKey":"esusMobile"},
+     *  {"key":"functionName","valueType":"static","value":"智蚁轨迹"}]
+     */
+    private String dataParamsJson;
+
+    private String responseParamsJson;
+
     @NotBlank
     private String paramsSchemaJson;
 
@@ -51,6 +63,15 @@ public class AiToolSaveRequestDto {
 
     public String getContentType() { return contentType; }
     public void setContentType(String contentType) { this.contentType = contentType; }
+
+    public String getMethodName() { return methodName; }
+    public void setMethodName(String methodName) { this.methodName = methodName; }
+
+    public String getDataParamsJson() { return dataParamsJson; }
+    public void setDataParamsJson(String dataParamsJson) { this.dataParamsJson = dataParamsJson; }
+
+    public String getResponseParamsJson() { return responseParamsJson; }
+    public void setResponseParamsJson(String responseParamsJson) { this.responseParamsJson = responseParamsJson; }
 
     public String getParamsSchemaJson() { return paramsSchemaJson; }
     public void setParamsSchemaJson(String paramsSchemaJson) { this.paramsSchemaJson = paramsSchemaJson; }

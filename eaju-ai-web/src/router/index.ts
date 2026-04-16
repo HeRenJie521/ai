@@ -51,12 +51,6 @@ const router = createRouter({
       meta: { auth: true, admin: true },
     },
     {
-      path: '/settings/api-manage',
-      name: 'settings-api-manage',
-      component: () => import('@/views/admin/SystemSettingsView.vue'),
-      meta: { auth: true, admin: true },
-    },
-    {
       path: '/settings/tools',
       name: 'settings-tools',
       component: () => import('@/views/admin/SystemSettingsView.vue'),

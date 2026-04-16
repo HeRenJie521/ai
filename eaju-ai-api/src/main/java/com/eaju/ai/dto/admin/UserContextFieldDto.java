@@ -5,6 +5,8 @@ public class UserContextFieldDto {
     private Long id;
     private String fieldKey;
     private String label;
+    private String fieldType;
+    private String parseExpression;
     private String description;
     private boolean enabled;
     private String createdAt;
@@ -17,6 +19,12 @@ public class UserContextFieldDto {
 
     public String getLabel() { return label; }
     public void setLabel(String label) { this.label = label; }
+
+    public String getFieldType() { return fieldType; }
+    public void setFieldType(String fieldType) { this.fieldType = fieldType; }
+
+    public String getParseExpression() { return parseExpression; }
+    public void setParseExpression(String parseExpression) { this.parseExpression = parseExpression; }
 
     public String getDescription() { return description; }
     public void setDescription(String description) { this.description = description; }

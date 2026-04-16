@@ -24,6 +24,14 @@ public class UserContextFieldEntity {
     @Column(nullable = false, length = 256)
     private String label;
 
+    /** 字段类型：String / Object / Array */
+    @Column(name = "field_type", nullable = false, length = 32)
+    private String fieldType = "String";
+
+    /** dot-notation 路径，如 data.esusMobile 或 appPermission.sitePermissions */
+    @Column(name = "parse_expression", nullable = false, columnDefinition = "TEXT")
+    private String parseExpression = "";
+
     @Column(columnDefinition = "TEXT")
     private String description;
 
@@ -56,6 +64,12 @@ public class UserContextFieldEntity {
 
     public String getLabel() { return label; }
     public void setLabel(String label) { this.label = label; }
+
+    public String getFieldType() { return fieldType; }
+    public void setFieldType(String fieldType) { this.fieldType = fieldType; }
+
+    public String getParseExpression() { return parseExpression; }
+    public void setParseExpression(String parseExpression) { this.parseExpression = parseExpression; }
 
     public String getDescription() { return description; }
     public void setDescription(String description) { this.description = description; }

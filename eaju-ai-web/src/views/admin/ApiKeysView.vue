@@ -361,14 +361,10 @@ function sessionColumns(keyId: number): DataTableColumns<SessionGroup> {
 
 <template>
   <div class="inner">
-    <header class="toolbar">
-      <n-text strong class="page-title">API Key 管理</n-text>
-      <n-space :size="12" wrap>
-        <n-button type="primary" @click="openCreate">新建 API Key</n-button>
-      </n-space>
-    </header>
-
-    <n-card :bordered="false" class="card" title="API Key 列表">
+    <n-card :bordered="false" class="card" title="API Key 管理">
+      <template #header-extra>
+        <n-button type="primary" @click="openCreate">+ 新建 API Key</n-button>
+      </template>
       <n-data-table :columns="columns" :data="rows" :loading="loading" :row-key="(r: ApiKeyRow) => r.id" />
     </n-card>
   </div>

@@ -139,28 +139,34 @@ const columns: DataTableColumns<ApiDefinitionRow> = [
   {
     title: '系统名称',
     key: 'systemName',
-    render: (row) => h(NText, { code: true }, { default: () => row.systemName }),
+    width: 160,
+    render: (row) => h(NText, { strong: true }, { default: () => row.systemName }),
   },
   {
     title: '接口请求路径',
     key: 'requestUrl',
     ellipsis: { tooltip: true },
+    render: (row) => h('span', { style: 'font-size:12px; font-family:monospace; color:#555' }, row.requestUrl),
   },
   {
-    title: '请求方式',
+    title: '方式',
     key: 'httpMethod',
-    width: 90,
+    width: 70,
     render: (row) => h(NTag, { size: 'small', type: 'info' }, { default: () => row.httpMethod }),
   },
   {
     title: '参数格式',
     key: 'contentType',
-    width: 180,
-    render: (row) => h(NTag, { size: 'small', type: 'info' }, { default: () => row.contentType }),
+    width: 120,
+    render: (row) => {
+      const short = row.contentType === 'application/json' ? 'JSON' : 'Form'
+      return h(NTag, { size: 'small', type: 'default' }, { default: () => short })
+    },
   },
   {
     title: '备注',
     key: 'remark',
+    width: 160,
     ellipsis: { tooltip: true },
   },
   {
@@ -193,25 +199,31 @@ onMounted(() => {
       </NSpin>
     </NCard>
 
-    <NModal v-model:show="showModal" preset="card" :title="editId ? '编辑接口' : '新建接口'" style="width:680px" :mask-closable="false">
-      <NForm :model="form" label-placement="left" label-width="110px">
+    <NModal
+      v-model:show="showModal"
+      preset="card"
+      :title="editId ? '编辑接口' : '新建接口'"
+      style="width:640px"
+      :mask-closable="false"
+    >
+      <NForm :model="form" label-placement="left" label-width="100px">
         <NFormItem label="系统名称" required>
           <NInput v-model:value="form.systemName" placeholder="如：请假系统" />
         </NFormItem>
-        <NFormItem label="接口请求路径" required>
-          <NInput v-model:value="form.requestUrl" placeholder="完整的 URL，如 https://api.example.com/leave" />
+        <NFormItem label="请求路径" required>
+          <NInput v-model:value="form.requestUrl" placeholder="完整 URL，如 https://api.example.com/leave" />
         </NFormItem>
         <NFormItem label="请求方式" required>
           <NSelect v-model:value="form.httpMethod" :options="httpMethodOptions" style="width:120px" />
         </NFormItem>
         <NFormItem label="参数格式" required>
-          <NSelect v-model:value="form.contentType" :options="contentTypeOptions" style="width:280px" />
+          <NSelect v-model:value="form.contentType" :options="contentTypeOptions" style="width:100%" />
         </NFormItem>
         <NFormItem label="备注">
           <NInput
             v-model:value="form.remark"
             type="textarea"
-            :rows="3"
+            :rows="2"
             placeholder="可选，对接口的补充说明"
           />
         </NFormItem>

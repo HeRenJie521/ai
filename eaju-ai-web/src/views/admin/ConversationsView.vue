@@ -209,11 +209,7 @@ const columns = [
 
 <template>
   <div class="page-inner">
-    <header class="toolbar">
-      <n-text strong class="page-title">会话管理</n-text>
-    </header>
-
-    <n-card :bordered="false" class="card">
+    <n-card :bordered="false" class="card" title="会话管理">
         <div class="search-bar">
           <n-input
             v-model:value="queryUserId"
