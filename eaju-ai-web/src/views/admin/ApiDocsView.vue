@@ -91,6 +91,7 @@ const reqParams = [
   { field: 'maxTokens', type: 'integer', required: false, desc: '最大输出 token 数（对应 OpenAI 的 max_tokens）。不传时使用后台推理默认值。' },
   { field: 'topP', type: 'number', required: false, desc: 'Top-P 核采样，范围 0~1。与 temperature 一般二选一使用。' },
   { field: 'topK', type: 'integer', required: false, desc: 'Top-K 采样（部分厂商支持，如通义、Gemini）。' },
+  { field: 'sampleCount', type: 'integer', required: false, desc: '生成候选条数，对应 OpenAI 的 n。不传时默认 1。' },
   { field: 'frequencyPenalty', type: 'number', required: false, desc: '频率惩罚，范围 -2~2，减少已出现词的重复频率。' },
   { field: 'presencePenalty', type: 'number', required: false, desc: '存在惩罚，范围 -2~2，鼓励模型涉及新话题。' },
   { field: 'responseFormat', type: 'string', required: false, desc: '回复格式。TEXT（默认）或 JSON_OBJECT（要求模型输出合法 JSON）。' },
@@ -99,7 +100,8 @@ const reqParams = [
 
 const messageParams = [
   { field: 'role', type: 'string', required: true, desc: '消息角色：user（用户）/ assistant（模型）/ system（系统提示）。' },
-  { field: 'content', type: 'string', required: true, desc: '消息内容文本。' },
+  { field: 'content', type: 'string', required: false, desc: '消息内容文本。可与 fileUrls 同时存在；纯附件时可传空串。' },
+  { field: 'fileUrls', type: 'string[]', required: false, desc: '文件/图片公网 URL 列表，通过 /api/file/upload 上传后获得。图片按 OpenAI vision 格式发给上游，其它文件类型以链接形式触达模型。' },
 ]
 
 const respFields = [
@@ -141,6 +143,103 @@ const uploadErrors = [
 
 const openUploadRows = ref(['upload-params', 'upload-resp', 'upload-errors', 'upload-example'])
 
+// ---- /api/embed/login 数据 ----
+const embedLoginExample = `{
+  "integrationId": 1,
+  "userId": "13800138000",
+  "username": "张三",
+  "token": "从管理后台「集成管理」复制的 Embed Token"
+}`
+
+const embedLoginResponse = `{
+  "token": "eyJhbGciOiJIUzI1NiJ9……",
+  "jti": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "expiresIn": 86400,
+  "userId": "13800138000",
+  "phone": "13800138000",
+  "username": "张三",
+  "admin": false,
+  "defaultModel": null,
+  "integrationName": "客服助手"
+}`
+
+const curlEmbedLogin = `curl -X POST http://your-host/api/embed/login \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "integrationId": 1,
+    "userId": "13800138000",
+    "username": "张三",
+    "token": "your_embed_token_here"
+  }'`
+
+const embedLoginReqParams = [
+  { field: 'integrationId', type: 'Long', required: true,  desc: '集成 ID，对应 api_key 表 id，类型为 WEB_EMBED（type=2）。从管理后台「集成管理」页获取。' },
+  { field: 'userId',        type: 'string', required: true,  desc: '业务用户 ID（通常为手机号）。用于在 JWT 中标识用户身份。' },
+  { field: 'username',      type: 'string', required: false, desc: '用户显示名（如姓名）。未传时前端展示名降级为 userId。' },
+  { field: 'token',         type: 'string', required: true,  desc: '嵌入凭证（Embed Token），从管理后台「集成管理」复制。服务端对其做 SHA-256 与库中存储的哈希值比对。' },
+]
+
+const embedLoginRespFields = [
+  { field: 'token',           type: 'string',  desc: 'JWT access token，前端写入 localStorage 后续请求携带。' },
+  { field: 'jti',             type: 'string',  desc: 'JWT ID，与 Redis 会话 key 一致，登出时用于作废服务端会话。' },
+  { field: 'expiresIn',       type: 'Long',    desc: '过期秒数，与 Redis 会话 TTL 对齐（默认 86400 秒 / 24 小时）。' },
+  { field: 'userId',          type: 'string',  desc: '业务用户 ID（与入参一致）。' },
+  { field: 'phone',           type: 'string',  desc: '同 userId。' },
+  { field: 'username',        type: 'string',  desc: '用户显示名（传入值，或 userId 降级）。' },
+  { field: 'admin',           type: 'boolean', desc: '固定 false，嵌入用户无管理权限。' },
+  { field: 'defaultModel',    type: 'string',  desc: '固定 null，WEB_EMBED 模式不携带默认模型。' },
+  { field: 'integrationName', type: 'string',  desc: '集成名称（api_key.name），前端用于展示 AI 助手名称。' },
+]
+
+const openEmbedLoginRows = ref(['embed-login-params', 'embed-login-resp', 'embed-login-example'])
+
+// ---- /api/embed/app-login 数据 ----
+const appEmbedLoginExample = `{
+  "appId": 1,
+  "userId": "13800138000",
+  "username": "张三"
+}`
+
+const appEmbedLoginResponse = `{
+  "token": "eyJhbGciOiJIUzI1NiJ9……",
+  "jti": "b2c3d4e5-f6a7-8901-bcde-f23456789012",
+  "expiresIn": 86400,
+  "userId": "13800138000",
+  "phone": "13800138000",
+  "username": "张三",
+  "admin": false,
+  "defaultModel": "deepseek-chat",
+  "integrationName": "智能问答助手"
+}`
+
+const curlAppEmbedLogin = `curl -X POST http://your-host/api/embed/app-login \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "appId": 1,
+    "userId": "13800138000",
+    "username": "张三"
+  }'`
+
+const appEmbedLoginReqParams = [
+  { field: 'appId',    type: 'Long',   required: true,  desc: 'AI 应用 ID，对应 ai_app 表 id。从管理后台「应用管理」或嵌入代码中的 aid 参数获取。' },
+  { field: 'userId',   type: 'string', required: true,  desc: '业务用户 ID。用于在 JWT 中标识用户身份，写入会话缓存。' },
+  { field: 'username', type: 'string', required: false, desc: '用户显示名。未传时前端展示名降级为 userId。' },
+]
+
+const appEmbedLoginRespFields = [
+  { field: 'token',           type: 'string',  desc: 'JWT access token，JWT claims 中携带 appId，ChatService 据此直接加载 AI 应用配置，无需用户手动选择模型。' },
+  { field: 'jti',             type: 'string',  desc: 'JWT ID，登出时用于作废服务端会话。' },
+  { field: 'expiresIn',       type: 'Long',    desc: '过期秒数（默认 86400 秒 / 24 小时）。' },
+  { field: 'userId',          type: 'string',  desc: '业务用户 ID（与入参一致）。' },
+  { field: 'phone',           type: 'string',  desc: '同 userId。' },
+  { field: 'username',        type: 'string',  desc: '用户显示名。' },
+  { field: 'admin',           type: 'boolean', desc: '固定 false。' },
+  { field: 'defaultModel',    type: 'string',  desc: 'AI 应用绑定的模型 ID（ai_app.model_id），前端聊天页默认选中该模型。' },
+  { field: 'integrationName', type: 'string',  desc: 'AI 应用名称（ai_app.name），前端用于展示 AI 助手名称。' },
+]
+
+const openAppEmbedLoginRows = ref(['app-embed-login-params', 'app-embed-login-resp', 'app-embed-login-example'])
+
 // ---- 复制 ----
 async function copy(text: string) {
   try {
@@ -174,6 +273,26 @@ const navItems = [
       { id: 'anchor-upload-resp', label: '响应' },
       { id: 'anchor-upload-errors', label: '错误码说明' },
       { id: 'anchor-upload-example', label: '调用示例' },
+    ],
+  },
+  {
+    id: 'anchor-embed-login',
+    label: 'POST /api/embed/login',
+    tag: 'POST',
+    children: [
+      { id: 'anchor-embed-login-params', label: '请求体参数' },
+      { id: 'anchor-embed-login-resp', label: '响应' },
+      { id: 'anchor-embed-login-example', label: '调用示例' },
+    ],
+  },
+  {
+    id: 'anchor-app-embed-login',
+    label: 'POST /api/embed/app-login',
+    tag: 'POST',
+    children: [
+      { id: 'anchor-app-embed-login-params', label: '请求体参数' },
+      { id: 'anchor-app-embed-login-resp', label: '响应' },
+      { id: 'anchor-app-embed-login-example', label: '调用示例' },
     ],
   },
 ]
@@ -442,6 +561,162 @@ onUnmounted(() => {
             <div class="code-block-wrap">
               <div class="code-header"><span>上传文件</span><n-button size="tiny" @click="copy(curlUpload)">复制</n-button></div>
               <pre class="code-block">{{ curlUpload }}</pre>
+            </div>
+          </n-collapse-item>
+        </n-collapse>
+
+        <!-- ========== /api/embed/login ========== -->
+        <div id="anchor-embed-login" class="anchor-target" />
+        <n-card :bordered="false" class="section-card">
+          <div class="endpoint-row">
+            <n-tag type="success" :bordered="false" class="method-tag">POST</n-tag>
+            <code class="endpoint-path">/api/embed/login</code>
+          </div>
+          <p class="endpoint-desc">
+            WEB_EMBED 集成免密 SSO 登录接口。集成方后端生成 iframe URL 时携带签名参数，前端 EmbedView 加载时调用此接口完成静默登录，JWT 写入 localStorage 后续自动维持登录态。
+          </p>
+          <div class="auth-block">
+            <n-text strong style="display:block;margin-bottom:6px">鉴权方式</n-text>
+            <div class="auth-row">
+              <n-tag size="small" :bordered="false" type="default">无需 JWT / API Key</n-tag>
+              <span>安全性由请求体中的 <code>token</code>（Embed Token）保证。服务端对 token 做 SHA-256 后与库中哈希比对，不匹配返回 400。</span>
+            </div>
+          </div>
+        </n-card>
+
+        <n-collapse :default-expanded-names="openEmbedLoginRows" class="collapse">
+          <n-collapse-item name="embed-login-params">
+            <template #header>
+              <div id="anchor-embed-login-params" class="anchor-target collapse-title">请求体参数（Request Body · application/json）</div>
+            </template>
+            <div class="table-wrap">
+              <table class="doc-table">
+                <thead><tr><th>字段</th><th>类型</th><th>必填</th><th>说明</th></tr></thead>
+                <tbody>
+                  <tr v-for="p in embedLoginReqParams" :key="p.field">
+                    <td><code>{{ p.field }}</code></td>
+                    <td><span class="type-badge">{{ p.type }}</span></td>
+                    <td><n-tag size="small" :bordered="false" :type="p.required ? 'error' : 'default'">{{ p.required ? '必填' : '可选' }}</n-tag></td>
+                    <td class="desc-cell">{{ p.desc }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </n-collapse-item>
+
+          <n-collapse-item name="embed-login-resp">
+            <template #header>
+              <div id="anchor-embed-login-resp" class="anchor-target collapse-title">响应（HTTP 200 · application/json）</div>
+            </template>
+            <div class="table-wrap">
+              <table class="doc-table">
+                <thead><tr><th>字段</th><th>类型</th><th>说明</th></tr></thead>
+                <tbody>
+                  <tr v-for="f in embedLoginRespFields" :key="f.field">
+                    <td><code>{{ f.field }}</code></td>
+                    <td><span class="type-badge">{{ f.type }}</span></td>
+                    <td class="desc-cell">{{ f.desc }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="code-block-wrap">
+              <div class="code-header"><span>响应示例</span><n-button size="tiny" @click="copy(embedLoginResponse)">复制</n-button></div>
+              <pre class="code-block">{{ embedLoginResponse }}</pre>
+            </div>
+          </n-collapse-item>
+
+          <n-collapse-item name="embed-login-example">
+            <template #header>
+              <div id="anchor-embed-login-example" class="anchor-target collapse-title">调用示例（curl）</div>
+            </template>
+            <div class="example-group">
+              <div class="code-block-wrap">
+                <div class="code-header"><span>curl 请求</span><n-button size="tiny" @click="copy(curlEmbedLogin)">复制</n-button></div>
+                <pre class="code-block">{{ curlEmbedLogin }}</pre>
+              </div>
+              <div class="code-block-wrap">
+                <div class="code-header"><span>请求体（JSON）</span><n-button size="tiny" @click="copy(embedLoginExample)">复制</n-button></div>
+                <pre class="code-block">{{ embedLoginExample }}</pre>
+              </div>
+            </div>
+          </n-collapse-item>
+        </n-collapse>
+
+        <!-- ========== /api/embed/app-login ========== -->
+        <div id="anchor-app-embed-login" class="anchor-target" />
+        <n-card :bordered="false" class="section-card">
+          <div class="endpoint-row">
+            <n-tag type="success" :bordered="false" class="method-tag">POST</n-tag>
+            <code class="endpoint-path">/api/embed/app-login</code>
+          </div>
+          <p class="endpoint-desc">
+            应用管理嵌入登录接口。管理员在「应用管理」中配置好 AI 应用并生成嵌入代码，前端通过 URL 参数 <code>aid/uid/username</code> 调用此接口完成登录。<strong>无需 HMAC 签名</strong>，直接按 appId 校验应用是否存在即可。JWT 中携带 appId claim，ChatService 据此直接加载对应 AI 应用配置。
+          </p>
+          <div class="auth-block">
+            <n-text strong style="display:block;margin-bottom:6px">鉴权方式</n-text>
+            <div class="auth-row">
+              <n-tag size="small" :bordered="false" type="default">无需 JWT / API Key / Embed Token</n-tag>
+              <span>仅校验 appId 对应的 AI 应用是否存在且未删除，不存在则返回 400。</span>
+            </div>
+          </div>
+        </n-card>
+
+        <n-collapse :default-expanded-names="openAppEmbedLoginRows" class="collapse">
+          <n-collapse-item name="app-embed-login-params">
+            <template #header>
+              <div id="anchor-app-embed-login-params" class="anchor-target collapse-title">请求体参数（Request Body · application/json）</div>
+            </template>
+            <div class="table-wrap">
+              <table class="doc-table">
+                <thead><tr><th>字段</th><th>类型</th><th>必填</th><th>说明</th></tr></thead>
+                <tbody>
+                  <tr v-for="p in appEmbedLoginReqParams" :key="p.field">
+                    <td><code>{{ p.field }}</code></td>
+                    <td><span class="type-badge">{{ p.type }}</span></td>
+                    <td><n-tag size="small" :bordered="false" :type="p.required ? 'error' : 'default'">{{ p.required ? '必填' : '可选' }}</n-tag></td>
+                    <td class="desc-cell">{{ p.desc }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </n-collapse-item>
+
+          <n-collapse-item name="app-embed-login-resp">
+            <template #header>
+              <div id="anchor-app-embed-login-resp" class="anchor-target collapse-title">响应（HTTP 200 · application/json）</div>
+            </template>
+            <div class="table-wrap">
+              <table class="doc-table">
+                <thead><tr><th>字段</th><th>类型</th><th>说明</th></tr></thead>
+                <tbody>
+                  <tr v-for="f in appEmbedLoginRespFields" :key="f.field">
+                    <td><code>{{ f.field }}</code></td>
+                    <td><span class="type-badge">{{ f.type }}</span></td>
+                    <td class="desc-cell">{{ f.desc }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="code-block-wrap">
+              <div class="code-header"><span>响应示例</span><n-button size="tiny" @click="copy(appEmbedLoginResponse)">复制</n-button></div>
+              <pre class="code-block">{{ appEmbedLoginResponse }}</pre>
+            </div>
+          </n-collapse-item>
+
+          <n-collapse-item name="app-embed-login-example">
+            <template #header>
+              <div id="anchor-app-embed-login-example" class="anchor-target collapse-title">调用示例（curl）</div>
+            </template>
+            <div class="example-group">
+              <div class="code-block-wrap">
+                <div class="code-header"><span>curl 请求</span><n-button size="tiny" @click="copy(curlAppEmbedLogin)">复制</n-button></div>
+                <pre class="code-block">{{ curlAppEmbedLogin }}</pre>
+              </div>
+              <div class="code-block-wrap">
+                <div class="code-header"><span>请求体（JSON）</span><n-button size="tiny" @click="copy(appEmbedLoginExample)">复制</n-button></div>
+                <pre class="code-block">{{ appEmbedLoginExample }}</pre>
+              </div>
             </div>
           </n-collapse-item>
         </n-collapse>

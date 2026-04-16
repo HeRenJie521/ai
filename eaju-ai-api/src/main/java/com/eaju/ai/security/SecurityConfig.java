@@ -67,12 +67,10 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOriginPatterns(Arrays.asList(
-                "http://localhost:*",
-                "http://127.0.0.1:*",
-                "http://192.168.*.*:*",
-                "http://172.*.*.*:*",
-                "http://10.*.*.*:*"));
+        // 使用 allowedOriginPatterns("*") 可在开启 allowCredentials 的同时放行所有来源。
+        // API Key 接口面向外部集成方，来源不固定，安全性由 Key 本身保证；
+        // 管理/登录接口虽也经过此过滤器，但受 JWT 鉴权保护，不会因放开 CORS 而降低安全性。
+        configuration.setAllowedOriginPatterns(Collections.singletonList("*"));
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"));
         configuration.setAllowedHeaders(Collections.singletonList("*"));
         configuration.setAllowCredentials(true);
