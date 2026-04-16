@@ -6,8 +6,10 @@ import com.eaju.ai.dto.embed.AppEmbedLoginRequestDto;
 import com.eaju.ai.dto.embed.EmbedLoginRequestDto;
 import com.eaju.ai.persistence.entity.AiAppEntity;
 import com.eaju.ai.persistence.entity.ApiKeyEntity;
+import com.eaju.ai.persistence.entity.UserContextFieldEntity;
 import com.eaju.ai.persistence.repository.AiAppRepository;
 import com.eaju.ai.persistence.repository.ApiKeyRepository;
+import com.eaju.ai.persistence.repository.UserContextFieldRepository;
 import com.eaju.ai.security.JwtIssueResult;
 import com.eaju.ai.security.JwtTokenProvider;
 import org.slf4j.Logger;
@@ -18,6 +20,9 @@ import org.springframework.util.StringUtils;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 /**
  * 嵌入网站（WEB_EMBED）免密单点登录服务。
@@ -35,15 +40,21 @@ public class EmbedAuthService {
     private final AiAppRepository aiAppRepository;
     private final JwtTokenProvider jwtTokenProvider;
     private final LoginSessionCacheService loginSessionCacheService;
+    private final UserContextFieldRepository userContextFieldRepository;
+    private final UserContextCacheService userContextCacheService;
 
     public EmbedAuthService(ApiKeyRepository apiKeyRepository,
                             AiAppRepository aiAppRepository,
                             JwtTokenProvider jwtTokenProvider,
-                            LoginSessionCacheService loginSessionCacheService) {
+                            LoginSessionCacheService loginSessionCacheService,
+                            UserContextFieldRepository userContextFieldRepository,
+                            UserContextCacheService userContextCacheService) {
         this.apiKeyRepository = apiKeyRepository;
         this.aiAppRepository = aiAppRepository;
         this.jwtTokenProvider = jwtTokenProvider;
         this.loginSessionCacheService = loginSessionCacheService;
+        this.userContextFieldRepository = userContextFieldRepository;
+        this.userContextCacheService = userContextCacheService;
     }
 
     public LoginResponseDto embedLogin(EmbedLoginRequestDto req) {
@@ -117,6 +128,9 @@ public class EmbedAuthService {
         snap.setDmsResponseExcerpt("{\"embed\":true,\"appId\":" + app.getId() + "}");
         loginSessionCacheService.save(issued.getJti(), snap);
 
+        // 提取并存储用户上下文字段（过滤白名单）
+        storeUserContext(issued.getJti(), req.getExtraContext());
+
         log.info("AppEmbedLogin 成功: appId={}, userId={}", app.getId(), userId);
 
         LoginResponseDto dto = new LoginResponseDto();
@@ -130,6 +144,29 @@ public class EmbedAuthService {
         dto.setDefaultModel(app.getModelId());
         dto.setIntegrationName(app.getName());
         return dto;
+    }
+
+    /**
+     * 根据 user_context_field 白名单过滤 extraContext，将允许的字段存入 Redis。
+     */
+    private void storeUserContext(String jti, Map<String, Object> extraContext) {
+        if (!StringUtils.hasText(jti) || extraContext == null || extraContext.isEmpty()) {
+            return;
+        }
+        List<UserContextFieldEntity> allowedFields = userContextFieldRepository.findByEnabledIsTrueOrderByIdAsc();
+        if (allowedFields.isEmpty()) {
+            return;
+        }
+        Map<String, Object> filtered = new HashMap<>();
+        for (UserContextFieldEntity field : allowedFields) {
+            if (extraContext.containsKey(field.getFieldKey())) {
+                filtered.put(field.getFieldKey(), extraContext.get(field.getFieldKey()));
+            }
+        }
+        if (!filtered.isEmpty()) {
+            userContextCacheService.save(jti, filtered);
+            log.debug("存储用户上下文: jti={} keys={}", jti, filtered.keySet());
+        }
     }
 
     private static String sha256Hex(String s) {

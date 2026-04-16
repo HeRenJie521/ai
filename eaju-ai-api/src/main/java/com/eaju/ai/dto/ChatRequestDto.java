@@ -79,6 +79,10 @@ public class ChatRequestDto {
     @JsonIgnore
     private Long internalAppId;
 
+    /** 服务端写入：JWT jti，用于读取用户上下文缓存（工具调用变量替换），不落库到请求 JSON */
+    @JsonIgnore
+    private String internalJti;
+
     public String getProvider() {
         return provider;
     }
@@ -229,5 +233,13 @@ public class ChatRequestDto {
 
     public void setInternalAppId(Long internalAppId) {
         this.internalAppId = internalAppId;
+    }
+
+    public String getInternalJti() {
+        return internalJti;
+    }
+
+    public void setInternalJti(String internalJti) {
+        this.internalJti = internalJti;
     }
 }

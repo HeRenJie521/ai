@@ -47,6 +47,7 @@ public class ChatController {
         request.setInternalApiKeyId(apiKeyId);
         request.setInternalIntegrationId(integrationId);
         request.setInternalAppId(appId);
+        request.setInternalJti(CallerPrincipal.jti(authentication));
         if (StringUtils.hasText(uid) && StringUtils.hasText(request.getSessionId())) {
             chatConversationService.touchOnChatStart(
                     uid,

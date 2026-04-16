@@ -8,6 +8,7 @@ import com.eaju.ai.llm.OpenAiLlmExecutor;
 import com.eaju.ai.llm.support.OpenAiStreamAccumulator;
 import com.eaju.ai.persistence.ChatRecordService;
 import com.eaju.ai.persistence.entity.AiAppEntity;
+import com.eaju.ai.persistence.entity.AiToolEntity;
 import com.eaju.ai.persistence.repository.AiAppRepository;
 import com.eaju.ai.session.ChatSessionService;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -20,7 +21,9 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import java.io.Closeable;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -36,6 +39,9 @@ public class ChatService {
     private final ChatRecordService chatRecordService;
     private final ObjectMapper objectMapper;
     private final AiAppRepository aiAppRepository;
+    private final AiToolService aiToolService;
+    private final UserContextCacheService userContextCacheService;
+    private final ToolCallOrchestrator toolCallOrchestrator;
 
     public ChatService(LlmProviderConfigService llmProviderConfigService,
                        OpenAiLlmExecutor openAiLlmExecutor,
@@ -43,7 +49,10 @@ public class ChatService {
                        ChatSessionService chatSessionService,
                        ChatRecordService chatRecordService,
                        ObjectMapper objectMapper,
-                       AiAppRepository aiAppRepository) {
+                       AiAppRepository aiAppRepository,
+                       AiToolService aiToolService,
+                       UserContextCacheService userContextCacheService,
+                       ToolCallOrchestrator toolCallOrchestrator) {
         this.llmProviderConfigService = llmProviderConfigService;
         this.openAiLlmExecutor = openAiLlmExecutor;
         this.chatStreamExecutor = chatStreamExecutor;
@@ -51,19 +60,37 @@ public class ChatService {
         this.chatRecordService = chatRecordService;
         this.objectMapper = objectMapper;
         this.aiAppRepository = aiAppRepository;
+        this.aiToolService = aiToolService;
+        this.userContextCacheService = userContextCacheService;
+        this.toolCallOrchestrator = toolCallOrchestrator;
     }
 
     public ChatResponseDto chat(ChatRequestDto request) {
         ChatRequestDto effective = chatSessionService.mergeHistory(request);
         ChatRequestDto forLlm = withSystemPrompt(request, effective);
         LlmProviderConfigSnapshot cfg = llmProviderConfigService.requireSnapshot(forLlm.getProvider());
-        ChatResponseDto response = openAiLlmExecutor.chat(forLlm, cfg);
+
+        // 若当前应用绑定了工具，走工具调用编排循环
+        List<AiToolEntity> tools = resolveTools(request.getInternalAppId());
+        ChatResponseDto response;
+        if (!tools.isEmpty()) {
+            Map<String, Object> userCtx = userContextCacheService.get(request.getInternalJti());
+            response = toolCallOrchestrator.chat(forLlm, cfg, tools, userCtx);
+        } else {
+            response = openAiLlmExecutor.chat(forLlm, cfg);
+        }
+
         chatSessionService.appendAssistantToSession(request, effective, response);
         chatRecordService.saveBlockingTurn(request, effective, response, false);
         if (!cfg.resolveThinkingContentWanted(forLlm)) {
             response.setReasoningContent(null);
         }
         return response;
+    }
+
+    private List<AiToolEntity> resolveTools(Long appId) {
+        if (appId == null) return Collections.emptyList();
+        return aiToolService.findEnabledToolsByAppId(appId);
     }
 
     public SseEmitter chatStream(ChatRequestDto request) {

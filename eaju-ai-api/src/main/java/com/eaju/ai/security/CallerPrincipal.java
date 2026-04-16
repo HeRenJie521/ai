@@ -75,4 +75,22 @@ public final class CallerPrincipal {
         }
         return null;
     }
+
+    /**
+     * JWT jti（用于读取用户上下文缓存）；API Key 调用或匿名访问返回 null。
+     */
+    public static String jti(Authentication authentication) {
+        if (authentication == null || !authentication.isAuthenticated()) {
+            return null;
+        }
+        if (authentication instanceof AnonymousAuthenticationToken) {
+            return null;
+        }
+        Object p = authentication.getPrincipal();
+        if (p instanceof AuthUserPrincipal) {
+            String jti = ((AuthUserPrincipal) p).getJti();
+            return org.springframework.util.StringUtils.hasText(jti) ? jti : null;
+        }
+        return null;
+    }
 }

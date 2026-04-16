@@ -32,6 +32,7 @@ import {
   type AiAppUsage,
   type RecentTurnRow,
 } from '@/api/adminAiApps'
+import { adminListTools, adminBindAppTools, adminGetAppTools, type AiToolRow } from '@/api/adminTools'
 import { listLlmProviders, type LlmProviderOption } from '@/api/llmProviders'
 import type { ChatMessage } from '@/api/conversations'
 import { useAuthStore } from '@/stores/auth'
@@ -95,6 +96,28 @@ const msgSessionId = ref('')
 const msgLoading = ref(false)
 const msgList = ref<ChatMessage[]>([])
 
+// ---- 工具绑定 ----
+const allTools = ref<AiToolRow[]>([])
+const editBoundToolIds = ref<number[]>([])
+const toolOptions = computed(() =>
+  allTools.value.map((t) => ({ label: `${t.label}（${t.name}）`, value: t.id })),
+)
+
+async function loadAllTools() {
+  try {
+    allTools.value = await adminListTools()
+  } catch { /* 忽略 */ }
+}
+
+async function loadBoundTools(appId: number) {
+  try {
+    const bound = await adminGetAppTools(appId)
+    editBoundToolIds.value = bound.map((t) => t.id)
+  } catch {
+    editBoundToolIds.value = []
+  }
+}
+
 // ---- 推荐问题（新建/编辑共用辅助状态）----
 const newSuggestionCreate = ref('')
 const newSuggestionEdit = ref('')
@@ -133,6 +156,7 @@ async function loadLlmProviders() {
 onMounted(() => {
   void load()
   void loadLlmProviders()
+  void loadAllTools()
 })
 
 // ---------- 新建 ----------
@@ -187,6 +211,8 @@ function openEdit(r: AiAppRow) {
   }
   suggestionItemsEdit.value = r.suggestions ? JSON.parse(r.suggestions) : []
   newSuggestionEdit.value = ''
+  editBoundToolIds.value = []
+  void loadBoundTools(r.id)
 }
 
 async function submitEdit() {
@@ -211,6 +237,7 @@ async function submitEdit() {
       systemTask: editForm.value.systemTask,
       systemConstraints: editForm.value.systemConstraints,
     })
+    await adminBindAppTools(id, editBoundToolIds.value)
     editId.value = null
     message.success('已保存')
     await load()
@@ -645,6 +672,16 @@ const columns: DataTableColumns<AiAppRow> = [
             <n-button type="primary" @click="addSuggestion(suggestionItemsEdit, newSuggestionEdit, v => newSuggestionEdit = v)">添加</n-button>
           </div>
         </div>
+      </n-form-item>
+
+      <n-form-item label="绑定工具（工具调用）">
+        <n-select
+          v-model:value="editBoundToolIds"
+          :options="toolOptions"
+          multiple
+          clearable
+          placeholder="选择该应用可调用的工具（可多选）"
+        />
       </n-form-item>
     </n-form>
     <template #footer>

@@ -28,6 +28,14 @@ public class ChatMessageDto {
     @JsonInclude(JsonInclude.Include.NON_NULL)
     private String createdAt;
 
+    /** tool 角色消息时对应的 tool_call_id */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    private String toolCallId;
+
+    /** assistant 消息中 LLM 发出的 tool_calls JSON 数组字符串（内部使用，不序列化给前端） */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    private String toolCallsJson;
+
     public String getRole() {
         return role;
     }
@@ -66,5 +74,21 @@ public class ChatMessageDto {
 
     public void setCreatedAt(String createdAt) {
         this.createdAt = createdAt;
+    }
+
+    public String getToolCallId() {
+        return toolCallId;
+    }
+
+    public void setToolCallId(String toolCallId) {
+        this.toolCallId = toolCallId;
+    }
+
+    public String getToolCallsJson() {
+        return toolCallsJson;
+    }
+
+    public void setToolCallsJson(String toolCallsJson) {
+        this.toolCallsJson = toolCallsJson;
     }
 }

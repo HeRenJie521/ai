@@ -70,7 +70,8 @@
       "Bash(psql *)",
       "Bash(echo *)",
       "Bash(xargs *)",
-      "Bash(git checkout *)"
+      "Bash(git checkout *)",
+      "Bash(git restore *)"
     ]
   },
   "$version": 3

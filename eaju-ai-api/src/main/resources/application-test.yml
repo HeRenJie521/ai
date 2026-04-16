@@ -73,7 +73,7 @@ app:
     dms-base-url: http://superapp.51eanj.com:82/eaju_app_service/eajudms/DmsInterface
     dms-login-method: appUserLogin
     dms-login-type: "1"
-    admin-phones: "15296711325"
+    admin-phones: "15296711325,13403928938,15101120754,18001077289"
     session-redis-key-prefix: "auth:session:"
     session-ttl-hours: 0
   http-client:

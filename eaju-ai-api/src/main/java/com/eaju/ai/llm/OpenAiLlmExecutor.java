@@ -49,6 +49,24 @@ public class OpenAiLlmExecutor {
     }
 
     /**
+     * 携带工具定义的阻塞请求，供 {@link com.eaju.ai.service.ToolCallOrchestrator} 使用。
+     *
+     * @param toolsArray OpenAI tools 数组节点
+     */
+    public ChatResponseDto chatWithTools(ChatRequestDto request, LlmProviderConfigSnapshot cfg,
+                                         ArrayNode toolsArray) {
+        cfg.validateOrThrow();
+        String modelId = cfg.resolveUpstreamModelId(request.getModel(), request.getMode());
+        ObjectNode body = buildChatCompletionBody(cfg, modelId, request, false);
+        if (toolsArray != null && toolsArray.size() > 0) {
+            body.set("tools", toolsArray);
+            body.put("tool_choice", "auto");
+        }
+        JsonNode root = httpClient.post(cfg.getBaseUrl(), cfg.getApiKey(), body);
+        return responseMapper.map(cfg.getCode(), modelId, root);
+    }
+
+    /**
      * 流式请求：将上游 chunk 转发到 {@code emitter}；不在此调用 {@link SseEmitter#complete()}，由调用方在落库后结束。
      *
      * @param onEachChunkJson 每条上游 chunk 的 JSON 字符串，可为 null
@@ -146,6 +164,40 @@ public class OpenAiLlmExecutor {
             ObjectNode rfNode = objectMapper.createObjectNode();
             rfNode.put("type", "json_object");
             body.set("response_format", rfNode);
+            
+            // Qwen/通义千问要求：使用 json_object 格式时，消息中必须包含 "json" 这个词
+            // 在 system message 中添加提示，确保满足 API 要求
+            ensureJsonMentionInSystemMessage(body);
+        }
+    }
+
+    /**
+     * 确保 system message 中包含 "json" 这个词，满足 Qwen API 的要求
+     */
+    private void ensureJsonMentionInSystemMessage(ObjectNode body) {
+        JsonNode messagesNode = body.get("messages");
+        if (messagesNode == null || !messagesNode.isArray()) {
+            return;
+        }
+        
+        // 检查是否已有 system message 包含 json 关键词
+        boolean hasJsonMention = false;
+        for (JsonNode msg : messagesNode) {
+            if ("system".equals(msg.path("role").asText())) {
+                String content = msg.path("content").asText("");
+                if (content.toLowerCase().contains("json")) {
+                    hasJsonMention = true;
+                    break;
+                }
+            }
+        }
+        
+        // 如果没有，添加一个 system message
+        if (!hasJsonMention) {
+            ObjectNode systemMsg = objectMapper.createObjectNode();
+            systemMsg.put("role", "system");
+            systemMsg.put("content", "请始终以 JSON 格式返回响应。");
+            ((ArrayNode) messagesNode).insert(0, systemMsg);
         }
     }
 
@@ -209,9 +261,27 @@ public class OpenAiLlmExecutor {
             if (m == null) {
                 continue;
             }
+            String role = m.getRole() != null ? m.getRole() : "";
             ObjectNode node = objectMapper.createObjectNode();
-            node.put("role", m.getRole() != null ? m.getRole() : "");
-            putMessageContentForUpstream(node, m);
+            node.put("role", role);
+            if ("tool".equals(role)) {
+                // tool 结果消息：content 为字符串，需携带 tool_call_id
+                node.put("content", m.getContent() != null ? m.getContent() : "");
+                if (StringUtils.hasText(m.getToolCallId())) {
+                    node.put("tool_call_id", m.getToolCallId());
+                }
+            } else if ("assistant".equals(role) && StringUtils.hasText(m.getToolCallsJson())) {
+                // assistant 消息中包含 tool_calls（编排器循环中追加的历史）
+                node.put("content", m.getContent() != null ? m.getContent() : "");
+                try {
+                    JsonNode toolCallsNode = objectMapper.readTree(m.getToolCallsJson());
+                    node.set("tool_calls", toolCallsNode);
+                } catch (Exception ex) {
+                    // 解析失败，忽略 tool_calls
+                }
+            } else {
+                putMessageContentForUpstream(node, m);
+            }
             array.add(node);
         }
         return array;
