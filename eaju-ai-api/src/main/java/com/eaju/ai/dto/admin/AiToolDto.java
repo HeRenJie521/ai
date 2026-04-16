@@ -10,6 +10,7 @@ public class AiToolDto {
     private String url;
     private String headersJson;
     private String bodyTemplate;
+    private String contentType;
     private String paramsSchemaJson;
     private boolean enabled;
     private String createdAt;
@@ -37,6 +38,9 @@ public class AiToolDto {
 
     public String getBodyTemplate() { return bodyTemplate; }
     public void setBodyTemplate(String bodyTemplate) { this.bodyTemplate = bodyTemplate; }
+
+    public String getContentType() { return contentType; }
+    public void setContentType(String contentType) { this.contentType = contentType; }
 
     public String getParamsSchemaJson() { return paramsSchemaJson; }
     public void setParamsSchemaJson(String paramsSchemaJson) { this.paramsSchemaJson = paramsSchemaJson; }

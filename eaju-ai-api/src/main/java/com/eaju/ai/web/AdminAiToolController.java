@@ -43,7 +43,7 @@ public class AdminAiToolController {
         AiToolEntity e = service.create(
                 body.getName(), body.getLabel(), body.getDescription(),
                 body.getHttpMethod(), body.getUrl(),
-                body.getHeadersJson(), body.getBodyTemplate(), body.getParamsSchemaJson());
+                body.getHeadersJson(), body.getBodyTemplate(), body.getContentType(), body.getParamsSchemaJson());
         return toDto(e);
     }
 
@@ -53,7 +53,7 @@ public class AdminAiToolController {
         AiToolEntity e = service.update(
                 id, body.getName(), body.getLabel(), body.getDescription(),
                 body.getHttpMethod(), body.getUrl(),
-                body.getHeadersJson(), body.getBodyTemplate(), body.getParamsSchemaJson(),
+                body.getHeadersJson(), body.getBodyTemplate(), body.getContentType(), body.getParamsSchemaJson(),
                 body.getEnabled());
         return toDto(e);
     }
@@ -73,6 +73,7 @@ public class AdminAiToolController {
         dto.setUrl(e.getUrl());
         dto.setHeadersJson(e.getHeadersJson());
         dto.setBodyTemplate(e.getBodyTemplate());
+        dto.setContentType(e.getContentType());
         dto.setParamsSchemaJson(e.getParamsSchemaJson());
         dto.setEnabled(e.isEnabled());
         dto.setCreatedAt(e.getCreatedAt() != null ? e.getCreatedAt().toString() : null);

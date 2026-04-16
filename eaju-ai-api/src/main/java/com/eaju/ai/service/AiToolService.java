@@ -45,16 +45,17 @@ public class AiToolService {
     @Transactional
     public AiToolEntity create(String name, String label, String description,
                                String httpMethod, String url, String headersJson,
-                               String bodyTemplate, String paramsSchemaJson) {
-        validate(name, label, description, url, paramsSchemaJson);
+                               String bodyTemplate, String contentType, String paramsSchemaJson) {
+        validate(name, description, url, paramsSchemaJson);
         AiToolEntity e = new AiToolEntity();
         e.setName(name.trim());
-        e.setLabel(label.trim());
+        e.setLabel(StringUtils.hasText(label) ? label.trim() : name.trim());
         e.setDescription(description.trim());
         e.setHttpMethod(StringUtils.hasText(httpMethod) ? httpMethod.trim().toUpperCase() : "POST");
         e.setUrl(url.trim());
         e.setHeadersJson(StringUtils.hasText(headersJson) ? headersJson.trim() : null);
         e.setBodyTemplate(StringUtils.hasText(bodyTemplate) ? bodyTemplate.trim() : null);
+        e.setContentType(StringUtils.hasText(contentType) ? contentType.trim() : "application/json");
         e.setParamsSchemaJson(paramsSchemaJson.trim());
         return aiToolRepository.save(e);
     }
@@ -62,16 +63,17 @@ public class AiToolService {
     @Transactional
     public AiToolEntity update(Long id, String name, String label, String description,
                                String httpMethod, String url, String headersJson,
-                               String bodyTemplate, String paramsSchemaJson, Boolean enabled) {
+                               String bodyTemplate, String contentType, String paramsSchemaJson, Boolean enabled) {
         AiToolEntity e = aiToolRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("工具不存在: " + id));
+                .orElseThrow(() -> new IllegalArgumentException("工具不存在：" + id));
         if (StringUtils.hasText(name)) e.setName(name.trim());
-        if (StringUtils.hasText(label)) e.setLabel(label.trim());
+        if (label != null) e.setLabel(StringUtils.hasText(label) ? label.trim() : e.getName());
         if (StringUtils.hasText(description)) e.setDescription(description.trim());
         if (StringUtils.hasText(httpMethod)) e.setHttpMethod(httpMethod.trim().toUpperCase());
         if (StringUtils.hasText(url)) e.setUrl(url.trim());
         if (headersJson != null) e.setHeadersJson(StringUtils.hasText(headersJson) ? headersJson.trim() : null);
         if (bodyTemplate != null) e.setBodyTemplate(StringUtils.hasText(bodyTemplate) ? bodyTemplate.trim() : null);
+        if (contentType != null) e.setContentType(StringUtils.hasText(contentType) ? contentType.trim() : "application/json");
         if (StringUtils.hasText(paramsSchemaJson)) e.setParamsSchemaJson(paramsSchemaJson.trim());
         if (enabled != null) e.setEnabled(enabled);
         return aiToolRepository.save(e);
@@ -80,7 +82,7 @@ public class AiToolService {
     @Transactional
     public void delete(Long id) {
         if (!aiToolRepository.existsById(id)) {
-            throw new IllegalArgumentException("工具不存在: " + id);
+            throw new IllegalArgumentException("工具不存在：" + id);
         }
         // 先清除所有应用与此工具的绑定关系，再删工具本体
         aiAppToolRepository.deleteByToolId(id);
@@ -95,7 +97,7 @@ public class AiToolService {
         for (Long toolId : toolIds) {
             if (toolId == null) continue;
             if (!aiToolRepository.existsById(toolId)) {
-                throw new IllegalArgumentException("工具不存在: " + toolId);
+                throw new IllegalArgumentException("工具不存在：" + toolId);
             }
             AiAppToolEntity binding = new AiAppToolEntity();
             binding.setAppId(appId);
@@ -105,10 +107,9 @@ public class AiToolService {
         }
     }
 
-    private static void validate(String name, String label, String description,
+    private static void validate(String name, String description,
                                   String url, String paramsSchemaJson) {
         if (!StringUtils.hasText(name)) throw new IllegalArgumentException("工具名称不能为空");
-        if (!StringUtils.hasText(label)) throw new IllegalArgumentException("工具显示名不能为空");
         if (!StringUtils.hasText(description)) throw new IllegalArgumentException("工具描述不能为空");
         if (!StringUtils.hasText(url)) throw new IllegalArgumentException("工具 URL 不能为空");
         if (!StringUtils.hasText(paramsSchemaJson)) throw new IllegalArgumentException("参数 Schema 不能为空");

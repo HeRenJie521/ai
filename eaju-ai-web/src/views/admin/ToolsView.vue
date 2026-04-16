@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { h, onMounted, ref } from 'vue'
+import { computed, h, onMounted, ref } from 'vue'
 import type { DataTableColumns } from 'naive-ui'
 import {
   NButton,
@@ -13,7 +13,6 @@ import {
   NSpace,
   NSpin,
   NSwitch,
-  NTag,
   NText,
   useDialog,
   useMessage,
@@ -26,35 +25,68 @@ import {
   type AiToolRow,
   type AiToolSavePayload,
 } from '@/api/adminTools'
+import {
+  adminListApiDefinitions,
+  type ApiDefinitionRow,
+} from '@/api/adminApiDefinitions'
 
 const message = useMessage()
 const dialog = useDialog()
 
 const loading = ref(false)
 const rows = ref<AiToolRow[]>([])
+const apiDefinitions = ref<ApiDefinitionRow[]>([])
+const apiDefinitionLoading = ref(false)
 
 // ---- 新建 / 编辑 ----
 const showModal = ref(false)
 const editId = ref<number | null>(null)
+const selectedApiDefinitionId = ref<number | null>(null)
 const form = ref<AiToolSavePayload>({
   name: '',
-  label: '',
   description: '',
   httpMethod: 'POST',
   url: '',
   headersJson: '',
   bodyTemplate: '',
+  contentType: 'application/json',
   paramsSchemaJson: '{"type":"object","properties":{},"required":[]}',
   enabled: true,
 })
 
-const httpMethodOptions = [
-  { label: 'GET', value: 'GET' },
-  { label: 'POST', value: 'POST' },
-  { label: 'PUT', value: 'PUT' },
-  { label: 'DELETE', value: 'DELETE' },
-  { label: 'PATCH', value: 'PATCH' },
-]
+// 接口定义下拉选项
+const apiDefinitionOptions = computed(() => {
+  return apiDefinitions.value.map((api) => ({
+    label: `${api.systemName} - ${api.httpMethod} - ${api.requestUrl}`,
+    value: api.id,
+    httpMethod: api.httpMethod,
+    url: api.requestUrl,
+    contentType: api.contentType,
+  }))
+})
+
+// 当选择接口时，自动填充 httpMethod、url、contentType
+function onApiDefinitionChange(apiDefId: number | null) {
+  if (apiDefId) {
+    const selected = apiDefinitions.value.find((api) => api.id === apiDefId)
+    if (selected) {
+      form.value.httpMethod = selected.httpMethod
+      form.value.url = selected.requestUrl
+      form.value.contentType = selected.contentType
+    }
+  }
+}
+
+async function loadApiDefinitions() {
+  apiDefinitionLoading.value = true
+  try {
+    apiDefinitions.value = await adminListApiDefinitions()
+  } catch (e: unknown) {
+    // 静默失败，不影响主流程
+  } finally {
+    apiDefinitionLoading.value = false
+  }
+}
 
 async function load() {
   loading.value = true
@@ -70,14 +102,15 @@ async function load() {
 
 function openCreate() {
   editId.value = null
+  selectedApiDefinitionId.value = null
   form.value = {
     name: '',
-    label: '',
     description: '',
     httpMethod: 'POST',
     url: '',
     headersJson: '',
     bodyTemplate: '',
+    contentType: 'application/json',
     paramsSchemaJson: '{"type":"object","properties":{},"required":[]}',
     enabled: true,
   }
@@ -88,15 +121,18 @@ function openEdit(row: AiToolRow) {
   editId.value = row.id
   form.value = {
     name: row.name,
-    label: row.label,
     description: row.description,
     httpMethod: row.httpMethod,
     url: row.url,
     headersJson: row.headersJson ?? '',
     bodyTemplate: row.bodyTemplate ?? '',
+    contentType: row.contentType ?? 'application/json',
     paramsSchemaJson: row.paramsSchemaJson,
     enabled: row.enabled,
   }
+  // 尝试匹配已保存的 URL 对应的接口定义
+  const matched = apiDefinitions.value.find((api) => api.requestUrl === row.url && api.httpMethod === row.httpMethod)
+  selectedApiDefinitionId.value = matched ? matched.id : null
   showModal.value = true
 }
 
@@ -104,12 +140,12 @@ async function handleSave() {
   try {
     const payload: AiToolSavePayload = {
       name: form.value.name.trim(),
-      label: form.value.label.trim(),
       description: form.value.description.trim(),
       httpMethod: form.value.httpMethod || 'POST',
       url: form.value.url.trim(),
       headersJson: form.value.headersJson?.trim() || undefined,
       bodyTemplate: form.value.bodyTemplate?.trim() || undefined,
+      contentType: form.value.contentType || 'application/json',
       paramsSchemaJson: form.value.paramsSchemaJson.trim(),
       enabled: form.value.enabled,
     }
@@ -149,25 +185,9 @@ function confirmDelete(row: AiToolRow) {
 
 const columns: DataTableColumns<AiToolRow> = [
   {
-    title: '名称(name)',
+    title: '名称 (name)',
     key: 'name',
     render: (row) => h(NText, { code: true }, { default: () => row.name }),
-  },
-  { title: '显示名', key: 'label' },
-  {
-    title: '方法',
-    key: 'httpMethod',
-    width: 80,
-    render: (row) => h(NTag, { size: 'small', type: 'info' }, { default: () => row.httpMethod }),
-  },
-  {
-    title: '状态',
-    key: 'enabled',
-    width: 80,
-    render: (row) =>
-      h(NTag, { size: 'small', type: row.enabled ? 'success' : 'default' }, {
-        default: () => (row.enabled ? '启用' : '禁用'),
-      }),
   },
   {
     title: '操作',
@@ -184,6 +204,7 @@ const columns: DataTableColumns<AiToolRow> = [
 ]
 
 onMounted(() => {
+  void loadApiDefinitions()
   void load()
 })
 </script>
@@ -204,9 +225,6 @@ onMounted(() => {
         <NFormItem label="工具名称" required>
           <NInput v-model:value="form.name" placeholder="英文，如 query_leave_balance" :disabled="!!editId" />
         </NFormItem>
-        <NFormItem label="显示名" required>
-          <NInput v-model:value="form.label" placeholder="如：查询剩余假期" />
-        </NFormItem>
         <NFormItem label="功能描述" required>
           <NInput
             v-model:value="form.description"
@@ -215,11 +233,15 @@ onMounted(() => {
             placeholder="LLM 据此决定何时调用此工具"
           />
         </NFormItem>
-        <NFormItem label="HTTP 方法">
-          <NSelect v-model:value="form.httpMethod" :options="httpMethodOptions" style="width:120px" />
-        </NFormItem>
-        <NFormItem label="URL" required>
-          <NInput v-model:value="form.url" placeholder="支持 {{var}} 模板，如 https://api.example.com/{{dept}}/leave" />
+        <NFormItem label="接口选择" required>
+          <NSelect
+            v-model:value="selectedApiDefinitionId"
+            :options="apiDefinitionOptions"
+            placeholder="选择已配置的接口"
+            clearable
+            style="width:100%"
+            @update:value="onApiDefinitionChange"
+          />
         </NFormItem>
         <NFormItem label="请求头 (JSON)">
           <NInput

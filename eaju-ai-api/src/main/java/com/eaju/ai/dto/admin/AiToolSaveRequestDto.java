@@ -7,7 +7,6 @@ public class AiToolSaveRequestDto {
     @NotBlank
     private String name;
 
-    @NotBlank
     private String label;
 
     @NotBlank
@@ -21,6 +20,8 @@ public class AiToolSaveRequestDto {
     private String headersJson;
 
     private String bodyTemplate;
+
+    private String contentType;
 
     @NotBlank
     private String paramsSchemaJson;
@@ -47,6 +48,9 @@ public class AiToolSaveRequestDto {
 
     public String getBodyTemplate() { return bodyTemplate; }
     public void setBodyTemplate(String bodyTemplate) { this.bodyTemplate = bodyTemplate; }
+
+    public String getContentType() { return contentType; }
+    public void setContentType(String contentType) { this.contentType = contentType; }
 
     public String getParamsSchemaJson() { return paramsSchemaJson; }
     public void setParamsSchemaJson(String paramsSchemaJson) { this.paramsSchemaJson = paramsSchemaJson; }

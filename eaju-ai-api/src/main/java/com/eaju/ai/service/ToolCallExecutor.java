@@ -12,7 +12,11 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestTemplate;
+import org.springframework.web.util.UriComponentsBuilder;
 
+import java.io.UnsupportedEncodingException;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -71,12 +75,25 @@ public class ToolCallExecutor {
             String body = null;
             String method = tool.getHttpMethod() != null ? tool.getHttpMethod().toUpperCase() : "POST";
             if (("POST".equals(method) || "PUT".equals(method) || "PATCH".equals(method))) {
+                // 设置 Content-Type
+                String contentType = tool.getContentType() != null ? tool.getContentType() : "application/json";
+                headers.set("Content-Type", contentType);
+                
                 if (StringUtils.hasText(tool.getBodyTemplate())) {
                     body = substitute(tool.getBodyTemplate(), vars);
+                    // 如果是 form-urlencoded 且使用模板，需要手动转换
+                    if ("application/x-www-form-urlencoded".equals(contentType)) {
+                        body = convertJsonToFormUrlEncoded(body);
+                    }
                 } else {
-                    // 默认将 argsMap 作为 JSON body
-                    body = objectMapper.writeValueAsString(argsMap);
-                    headers.set("Content-Type", "application/json");
+                    // 默认将 argsMap 作为 body
+                    if ("application/x-www-form-urlencoded".equals(contentType)) {
+                        // 将 argsMap 转换为 form-urlencoded 格式
+                        body = convertMapToFormUrlEncoded(argsMap);
+                    } else {
+                        // JSON 格式
+                        body = objectMapper.writeValueAsString(argsMap);
+                    }
                 }
             }
 
@@ -126,5 +143,55 @@ public class ToolCallExecutor {
         }
         m.appendTail(sb);
         return sb.toString();
+    }
+
+    /**
+     * 将 Map 转换为 form-urlencoded 格式
+     * 例如：{"key": "value"} -> "key=value"
+     */
+    private String convertMapToFormUrlEncoded(Map<String, Object> map) {
+        if (map == null || map.isEmpty()) {
+            return "";
+        }
+        StringBuilder sb = new StringBuilder();
+        boolean first = true;
+        for (Map.Entry<String, Object> entry : map.entrySet()) {
+            if (!first) {
+                sb.append("&");
+            }
+            try {
+                sb.append(URLEncoder.encode(entry.getKey(), StandardCharsets.UTF_8.name()));
+                sb.append("=");
+                if (entry.getValue() != null) {
+                    sb.append(URLEncoder.encode(entry.getValue().toString(), StandardCharsets.UTF_8.name()));
+                }
+            } catch (UnsupportedEncodingException e) {
+                // 不会发生，UTF-8 总是受支持
+            }
+            first = false;
+        }
+        return sb.toString();
+    }
+
+    /**
+     * 尝试将 JSON 字符串转换为 form-urlencoded 格式
+     * 如果输入已经是 form-urlencoded 格式，则直接返回
+     */
+    private String convertJsonToFormUrlEncoded(String jsonBody) {
+        if (jsonBody == null || jsonBody.isEmpty()) {
+            return "";
+        }
+        // 尝试解析为 JSON
+        try {
+            Map<String, Object> map = objectMapper.readValue(jsonBody,
+                    new TypeReference<Map<String, Object>>() {});
+            if (map != null && !map.isEmpty()) {
+                return convertMapToFormUrlEncoded(map);
+            }
+        } catch (Exception e) {
+            // 如果不是有效 JSON，可能是已经是 form-urlencoded 格式或模板，直接返回
+            log.debug("JSON 解析失败，可能已是 form-urlencoded 格式：{}", e.getMessage());
+        }
+        return jsonBody;
     }
 }

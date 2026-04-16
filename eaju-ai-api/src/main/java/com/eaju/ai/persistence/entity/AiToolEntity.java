@@ -45,6 +45,10 @@ public class AiToolEntity {
     @Column(name = "body_template", columnDefinition = "TEXT")
     private String bodyTemplate;
 
+    /** 参数格式：application/json 或 application/x-www-form-urlencoded */
+    @Column(name = "content_type", length = 128)
+    private String contentType = "application/json";
+
     /**
      * 传给 LLM 的 parameters JSON Schema，例如：
      * {"type":"object","properties":{"query":{"type":"string","description":"搜索关键词"}},"required":["query"]}
@@ -96,6 +100,9 @@ public class AiToolEntity {
 
     public String getBodyTemplate() { return bodyTemplate; }
     public void setBodyTemplate(String bodyTemplate) { this.bodyTemplate = bodyTemplate; }
+
+    public String getContentType() { return contentType; }
+    public void setContentType(String contentType) { this.contentType = contentType; }
 
     public String getParamsSchemaJson() { return paramsSchemaJson; }
     public void setParamsSchemaJson(String paramsSchemaJson) { this.paramsSchemaJson = paramsSchemaJson; }

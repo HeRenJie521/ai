@@ -9,6 +9,7 @@ export interface AiToolRow {
   url: string
   headersJson: string | null
   bodyTemplate: string | null
+  contentType: string | null
   paramsSchemaJson: string
   enabled: boolean
   createdAt: string | null
@@ -16,12 +17,13 @@ export interface AiToolRow {
 
 export interface AiToolSavePayload {
   name: string
-  label: string
+  label?: string
   description: string
   httpMethod?: string
   url: string
   headersJson?: string
   bodyTemplate?: string
+  contentType?: string
   paramsSchemaJson: string
   enabled?: boolean
 }

@@ -41,6 +41,7 @@ import ConversationsView from './ConversationsView.vue'
 import ApiKeysView from './ApiKeysView.vue'
 import AiAppsView from './AiAppsView.vue'
 import ToolsView from './ToolsView.vue'
+import ApiManageView from './ApiManageView.vue'
 import ContextFieldsView from './ContextFieldsView.vue'
 
 const router = useRouter()
@@ -49,7 +50,7 @@ const message = useMessage()
 const auth = useAuthStore()
 
 // 根据路由路径确定当前页面
-const currentPage = computed<'llm' | 'conversations' | 'api-keys' | 'ai-apps' | 'tools' | 'context-fields'>(() => {
+const currentPage = computed<'llm' | 'conversations' | 'api-keys' | 'ai-apps' | 'api-manage' | 'tools' | 'context-fields'>(() => {
   const path = route.path
   if (path === '/settings/conversations') {
     return 'conversations'
@@ -57,6 +58,8 @@ const currentPage = computed<'llm' | 'conversations' | 'api-keys' | 'ai-apps' | 
     return 'api-keys'
   } else if (path === '/settings/ai-apps') {
     return 'ai-apps'
+  } else if (path === '/settings/api-manage') {
+    return 'api-manage'
   } else if (path === '/settings/tools') {
     return 'tools'
   } else if (path === '/settings/context-fields') {
@@ -563,7 +566,7 @@ function back() {
   router.push('/chat')
 }
 
-function goTo(page: 'llm' | 'conversations' | 'api-keys' | 'ai-apps' | 'tools' | 'context-fields') {
+function goTo(page: 'llm' | 'conversations' | 'api-keys' | 'ai-apps' | 'api-manage' | 'tools' | 'context-fields') {
   router.push(`/settings/${page}`)
 }
 
@@ -591,6 +594,10 @@ function avatarLetter(row: LlmAdminRow): string {
         <div v-if="auth.isAdmin" class="menu-item" :class="{ active: currentPage === 'ai-apps' }" @click="goTo('ai-apps')">
           <span class="menu-icon">🤖</span>
           <span class="menu-label">应用管理</span>
+        </div>
+        <div v-if="auth.isAdmin" class="menu-item" :class="{ active: currentPage === 'api-manage' }" @click="goTo('api-manage')">
+          <span class="menu-icon">🌐</span>
+          <span class="menu-label">接口管理</span>
         </div>
         <div v-if="auth.isAdmin" class="menu-item" :class="{ active: currentPage === 'api-keys' }" @click="goTo('api-keys')">
           <span class="menu-icon">🔑</span>
@@ -981,6 +988,11 @@ function avatarLetter(row: LlmAdminRow): string {
     <!-- 集成管理 -->
     <div v-if="currentPage === 'api-keys'" class="settings-content-inner-full">
       <ApiKeysView />
+    </div>
+
+    <!-- 接口管理 -->
+    <div v-if="currentPage === 'api-manage'" class="settings-content-inner-full">
+      <ApiManageView />
     </div>
 
     <!-- 工具管理 -->
