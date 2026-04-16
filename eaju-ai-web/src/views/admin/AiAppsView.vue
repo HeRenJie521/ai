@@ -34,9 +34,12 @@ import {
 } from '@/api/adminAiApps'
 import { listLlmProviders, type LlmProviderOption } from '@/api/llmProviders'
 import type { ChatMessage } from '@/api/conversations'
+import { useAuthStore } from '@/stores/auth'
+import { renderChatMarkdown } from '@/utils/chatMarkdown'
 
 const message = useMessage()
 const dialog = useDialog()
+const authStore = useAuthStore()
 
 const loading = ref(false)
 const rows = ref<AiAppRow[]>([])
@@ -325,6 +328,8 @@ const embedUrl = computed(() => {
   const aid = embedRow.value?.id ?? ''
   const params = new URLSearchParams()
   params.set('aid', String(aid))
+  params.set('userid', authStore.userId || '')
+  params.set('username', authStore.username || '')
   return `${embedOrigin.value}/embed?${params.toString()}`
 })
 
@@ -745,7 +750,8 @@ const columns: DataTableColumns<AiAppRow> = [
               <summary class="msg-thinking-summary">思考过程</summary>
               <pre class="msg-body msg-thinking-body">{{ m.reasoningContent }}</pre>
             </details>
-            <pre class="msg-body">{{ m.content || '' }}</pre>
+            <div v-if="m.role === 'assistant'" class="msg-md" v-html="renderChatMarkdown(m.content || '')" />
+            <pre v-else class="msg-body">{{ m.content || '' }}</pre>
             <div v-if="m.createdAt" class="msg-time">{{ fmtTime(m.createdAt) }}</div>
           </div>
         </div>
@@ -923,6 +929,48 @@ details[open] .msg-thinking-summary::before { content: '▼ '; }
   margin: 0; white-space: pre-wrap; word-break: break-word;
   font-family: inherit; line-height: 1.5;
 }
+.msg-md {
+  font-size: 13px; line-height: 1.6; color: #111827; word-break: break-word;
+}
+.msg-md :deep(p) { margin: 0.35em 0; }
+.msg-md :deep(p:first-child) { margin-top: 0; }
+.msg-md :deep(p:last-child) { margin-bottom: 0; }
+.msg-md :deep(ul), .msg-md :deep(ol) { margin: 0.4em 0; padding-left: 1.3em; }
+.msg-md :deep(h1), .msg-md :deep(h2), .msg-md :deep(h3), .msg-md :deep(h4) {
+  margin: 0.55em 0 0.3em; font-weight: 600; line-height: 1.3;
+}
+.msg-md :deep(blockquote) {
+  margin: 0.4em 0; padding: 0.3em 0 0.3em 0.8em;
+  border-left: 3px solid #d1d5db; color: #4b5563;
+}
+.msg-md :deep(a) { color: #2563eb; text-decoration: underline; }
+.msg-md :deep(p > code), .msg-md :deep(li > code), .msg-md :deep(td > code) {
+  background: #f3f4f6; padding: 0.1em 0.35em; border-radius: 4px;
+  font-family: ui-monospace, monospace; font-size: 0.88em;
+}
+.msg-md :deep(.md-code-block) {
+  margin: 0.6em 0; border: 1px solid #e5e7eb; border-radius: 8px;
+  overflow: hidden; background: #fff;
+}
+.msg-md :deep(.md-code-head) {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 8px; padding: 4px 10px; background: #f3f4f6;
+  border-bottom: 1px solid #e5e7eb; font-size: 11px;
+}
+.msg-md :deep(.md-code-lang) { color: #6b7280; font-family: ui-monospace, monospace; }
+.msg-md :deep(.md-copy-btn) {
+  padding: 2px 7px; font-size: 11px; color: #374151;
+  background: #fff; border: 1px solid #d1d5db; border-radius: 4px; cursor: pointer;
+}
+.msg-md :deep(.md-copy-btn:hover) { background: #f9fafb; }
+.msg-md :deep(.md-code-pre) {
+  margin: 0; padding: 8px 12px; overflow-x: auto;
+  font-size: 12px; line-height: 1.5; background: #fafafa;
+}
+.msg-md :deep(.md-code-pre code) { font-family: ui-monospace, monospace; }
+.msg-md :deep(table) { border-collapse: collapse; margin: 0.5em 0; font-size: 12px; width: 100%; }
+.msg-md :deep(th), .msg-md :deep(td) { border: 1px solid #e5e7eb; padding: 0.3em 0.5em; }
+.msg-md :deep(th) { background: #f9fafb; }
 .msg-time { margin-top: 4px; font-size: 11px; color: #aaa; text-align: right; }
 .msg-modal-header {
   display: flex; align-items: center; gap: 10px; flex-wrap: nowrap; min-width: 0;

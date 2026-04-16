@@ -164,7 +164,8 @@ public class ChatConversationService {
         if (!StringUtils.hasText(userId)) {
             return out;
         }
-        for (ChatConversationEntity e : conversationRepository.findByUserIdAndDeletedAtIsNullOrderByLastMessageAtDesc(userId.trim())) {
+        for (ChatConversationEntity e : conversationRepository
+                .findByUserIdAndApiKeyIdIsNullAndIntegrationIdIsNullAndAppIdIsNullAndDeletedAtIsNullOrderByLastMessageAtDesc(userId.trim())) {
             out.add(toDto(e));
         }
         return out;

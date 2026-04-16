@@ -17,6 +17,9 @@ public interface ChatConversationRepository extends JpaRepository<ChatConversati
     /** 列表查询：仅返回未删除的会话 */
     List<ChatConversationEntity> findByUserIdAndDeletedAtIsNullOrderByLastMessageAtDesc(String userId);
 
+    /** 列表查询：仅返回在 chat 页面直接创建的会话（apiKeyId、integrationId、appId 均为 null） */
+    List<ChatConversationEntity> findByUserIdAndApiKeyIdIsNullAndIntegrationIdIsNullAndAppIdIsNullAndDeletedAtIsNullOrderByLastMessageAtDesc(String userId);
+
     /** 按 userId + sessionId 查（不过滤删除状态，供内部写操作使用） */
     Optional<ChatConversationEntity> findByUserIdAndSessionId(String userId, String sessionId);
 
