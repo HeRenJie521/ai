@@ -5,6 +5,7 @@ import com.eaju.ai.dto.admin.ApiKeyUsageDto;
 import com.eaju.ai.dto.admin.ModelUsageRowDto;
 import com.eaju.ai.dto.admin.RecentTurnDto;
 import com.eaju.ai.persistence.entity.ChatTurnEntity;
+import com.eaju.ai.persistence.repository.AiAppRepository;
 import com.eaju.ai.persistence.repository.ApiKeyRepository;
 import com.eaju.ai.persistence.repository.ChatTurnRepository;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -23,13 +24,16 @@ public class ApiKeyAuditService {
     private static final int PREVIEW_MAX = 240;
 
     private final ApiKeyRepository apiKeyRepository;
+    private final AiAppRepository aiAppRepository;
     private final ChatTurnRepository chatTurnRepository;
     private final ObjectMapper objectMapper;
 
     public ApiKeyAuditService(ApiKeyRepository apiKeyRepository,
+                              AiAppRepository aiAppRepository,
                               ChatTurnRepository chatTurnRepository,
                               ObjectMapper objectMapper) {
         this.apiKeyRepository = apiKeyRepository;
+        this.aiAppRepository = aiAppRepository;
         this.chatTurnRepository = chatTurnRepository;
         this.objectMapper = objectMapper;
     }
@@ -103,6 +107,35 @@ public class ApiKeyAuditService {
         r.setCreatedAt(t.getCreatedAt() != null ? t.getCreatedAt().toString() : null);
         r.setAssistantPreview(preview(t.getAssistantContent()));
         return r;
+    }
+
+    @Transactional(readOnly = true)
+    public ApiKeyUsageDto buildAppUsage(Long appId) {
+        aiAppRepository.findByIdAndDeletedIsFalse(appId)
+                .orElseThrow(() -> new IllegalArgumentException("AI 应用不存在"));
+
+        ApiKeyUsageDto dto = new ApiKeyUsageDto();
+        dto.setTurnCount(chatTurnRepository.countByAppId(appId));
+        dto.setTotalPromptTokens(chatTurnRepository.sumPromptTokensByAppId(appId));
+        dto.setTotalCompletionTokens(chatTurnRepository.sumCompletionTokensByAppId(appId));
+        dto.setTotalTokens(chatTurnRepository.sumTotalTokensByAppId(appId));
+
+        List<ModelUsageRowDto> byModel = new ArrayList<ModelUsageRowDto>();
+        for (Object[] row : chatTurnRepository.aggregateByModelForApp(appId)) {
+            ModelUsageRowDto m = new ModelUsageRowDto();
+            m.setModel(row[0] != null ? row[0].toString() : "");
+            m.setTurnCount(toLong(row[1]));
+            m.setTotalTokens(toLong(row[2]));
+            byModel.add(m);
+        }
+        dto.setByModel(byModel);
+
+        List<RecentTurnDto> recent = new ArrayList<RecentTurnDto>();
+        for (ChatTurnEntity t : chatTurnRepository.findTop50ByAppIdOrderByCreatedAtDesc(appId)) {
+            recent.add(toRecentTurnDto(t));
+        }
+        dto.setRecentTurns(recent);
+        return dto;
     }
 
     /**

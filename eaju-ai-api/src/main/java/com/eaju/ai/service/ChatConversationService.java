@@ -203,11 +203,17 @@ public class ChatConversationService {
     @Transactional
     public void touchOnChatStart(String userId, Long apiKeyId, String sessionId, List<ChatMessageDto> messages,
                                  String providerCode, String modeKey) {
-        touchOnChatStart(userId, apiKeyId, null, sessionId, messages, providerCode, modeKey);
+        touchOnChatStart(userId, apiKeyId, null, null, sessionId, messages, providerCode, modeKey);
     }
 
     @Transactional
     public void touchOnChatStart(String userId, Long apiKeyId, Long integrationId, String sessionId,
+                                 List<ChatMessageDto> messages, String providerCode, String modeKey) {
+        touchOnChatStart(userId, apiKeyId, integrationId, null, sessionId, messages, providerCode, modeKey);
+    }
+
+    @Transactional
+    public void touchOnChatStart(String userId, Long apiKeyId, Long integrationId, Long appId, String sessionId,
                                  List<ChatMessageDto> messages, String providerCode, String modeKey) {
         if (!StringUtils.hasText(userId) || !StringUtils.hasText(sessionId)) {
             return;
@@ -225,6 +231,9 @@ public class ChatConversationService {
             if (integrationId != null) {
                 e.setIntegrationId(integrationId);
             }
+            if (appId != null) {
+                e.setAppId(appId);
+            }
             if (("新对话".equals(e.getTitle()) || !StringUtils.hasText(e.getTitle())) && StringUtils.hasText(titleHint)) {
                 e.setTitle(titleHint);
             }
@@ -241,6 +250,9 @@ public class ChatConversationService {
             }
             if (integrationId != null) {
                 n.setIntegrationId(integrationId);
+            }
+            if (appId != null) {
+                n.setAppId(appId);
             }
             applyLastModelChoice(n, providerCode, modeKey);
             conversationRepository.save(n);

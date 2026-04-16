@@ -71,4 +71,10 @@ public interface ChatConversationRepository extends JpaRepository<ChatConversati
     int softDeleteByIntegrationIdAndSessionId(@Param("integrationId") Long integrationId,
                                               @Param("sessionId") String sessionId,
                                               @Param("now") Instant now);
+
+    /** 按 appId 查询会话（包括已删除），分页 */
+    Page<ChatConversationEntity> findByAppIdOrderByLastMessageAtDesc(Long appId, Pageable pageable);
+
+    /** 统计 AI 应用关联的会话数（包括已删除） */
+    long countByAppId(Long appId);
 }

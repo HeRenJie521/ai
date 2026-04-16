@@ -15,7 +15,7 @@ export interface ConversationAdminRow {
   deletedAt: string | null
   turnCount: number
   totalTokens: number
-  type: 'CHAT' | 'API_KEY' | 'EMBED'
+  type: 'CHAT' | 'API_KEY' | 'EMBED' | 'APP'
 }
 
 export interface ConversationDetail {
@@ -35,7 +35,7 @@ export interface ConversationDetail {
     totalTokens: number
   } | null
   byModel: ModelUsage[]
-  type: 'CHAT' | 'API_KEY' | 'EMBED'
+  type: 'CHAT' | 'API_KEY' | 'EMBED' | 'APP'
 }
 
 export interface ModelUsage {
@@ -56,11 +56,13 @@ export async function adminListConversations(
   page: number,
   size: number,
   userId?: string,
-  apiKeyId?: number
+  apiKeyId?: number,
+  appId?: number
 ): Promise<ConversationListResponse> {
   const params: Record<string, unknown> = { page, size }
   if (userId) params.userId = userId
   if (apiKeyId) params.apiKeyId = apiKeyId
+  if (appId) params.appId = appId
   const { data } = await http.get<ConversationListResponse>('/api/admin/conversations', { params })
   return data
 }

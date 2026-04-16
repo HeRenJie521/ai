@@ -1,10 +1,14 @@
 package com.eaju.ai.web;
 
+import com.eaju.ai.dto.ChatMessageDto;
 import com.eaju.ai.dto.admin.AiAppCreateRequestDto;
 import com.eaju.ai.dto.admin.AiAppResponseDto;
 import com.eaju.ai.dto.admin.AiAppUpdateRequestDto;
+import com.eaju.ai.dto.admin.ApiKeyUsageDto;
 import com.eaju.ai.persistence.entity.AiAppEntity;
 import com.eaju.ai.service.AiAppService;
+import com.eaju.ai.service.ApiKeyAuditService;
+import com.eaju.ai.service.ChatConversationService;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -25,9 +29,15 @@ import java.util.List;
 public class AdminAiAppController {
 
     private final AiAppService aiAppService;
+    private final ApiKeyAuditService apiKeyAuditService;
+    private final ChatConversationService chatConversationService;
 
-    public AdminAiAppController(AiAppService aiAppService) {
+    public AdminAiAppController(AiAppService aiAppService,
+                                ApiKeyAuditService apiKeyAuditService,
+                                ChatConversationService chatConversationService) {
         this.aiAppService = aiAppService;
+        this.apiKeyAuditService = apiKeyAuditService;
+        this.chatConversationService = chatConversationService;
     }
 
     @GetMapping
@@ -70,6 +80,20 @@ public class AdminAiAppController {
     @DeleteMapping("/{id}")
     public void delete(@PathVariable("id") Long id) {
         aiAppService.delete(id);
+    }
+
+    @GetMapping("/{id}/usage")
+    public ApiKeyUsageDto usage(@PathVariable("id") Long id) {
+        return apiKeyAuditService.buildAppUsage(id);
+    }
+
+    @GetMapping("/{id}/sessions/{sessionId}/messages")
+    public List<ChatMessageDto> sessionMessages(
+            @PathVariable("id") Long id,
+            @PathVariable("sessionId") String sessionId) {
+        aiAppService.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("AI 应用不存在"));
+        return chatConversationService.loadMessagesForAdmin(sessionId);
     }
 
     private static AiAppResponseDto toDto(AiAppEntity e) {

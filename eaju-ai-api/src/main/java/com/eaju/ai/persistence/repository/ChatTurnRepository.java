@@ -56,4 +56,22 @@ public interface ChatTurnRepository extends JpaRepository<ChatTurnEntity, Long> 
     List<Object[]> aggregateByModelForIntegration(@Param("iid") Long integrationId);
 
     List<ChatTurnEntity> findTop50ByIntegrationIdOrderByCreatedAtDesc(Long integrationId);
+
+    // ---- AI 应用嵌入维度统计 ----
+
+    long countByAppId(Long appId);
+
+    @Query("SELECT COALESCE(SUM(t.promptTokens), 0) FROM ChatTurnEntity t WHERE t.appId = :aid")
+    long sumPromptTokensByAppId(@Param("aid") Long appId);
+
+    @Query("SELECT COALESCE(SUM(t.completionTokens), 0) FROM ChatTurnEntity t WHERE t.appId = :aid")
+    long sumCompletionTokensByAppId(@Param("aid") Long appId);
+
+    @Query("SELECT COALESCE(SUM(t.totalTokens), 0) FROM ChatTurnEntity t WHERE t.appId = :aid")
+    long sumTotalTokensByAppId(@Param("aid") Long appId);
+
+    @Query("SELECT t.model, COUNT(t), COALESCE(SUM(t.totalTokens), 0) FROM ChatTurnEntity t WHERE t.appId = :aid GROUP BY t.model")
+    List<Object[]> aggregateByModelForApp(@Param("aid") Long appId);
+
+    List<ChatTurnEntity> findTop50ByAppIdOrderByCreatedAtDesc(Long appId);
 }

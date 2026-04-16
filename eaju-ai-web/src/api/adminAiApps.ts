@@ -1,4 +1,5 @@
 import http from './http'
+import type { ChatMessage } from './conversations'
 
 export interface AiAppRow {
   id: number
@@ -49,4 +50,47 @@ export async function adminUpdateAiApp(id: number, payload: AiAppUpdatePayload):
 
 export async function adminDeleteAiApp(id: number): Promise<void> {
   await http.delete(`/api/admin/ai-apps/${id}`)
+}
+
+export interface ModelUsageRow {
+  model: string
+  turnCount: number
+  totalTokens: number
+}
+
+export interface RecentTurnRow {
+  id: number
+  sessionId: string
+  userId: string | null
+  provider: string
+  model: string
+  promptTokens: number | null
+  completionTokens: number | null
+  totalTokens: number | null
+  createdAt: string | null
+  assistantPreview: string | null
+}
+
+export interface AiAppUsage {
+  turnCount: number
+  totalPromptTokens: number
+  totalCompletionTokens: number
+  totalTokens: number
+  byModel: ModelUsageRow[]
+  recentTurns: RecentTurnRow[]
+}
+
+export async function adminAiAppUsage(id: number): Promise<AiAppUsage> {
+  const { data } = await http.get<AiAppUsage>(`/api/admin/ai-apps/${id}/usage`)
+  return data
+}
+
+export async function adminAiAppSessionMessages(
+  id: number,
+  sessionId: string,
+): Promise<ChatMessage[]> {
+  const { data } = await http.get<ChatMessage[]>(
+    `/api/admin/ai-apps/${id}/sessions/${encodeURIComponent(sessionId)}/messages`,
+  )
+  return data
 }

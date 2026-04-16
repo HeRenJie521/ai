@@ -52,6 +52,10 @@ public class ChatConversationEntity {
     @Column(name = "integration_id")
     private Long integrationId;
 
+    /** AI 应用嵌入 ID（ai_app.id），用于统计该应用的对话用量；非应用嵌入为 null */
+    @Column(name = "app_id")
+    private Long appId;
+
     /** 逻辑删除时间，非空表示已删除 */
     @Column(name = "deleted_at")
     private Instant deletedAt;
@@ -153,5 +157,13 @@ public class ChatConversationEntity {
 
     public void setIntegrationId(Long integrationId) {
         this.integrationId = integrationId;
+    }
+
+    public Long getAppId() {
+        return appId;
+    }
+
+    public void setAppId(Long appId) {
+        this.appId = appId;
     }
 }

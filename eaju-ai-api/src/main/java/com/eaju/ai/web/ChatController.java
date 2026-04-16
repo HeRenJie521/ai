@@ -52,6 +52,7 @@ public class ChatController {
                     uid,
                     apiKeyId,
                     integrationId,
+                    appId,
                     request.getSessionId(),
                     request.getMessages(),
                     request.getProvider(),

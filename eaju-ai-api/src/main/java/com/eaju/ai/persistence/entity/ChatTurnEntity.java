@@ -76,6 +76,10 @@ public class ChatTurnEntity {
     @Column(name = "integration_id")
     private Long integrationId;
 
+    /** AI 应用嵌入 ID（ai_app.id），用于按应用统计用量；非应用嵌入调用为 null */
+    @Column(name = "app_id")
+    private Long appId;
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
@@ -228,5 +232,13 @@ public class ChatTurnEntity {
 
     public void setIntegrationId(Long integrationId) {
         this.integrationId = integrationId;
+    }
+
+    public Long getAppId() {
+        return appId;
+    }
+
+    public void setAppId(Long appId) {
+        this.appId = appId;
     }
 }

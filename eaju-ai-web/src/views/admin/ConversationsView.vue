@@ -28,6 +28,7 @@ import {
   type ConversationDetail,
 } from '@/api/adminConversations'
 import { adminListApiKeys, type ApiKeyRow } from '@/api/adminApiKeys'
+import { adminListAiApps, type AiAppRow } from '@/api/adminAiApps'
 
 const message = useMessage()
 
@@ -38,7 +39,9 @@ const page = ref(1)
 const pageSize = ref(20)
 const queryUserId = ref('')
 const queryApiKeyId = ref<number | null>(null)
+const queryAppId = ref<number | null>(null)
 const apiKeys = ref<ApiKeyRow[]>([])
+const aiApps = ref<AiAppRow[]>([])
 
 // 详情弹窗
 const showDetailModal = ref(false)
@@ -51,12 +54,18 @@ function integrationTypeLabel(type: ApiKeyRow['type']): string {
 }
 
 onMounted(async () => {
-  await loadApiKeys()
+  await Promise.all([loadApiKeys(), loadAiApps()])
   await loadData()
 })
 
 async function loadApiKeys() {
   apiKeys.value = await adminListApiKeys()
+}
+
+async function loadAiApps() {
+  try {
+    aiApps.value = await adminListAiApps()
+  } catch { /* 忽略 */ }
 }
 
 async function loadData() {
@@ -66,7 +75,8 @@ async function loadData() {
       page.value - 1,
       pageSize.value,
       queryUserId.value || undefined,
-      queryApiKeyId.value || undefined
+      queryApiKeyId.value || undefined,
+      queryAppId.value || undefined
     )
     rows.value = res.content
     total.value = res.totalElements
@@ -139,8 +149,9 @@ const columns = [
     width: 100,
     align: 'center' as const,
     render: (row: ConversationAdminRow) => {
-      const tagType = row.type === 'API_KEY' ? 'warning' : row.type === 'EMBED' ? 'info' : 'success'
-      const label = row.type === 'API_KEY' ? 'API Key' : row.type === 'EMBED' ? '嵌入网站' : 'Chat'
+      const isApp = row.type === 'APP' || row.type === 'EMBED'
+      const tagType = row.type === 'API_KEY' ? 'warning' : isApp ? 'info' : 'success'
+      const label = row.type === 'API_KEY' ? 'API Key' : isApp ? '应用' : 'Chat'
       return h(NTag, { type: tagType, size: 'small' }, { default: () => label })
     },
   },
@@ -215,8 +226,16 @@ const columns = [
             :options="apiKeys.map(k => ({ label: `${k.name}（${integrationTypeLabel(k.type)}）`, value: k.id }))"
             placeholder="按 API Key 筛选"
             clearable
+            style="width: 160px"
+            @update:value="() => { queryAppId = null; search() }"
+          />
+          <n-select
+            v-model:value="queryAppId"
+            :options="aiApps.map(a => ({ label: a.name, value: a.id }))"
+            placeholder="按应用筛选"
+            clearable
             style="width: 180px"
-            @update:value="search"
+            @update:value="() => { queryApiKeyId = null; search() }"
           />
           <n-button type="primary" @click="search">
             <template #icon>

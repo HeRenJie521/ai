@@ -5,9 +5,11 @@ import com.eaju.ai.dto.admin.ConversationAdminDto;
 import com.eaju.ai.dto.admin.ConversationDetailDto;
 import com.eaju.ai.dto.admin.ModelUsageRowDto;
 import com.eaju.ai.dto.conversation.ConversationResponseDto;
+import com.eaju.ai.persistence.entity.AiAppEntity;
 import com.eaju.ai.persistence.entity.ApiKeyEntity;
 import com.eaju.ai.persistence.entity.ChatConversationEntity;
 import com.eaju.ai.persistence.entity.ChatTurnEntity;
+import com.eaju.ai.persistence.repository.AiAppRepository;
 import com.eaju.ai.persistence.repository.ApiKeyRepository;
 import com.eaju.ai.persistence.repository.ChatConversationRepository;
 import com.eaju.ai.persistence.repository.ChatTurnRepository;
@@ -41,6 +43,7 @@ public class AdminConversationController {
     private final ChatConversationRepository conversationRepository;
     private final ChatTurnRepository chatTurnRepository;
     private final ApiKeyRepository apiKeyRepository;
+    private final AiAppRepository aiAppRepository;
     private final ChatConversationService chatConversationService;
     private final ObjectMapper objectMapper;
 
@@ -48,11 +51,13 @@ public class AdminConversationController {
             ChatConversationRepository conversationRepository,
             ChatTurnRepository chatTurnRepository,
             ApiKeyRepository apiKeyRepository,
+            AiAppRepository aiAppRepository,
             ChatConversationService chatConversationService,
             ObjectMapper objectMapper) {
         this.conversationRepository = conversationRepository;
         this.chatTurnRepository = chatTurnRepository;
         this.apiKeyRepository = apiKeyRepository;
+        this.aiAppRepository = aiAppRepository;
         this.chatConversationService = chatConversationService;
         this.objectMapper = objectMapper;
     }
@@ -64,13 +69,15 @@ public class AdminConversationController {
      * @param size     每页数量
      * @param userId   按手机号精确查询
      * @param apiKeyId 按 API Key ID 查询
+     * @param appId    按 AI 应用 ID 查询
      */
     @GetMapping
     public Map<String, Object> list(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
             @RequestParam(required = false) String userId,
-            @RequestParam(required = false) Long apiKeyId) {
+            @RequestParam(required = false) Long apiKeyId,
+            @RequestParam(required = false) Long appId) {
 
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "lastMessageAt"));
         Page<ChatConversationEntity> pageResult;
@@ -79,24 +86,37 @@ public class AdminConversationController {
             pageResult = conversationRepository.findByUserIdOrderByLastMessageAtDesc(userId.trim(), pageable);
         } else if (apiKeyId != null) {
             pageResult = conversationRepository.findByApiKeyIdOrderByLastMessageAtDesc(apiKeyId, pageable);
+        } else if (appId != null) {
+            pageResult = conversationRepository.findByAppIdOrderByLastMessageAtDesc(appId, pageable);
         } else {
             pageResult = conversationRepository.findAllByOrderByLastMessageAtDesc(pageable);
         }
 
         // 预加载 API Key / 嵌入集成名称
-        List<Long> relatedIds = pageResult.getContent().stream()
+        List<Long> relatedApiKeyIds = pageResult.getContent().stream()
                 .map(c -> c.getIntegrationId() != null ? c.getIntegrationId() : c.getApiKeyId())
                 .filter(id -> id != null)
                 .distinct()
                 .collect(Collectors.toList());
         Map<Long, String> apiKeyNameMap = new HashMap<>();
-        for (Long akId : relatedIds) {
+        for (Long akId : relatedApiKeyIds) {
             apiKeyRepository.findById(akId).ifPresent(ak -> apiKeyNameMap.put(akId, ak.getName()));
+        }
+
+        // 预加载 AI 应用名称
+        List<Long> relatedAppIds = pageResult.getContent().stream()
+                .map(ChatConversationEntity::getAppId)
+                .filter(id -> id != null)
+                .distinct()
+                .collect(Collectors.toList());
+        Map<Long, String> appNameMap = new HashMap<>();
+        for (Long aid : relatedAppIds) {
+            aiAppRepository.findById(aid).ifPresent(a -> appNameMap.put(aid, a.getName()));
         }
 
         List<ConversationAdminDto> list = new ArrayList<>();
         for (ChatConversationEntity e : pageResult.getContent()) {
-            ConversationAdminDto dto = toAdminDto(e, apiKeyNameMap);
+            ConversationAdminDto dto = toAdminDto(e, apiKeyNameMap, appNameMap);
             // 统计 turn 数量和 token
             long turnCount = chatTurnRepository.findBySessionIdOrderByCreatedAtAsc(e.getSessionId()).size();
             List<Object[]> tokenStats = chatTurnRepository.sumTokensBySessionId(e.getSessionId());
@@ -136,10 +156,14 @@ public class AdminConversationController {
         dto.setApiKeyId(e.getApiKeyId());
         dto.setDeletedAt(e.getDeletedAt() != null ? e.getDeletedAt().toString() : null);
 
-        if (e.getIntegrationId() != null) {
+        if (e.getAppId() != null) {
+            aiAppRepository.findById(e.getAppId())
+                    .ifPresent(a -> dto.setApiKeyName(a.getName()));
+            dto.setType("APP");
+        } else if (e.getIntegrationId() != null) {
             apiKeyRepository.findById(e.getIntegrationId())
                     .ifPresent(ak -> dto.setApiKeyName(ak.getName()));
-            dto.setType("EMBED");
+            dto.setType("APP");
         } else if (e.getApiKeyId() != null) {
             apiKeyRepository.findById(e.getApiKeyId())
                     .ifPresent(ak -> dto.setApiKeyName(ak.getName()));
@@ -185,7 +209,8 @@ public class AdminConversationController {
         return chatConversationService.loadMessagesForAdmin(sessionId);
     }
 
-    private ConversationAdminDto toAdminDto(ChatConversationEntity e, Map<Long, String> apiKeyNameMap) {
+    private ConversationAdminDto toAdminDto(ChatConversationEntity e, Map<Long, String> apiKeyNameMap,
+                                             Map<Long, String> appNameMap) {
         ConversationAdminDto dto = new ConversationAdminDto();
         dto.setId(e.getId());
         dto.setSessionId(e.getSessionId());
@@ -196,9 +221,12 @@ public class AdminConversationController {
         dto.setLastProviderCode(e.getLastProviderCode());
         dto.setLastModeKey(e.getLastModeKey());
         dto.setApiKeyId(e.getApiKeyId());
-        if (e.getIntegrationId() != null) {
+        if (e.getAppId() != null) {
+            dto.setApiKeyName(appNameMap.get(e.getAppId()));
+            dto.setType("APP");
+        } else if (e.getIntegrationId() != null) {
             dto.setApiKeyName(apiKeyNameMap.get(e.getIntegrationId()));
-            dto.setType("EMBED");
+            dto.setType("APP");
         } else if (e.getApiKeyId() != null) {
             dto.setApiKeyName(apiKeyNameMap.get(e.getApiKeyId()));
             dto.setType("API_KEY");

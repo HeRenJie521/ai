@@ -5,6 +5,8 @@ import {
   NButton,
   NCard,
   NDataTable,
+  NDrawer,
+  NDrawerContent,
   NForm,
   NFormItem,
   NInput,
@@ -24,9 +26,14 @@ import {
   adminDeleteAiApp,
   adminListAiApps,
   adminUpdateAiApp,
+  adminAiAppUsage,
+  adminAiAppSessionMessages,
   type AiAppRow,
+  type AiAppUsage,
+  type RecentTurnRow,
 } from '@/api/adminAiApps'
 import { listLlmProviders, type LlmProviderOption } from '@/api/llmProviders'
+import type { ChatMessage } from '@/api/conversations'
 
 const message = useMessage()
 const dialog = useDialog()
@@ -71,6 +78,19 @@ const promptForm = ref({
   systemTask: '',
   systemConstraints: '',
 })
+
+// ---- 用量抽屉 ----
+const usageOpen = ref(false)
+const usageAppId = ref<number | null>(null)
+const usageAppName = ref('')
+const usageLoading = ref(false)
+const usageData = ref<AiAppUsage | null>(null)
+
+// ---- 会话消息弹窗 ----
+const msgOpen = ref(false)
+const msgSessionId = ref('')
+const msgLoading = ref(false)
+const msgList = ref<ChatMessage[]>([])
 
 // ---- 推荐问题（新建/编辑共用辅助状态）----
 const newSuggestionCreate = ref('')
@@ -224,6 +244,47 @@ function openEmbed(r: AiAppRow) {
   showEmbed.value = true
 }
 
+// ---------- 用量 ----------
+async function openUsage(r: AiAppRow) {
+  usageAppId.value = r.id
+  usageAppName.value = r.name
+  usageData.value = null
+  usageOpen.value = true
+  usageLoading.value = true
+  try {
+    usageData.value = await adminAiAppUsage(r.id)
+  } catch (e: unknown) {
+    const err = e as { response?: { data?: { message?: string } }; message?: string }
+    message.error(err.response?.data?.message || err.message || '加载用量失败')
+  } finally {
+    usageLoading.value = false
+  }
+}
+
+async function openSessionMessages(appId: number, sessionId: string) {
+  msgSessionId.value = sessionId
+  msgList.value = []
+  msgOpen.value = true
+  msgLoading.value = true
+  try {
+    msgList.value = await adminAiAppSessionMessages(appId, sessionId)
+  } catch (e: unknown) {
+    const err = e as { response?: { data?: { message?: string } }; message?: string }
+    message.error(err.response?.data?.message || err.message || '加载消息失败')
+  } finally {
+    msgLoading.value = false
+  }
+}
+
+async function copySessionId() {
+  try {
+    await navigator.clipboard.writeText(msgSessionId.value)
+    message.success('已复制')
+  } catch {
+    message.error('复制失败')
+  }
+}
+
 // ---------- Prompt 配置 ----------
 function openPrompt(r: AiAppRow) {
   promptRow.value = r
@@ -314,6 +375,62 @@ function fmtTime(val: string | null): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
+interface SessionGroup {
+  sessionId: string
+  userId: string | null
+  models: string
+  turnCount: number
+  totalTokens: number
+  lastAt: string | null
+}
+
+function groupBySession(turns: RecentTurnRow[]): SessionGroup[] {
+  const map = new Map<string, SessionGroup>()
+  for (const t of turns) {
+    const key = t.sessionId
+    if (!map.has(key)) {
+      map.set(key, {
+        sessionId: key,
+        userId: t.userId,
+        models: t.model,
+        turnCount: 1,
+        totalTokens: t.totalTokens ?? 0,
+        lastAt: t.createdAt,
+      })
+    } else {
+      const g = map.get(key)!
+      g.turnCount += 1
+      g.totalTokens += t.totalTokens ?? 0
+      if (!g.models.split('、').includes(t.model)) g.models += '、' + t.model
+      if (t.createdAt && (!g.lastAt || t.createdAt > g.lastAt)) g.lastAt = t.createdAt
+    }
+  }
+  return Array.from(map.values())
+}
+
+function sessionColumns(appId: number): DataTableColumns<SessionGroup> {
+  return [
+    { title: '用户ID', key: 'userId', width: 130, ellipsis: { tooltip: true }, render: (r) => r.userId ?? '—' },
+    { title: '会话ID', key: 'sessionId', width: 100, render: (r) => r.sessionId.slice(0, 8) + '…' },
+    { title: '次数', key: 'turnCount', width: 60 },
+    { title: '模型', key: 'models', width: 140, ellipsis: { tooltip: true } },
+    { title: 'Token', key: 'totalTokens', width: 80 },
+    { title: '最近时间', key: 'lastAt', width: 152, render: (r) => fmtTime(r.lastAt) },
+    {
+      title: '操作',
+      key: 'open',
+      width: 88,
+      fixed: 'right' as const,
+      render: (r) =>
+        h(
+          NButton,
+          { size: 'tiny', type: 'primary', ghost: true, onClick: () => void openSessionMessages(appId, r.sessionId) },
+          { default: () => '查看消息' },
+        ),
+    },
+  ]
+}
+
 const columns: DataTableColumns<AiAppRow> = [
   {
     title: '应用名称',
@@ -355,9 +472,10 @@ const columns: DataTableColumns<AiAppRow> = [
   {
     title: '操作',
     key: 'actions',
-    width: 260,
+    width: 320,
     render: (r) =>
       h(NSpace, { size: 8, wrap: false, justify: 'center' }, () => [
+        h(NButton, { size: 'small', onClick: () => openUsage(r) }, { default: () => '用量' }),
         h(NButton, { size: 'small', onClick: () => openEdit(r) }, { default: () => '编辑' }),
         h(
           NButton,
@@ -563,6 +681,77 @@ const columns: DataTableColumns<AiAppRow> = [
     </template>
   </n-modal>
 
+  <!-- ============ 用量抽屉 ============ -->
+  <n-drawer v-model:show="usageOpen" :width="760" placement="right">
+    <n-drawer-content :title="`用量 · ${usageAppName}`" closable>
+      <n-spin :show="usageLoading">
+        <template v-if="usageData">
+          <n-space vertical :size="16">
+            <n-text>
+              次数 {{ usageData.turnCount }}；输入 {{ usageData.totalPromptTokens }}；输出
+              {{ usageData.totalCompletionTokens }}；合计 {{ usageData.totalTokens }}
+            </n-text>
+            <div>
+              <n-text strong style="display: block; margin-bottom: 8px">模型统计</n-text>
+              <n-data-table
+                :columns="[
+                  { title: '模型', key: 'model' },
+                  { title: '次数', key: 'turnCount', width: 88 },
+                  { title: 'Token', key: 'totalTokens', width: 100 },
+                ]"
+                :data="usageData.byModel"
+                :max-height="200"
+                size="small"
+              />
+            </div>
+            <div v-if="usageAppId != null">
+              <n-text strong style="display: block; margin-bottom: 8px">调用记录</n-text>
+              <n-data-table
+                :columns="sessionColumns(usageAppId)"
+                :data="groupBySession(usageData.recentTurns)"
+                :max-height="360"
+                :scroll-x="620"
+                size="small"
+                :single-line="false"
+                style="white-space: nowrap"
+              />
+            </div>
+          </n-space>
+        </template>
+      </n-spin>
+    </n-drawer-content>
+  </n-drawer>
+
+  <!-- ============ 会话消息弹窗 ============ -->
+  <n-modal v-model:show="msgOpen" preset="card" style="width: min(680px, 98vw)">
+    <template #header>
+      <div class="msg-modal-header">
+        <span class="msg-modal-title">会话消息</span>
+        <span class="msg-modal-session">{{ msgSessionId }}</span>
+        <n-button size="tiny" @click="copySessionId">复制ID</n-button>
+      </div>
+    </template>
+    <n-spin :show="msgLoading">
+      <div class="msg-preview">
+        <div
+          v-for="(m, i) in msgList"
+          :key="i"
+          :class="['msg-row', m.role === 'user' ? 'msg-row--right' : 'msg-row--left']"
+        >
+          <div :class="['msg-bubble', m.role === 'user' ? 'msg-bubble--user' : 'msg-bubble--ai']">
+            <div class="msg-role-label">{{ m.role === 'user' ? '提问' : 'AI回复' }}</div>
+            <details v-if="m.role === 'assistant' && m.reasoningContent" class="msg-thinking">
+              <summary class="msg-thinking-summary">思考过程</summary>
+              <pre class="msg-body msg-thinking-body">{{ m.reasoningContent }}</pre>
+            </details>
+            <pre class="msg-body">{{ m.content || '' }}</pre>
+            <div v-if="m.createdAt" class="msg-time">{{ fmtTime(m.createdAt) }}</div>
+          </div>
+        </div>
+      </div>
+    </n-spin>
+  </n-modal>
+
   <!-- ============ Prompt 配置弹窗 ============ -->
   <n-modal
     v-model:show="showPrompt"
@@ -696,5 +885,50 @@ const columns: DataTableColumns<AiAppRow> = [
 /* 表格内容居中 */
 :deep(.n-data-table td.n-data-table-td) {
   text-align: center;
+}
+.msg-preview {
+  max-height: 70vh;
+  overflow-y: auto;
+  padding: 4px 0;
+  font-size: 13px;
+}
+.msg-row { display: flex; margin-bottom: 12px; }
+.msg-row--left  { justify-content: flex-start; }
+.msg-row--right { justify-content: flex-end; }
+.msg-bubble {
+  max-width: 75%;
+  padding: 8px 12px;
+  border-radius: 14px;
+}
+.msg-bubble--ai   { background: #f4f4f5; border-bottom-left-radius: 4px; }
+.msg-bubble--user { background: #e8f4fd; border-bottom-right-radius: 4px; }
+.msg-role-label { font-size: 11px; color: #999; margin-bottom: 4px; }
+.msg-thinking {
+  margin-bottom: 8px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #f9fafb;
+  padding: 6px 10px;
+}
+.msg-thinking-summary {
+  cursor: pointer; font-size: 12px; font-weight: 600; color: #6b7280;
+  user-select: none; list-style: none;
+}
+.msg-thinking-summary::-webkit-details-marker { display: none; }
+.msg-thinking-summary::before { content: '▶ '; font-size: 10px; }
+details[open] .msg-thinking-summary::before { content: '▼ '; }
+.msg-thinking-body { margin-top: 6px; font-size: 12px; color: #6b7280; }
+.msg-body {
+  margin: 0; white-space: pre-wrap; word-break: break-word;
+  font-family: inherit; line-height: 1.5;
+}
+.msg-time { margin-top: 4px; font-size: 11px; color: #aaa; text-align: right; }
+.msg-modal-header {
+  display: flex; align-items: center; gap: 10px; flex-wrap: nowrap; min-width: 0;
+}
+.msg-modal-title { font-weight: 600; white-space: nowrap; }
+.msg-modal-session {
+  font-size: 12px; color: #999; font-family: ui-monospace, monospace;
+  word-break: break-all; min-width: 0;
 }
 </style>
