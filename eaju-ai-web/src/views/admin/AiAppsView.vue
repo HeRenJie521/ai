@@ -297,14 +297,15 @@ function openPrompt(r: AiAppRow) {
 }
 
 async function submitPrompt() {
-  const id = promptRow.value?.id
-  if (id == null) return
+  const row = promptRow.value
+  const id = row?.id
+  if (id == null || row == null) return
   try {
     await adminUpdateAiApp(id, {
-      name: promptRow.value.name,
-      modelId: promptRow.value.modelId || undefined,
-      welcomeText: promptRow.value.welcomeText || undefined,
-      suggestions: promptRow.value.suggestions || '',
+      name: row.name,
+      modelId: row.modelId || undefined,
+      welcomeText: row.welcomeText || undefined,
+      suggestions: row.suggestions || '',
       systemRole: promptForm.value.systemRole || undefined,
       systemTask: promptForm.value.systemTask || undefined,
       systemConstraints: promptForm.value.systemConstraints || undefined,
