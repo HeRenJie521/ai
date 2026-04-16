@@ -35,7 +35,7 @@ spring:
   redis:
     host: 10.0.254.5
     port: 6379
-    password: laSQL2019
+    password: DtxjrIytG8TX
     timeout: 10s
     lettuce:
       pool:
