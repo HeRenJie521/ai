@@ -28,7 +28,11 @@ public class ConversationController {
     public List<ConversationResponseDto> list(Authentication authentication) {
         Long integrationId = CallerPrincipal.integrationId(authentication);
         if (integrationId != null) {
-            return chatConversationService.listForIntegration(integrationId);
+            return chatConversationService.listForIntegration(integrationId, CallerPrincipal.userId(authentication));
+        }
+        Long appId = CallerPrincipal.appId(authentication);
+        if (appId != null) {
+            return chatConversationService.listForApp(appId, CallerPrincipal.userId(authentication));
         }
         Long apiKeyId = CallerPrincipal.apiKeyId(authentication);
         if (apiKeyId != null) {

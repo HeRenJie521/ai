@@ -304,13 +304,26 @@ public class ChatConversationService {
     }
 
     @Transactional(readOnly = true)
-    public List<ConversationResponseDto> listForIntegration(Long integrationId) {
+    public List<ConversationResponseDto> listForIntegration(Long integrationId, String userId) {
         List<ConversationResponseDto> out = new ArrayList<ConversationResponseDto>();
-        if (integrationId == null) {
+        if (integrationId == null || !StringUtils.hasText(userId)) {
             return out;
         }
         for (ChatConversationEntity e :
-                conversationRepository.findByIntegrationIdAndDeletedAtIsNullOrderByLastMessageAtDesc(integrationId)) {
+                conversationRepository.findByIntegrationIdAndUserIdAndDeletedAtIsNullOrderByLastMessageAtDesc(integrationId, userId.trim())) {
+            out.add(toDto(e));
+        }
+        return out;
+    }
+
+    @Transactional(readOnly = true)
+    public List<ConversationResponseDto> listForApp(Long appId, String userId) {
+        List<ConversationResponseDto> out = new ArrayList<ConversationResponseDto>();
+        if (appId == null || !StringUtils.hasText(userId)) {
+            return out;
+        }
+        for (ChatConversationEntity e :
+                conversationRepository.findConversationsForAppUser(userId.trim(), appId)) {
             out.add(toDto(e));
         }
         return out;

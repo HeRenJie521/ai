@@ -64,8 +64,23 @@ public interface ChatConversationRepository extends JpaRepository<ChatConversati
     /** 列表查询：仅返回未删除的 embed 会话（按最新消息倒序） */
     List<ChatConversationEntity> findByIntegrationIdAndDeletedAtIsNullOrderByLastMessageAtDesc(Long integrationId);
 
+    /** 列表查询：按 integrationId + userId，仅返回当前用户自己的未删除会话 */
+    List<ChatConversationEntity> findByIntegrationIdAndUserIdAndDeletedAtIsNullOrderByLastMessageAtDesc(Long integrationId, String userId);
+
     /** 按 integrationId + sessionId 查（仅未删除），用于 WEB_EMBED 会话归属校验 */
     Optional<ChatConversationEntity> findByIntegrationIdAndSessionIdAndDeletedAtIsNull(Long integrationId, String sessionId);
+
+    /**
+     * 列表查询：按 appId + userId，兼容两种数据：
+     * 1. 新数据：app_id = ?（76531dd 之后正确落库）
+     * 2. 老数据：app_id IS NULL、api_key_id IS NULL、integration_id IS NULL（之前未回填）
+     * 两者均过滤 deleted_at IS NULL，按 last_message_at 倒序。
+     */
+    @Query("SELECT c FROM ChatConversationEntity c WHERE c.userId = :userId " +
+           "AND (c.appId = :appId OR (c.appId IS NULL AND c.apiKeyId IS NULL AND c.integrationId IS NULL)) " +
+           "AND c.deletedAt IS NULL ORDER BY c.lastMessageAt DESC")
+    List<ChatConversationEntity> findConversationsForAppUser(@Param("userId") String userId,
+                                                             @Param("appId") Long appId);
 
     /** 逻辑删除（embed 维度）：仅删除属于该 integrationId 的会话 */
     @Modifying
