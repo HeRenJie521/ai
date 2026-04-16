@@ -61,9 +61,16 @@ const editForm = ref(defaultForm())
 // ---- 嵌入网站 ----
 const showEmbed = ref(false)
 const embedRow = ref<AiAppRow | null>(null)
-const embedPhone = ref('')
-const embedUsername = ref('')
 const embedActiveTab = ref('pc')
+
+// ---- Prompt 配置 ----
+const showPrompt = ref(false)
+const promptRow = ref<AiAppRow | null>(null)
+const promptForm = ref({
+  systemRole: '',
+  systemTask: '',
+  systemConstraints: '',
+})
 
 // ---- 推荐问题（新建/编辑共用辅助状态）----
 const newSuggestionCreate = ref('')
@@ -124,18 +131,20 @@ async function submitCreate() {
       ? JSON.stringify(suggestionItemsCreate.value)
       : undefined
   try {
-    await adminCreateAiApp({
+    const created = await adminCreateAiApp({
       name,
       modelId: createForm.value.modelId || undefined,
       welcomeText: createForm.value.welcomeText || undefined,
       suggestions: suggestionsJson,
-      systemRole: createForm.value.systemRole || undefined,
-      systemTask: createForm.value.systemTask || undefined,
-      systemConstraints: createForm.value.systemConstraints || undefined,
+      systemRole: undefined,
+      systemTask: undefined,
+      systemConstraints: undefined,
     })
     showCreate.value = false
-    message.success('已创建')
+    message.success('已创建，是否立即配置 Prompt？')
     await load()
+    // 打开 Prompt 配置弹窗
+    openPrompt(created)
   } catch (e: unknown) {
     const err = e as { response?: { data?: { message?: string } }; message?: string }
     message.error(err.response?.data?.message || err.message || '创建失败')
@@ -211,22 +220,49 @@ function confirmDelete(r: AiAppRow) {
 // ---------- 嵌入网站 ----------
 function openEmbed(r: AiAppRow) {
   embedRow.value = r
-  embedPhone.value = ''
-  embedUsername.value = ''
   embedActiveTab.value = 'pc'
   showEmbed.value = true
+}
+
+// ---------- Prompt 配置 ----------
+function openPrompt(r: AiAppRow) {
+  promptRow.value = r
+  promptForm.value = {
+    systemRole: r.systemRole || '',
+    systemTask: r.systemTask || '',
+    systemConstraints: r.systemConstraints || '',
+  }
+  showPrompt.value = true
+}
+
+async function submitPrompt() {
+  const id = promptRow.value?.id
+  if (id == null) return
+  try {
+    await adminUpdateAiApp(id, {
+      name: promptRow.value.name,
+      modelId: promptRow.value.modelId || undefined,
+      welcomeText: promptRow.value.welcomeText || undefined,
+      suggestions: promptRow.value.suggestions || '',
+      systemRole: promptForm.value.systemRole || undefined,
+      systemTask: promptForm.value.systemTask || undefined,
+      systemConstraints: promptForm.value.systemConstraints || undefined,
+    })
+    showPrompt.value = false
+    message.success('已保存')
+    await load()
+  } catch (e: unknown) {
+    const err = e as { response?: { data?: { message?: string } }; message?: string }
+    message.error(err.response?.data?.message || err.message || '保存失败')
+  }
 }
 
 const embedOrigin = computed(() => window.location.origin)
 
 const embedUrl = computed(() => {
   const aid = embedRow.value?.id ?? ''
-  const uid = embedPhone.value.trim()
-  const uname = embedUsername.value.trim()
   const params = new URLSearchParams()
   params.set('aid', String(aid))
-  if (uid) params.set('uid', uid)
-  if (uname) params.set('username', uname)
   return `${embedOrigin.value}/embed?${params.toString()}`
 })
 
@@ -319,10 +355,15 @@ const columns: DataTableColumns<AiAppRow> = [
   {
     title: '操作',
     key: 'actions',
-    width: 200,
+    width: 260,
     render: (r) =>
-      h(NSpace, { size: 8, wrap: false }, () => [
+      h(NSpace, { size: 8, wrap: false, justify: 'center' }, () => [
         h(NButton, { size: 'small', onClick: () => openEdit(r) }, { default: () => '编辑' }),
+        h(
+          NButton,
+          { size: 'small', type: 'info', ghost: true, onClick: () => openPrompt(r) },
+          { default: () => 'Prompt' },
+        ),
         h(
           NButton,
           { size: 'small', type: 'primary', ghost: true, onClick: () => openEmbed(r) },
@@ -415,34 +456,6 @@ const columns: DataTableColumns<AiAppRow> = [
           </div>
         </div>
       </n-form-item>
-
-      <n-form-item label="角色设定（可选）">
-        <n-input
-          v-model:value="createForm.systemRole"
-          type="textarea"
-          placeholder="例如：你是一名专业的客服助手，熟悉公司产品与服务。"
-          :autosize="{ minRows: 2, maxRows: 5 }"
-        />
-      </n-form-item>
-
-      <n-form-item label="任务指令（可选）">
-        <n-input
-          v-model:value="createForm.systemTask"
-          type="textarea"
-          placeholder="例如：帮助用户解决售前、售后问题，引导用户下单。"
-          :autosize="{ minRows: 2, maxRows: 5 }"
-        />
-      </n-form-item>
-
-      <n-form-item label="限制条件（可选）">
-        <n-input
-          v-model:value="createForm.systemConstraints"
-          type="textarea"
-          placeholder="例如：不得讨论竞争对手；回答简洁，不超过 200 字。"
-          :autosize="{ minRows: 2, maxRows: 5 }"
-        />
-        <template #feedback>三个提示词字段均为空时不下发 system prompt</template>
-      </n-form-item>
     </n-form>
     <template #footer>
       <n-space justify="end">
@@ -509,34 +522,6 @@ const columns: DataTableColumns<AiAppRow> = [
           </div>
         </div>
       </n-form-item>
-
-      <n-form-item label="角色设定（可选）">
-        <n-input
-          v-model:value="editForm.systemRole"
-          type="textarea"
-          placeholder="例如：你是一名专业的客服助手，熟悉公司产品与服务。"
-          :autosize="{ minRows: 2, maxRows: 5 }"
-        />
-      </n-form-item>
-
-      <n-form-item label="任务指令（可选）">
-        <n-input
-          v-model:value="editForm.systemTask"
-          type="textarea"
-          placeholder="例如：帮助用户解决售前、售后问题，引导用户下单。"
-          :autosize="{ minRows: 2, maxRows: 5 }"
-        />
-      </n-form-item>
-
-      <n-form-item label="限制条件（可选）">
-        <n-input
-          v-model:value="editForm.systemConstraints"
-          type="textarea"
-          placeholder="例如：不得讨论竞争对手；回答简洁，不超过 200 字。"
-          :autosize="{ minRows: 2, maxRows: 5 }"
-        />
-        <template #feedback>三个提示词字段均为空时不下发 system prompt</template>
-      </n-form-item>
     </n-form>
     <template #footer>
       <n-space justify="end">
@@ -554,30 +539,13 @@ const columns: DataTableColumns<AiAppRow> = [
     style="width: min(680px, 96vw)"
     :mask-closable="true"
   >
-    <n-form label-placement="top" style="margin-bottom: 16px;">
-      <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px;">
-        <n-form-item label="应用 ID">
-          <n-input :value="String(embedRow?.id ?? '')" readonly />
-        </n-form-item>
-        <n-form-item label="用户手机号">
-          <n-input v-model:value="embedPhone" placeholder="如 13800138000" />
-        </n-form-item>
-        <n-form-item label="用户姓名">
-          <n-input v-model:value="embedUsername" placeholder="如 张三" />
-        </n-form-item>
-      </div>
-      <n-form-item label="嵌入链接预览">
-        <n-input :value="embedUrl" readonly type="textarea" :autosize="{ minRows: 2, maxRows: 3 }" />
-      </n-form-item>
-    </n-form>
-
     <n-tabs v-model:value="embedActiveTab" type="line" animated>
       <n-tab-pane name="pc" tab="嵌入 PC 端">
         <div class="embed-code-block">
           <pre class="embed-code">{{ embedCodePc }}</pre>
           <n-button size="small" type="primary" @click="copyCode(embedCodePc)">复制代码</n-button>
         </div>
-        <p class="embed-hint">将以上代码粘贴到您网站的 HTML 中，即可在 PC 端展示 480×680 的聊天窗口。</p>
+        <p class="embed-hint">将以上代码粘贴到您网站的 HTML 中，即可在 PC 端展示聊天窗口。</p>
       </n-tab-pane>
       <n-tab-pane name="mobile" tab="嵌入移动端">
         <div class="embed-code-block">
@@ -591,6 +559,51 @@ const columns: DataTableColumns<AiAppRow> = [
     <template #footer>
       <n-space justify="end">
         <n-button @click="showEmbed = false">关闭</n-button>
+      </n-space>
+    </template>
+  </n-modal>
+
+  <!-- ============ Prompt 配置弹窗 ============ -->
+  <n-modal
+    v-model:show="showPrompt"
+    preset="card"
+    :title="`Prompt 配置 — ${promptRow?.name ?? ''}`"
+    style="width: min(640px, 96vw)"
+    :mask-closable="false"
+  >
+    <n-form label-placement="top">
+      <n-form-item label="角色设定">
+        <n-input
+          v-model:value="promptForm.systemRole"
+          type="textarea"
+          placeholder="例如：你是一名专业的客服助手，熟悉公司产品与服务。"
+          :autosize="{ minRows: 3, maxRows: 6 }"
+        />
+      </n-form-item>
+
+      <n-form-item label="任务指令">
+        <n-input
+          v-model:value="promptForm.systemTask"
+          type="textarea"
+          placeholder="例如：帮助用户解决售前、售后问题，引导用户下单。"
+          :autosize="{ minRows: 3, maxRows: 6 }"
+        />
+      </n-form-item>
+
+      <n-form-item label="限制条件">
+        <n-input
+          v-model:value="promptForm.systemConstraints"
+          type="textarea"
+          placeholder="例如：不得讨论竞争对手；回答简洁，不超过 200 字。"
+          :autosize="{ minRows: 3, maxRows: 6 }"
+        />
+        <template #feedback>三个提示词字段均为空时不下发 system prompt</template>
+      </n-form-item>
+    </n-form>
+    <template #footer>
+      <n-space justify="end">
+        <n-button @click="showPrompt = false">取消</n-button>
+        <n-button type="primary" @click="submitPrompt">保存</n-button>
       </n-space>
     </template>
   </n-modal>
@@ -673,5 +686,15 @@ const columns: DataTableColumns<AiAppRow> = [
   font-size: 12px;
   color: #6b7280;
   margin: 0;
+}
+
+/* 表格标题居中 */
+:deep(.n-data-table th.n-data-table-th) {
+  text-align: center;
+}
+
+/* 表格内容居中 */
+:deep(.n-data-table td.n-data-table-td) {
+  text-align: center;
 }
 </style>
