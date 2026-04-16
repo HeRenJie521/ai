@@ -45,7 +45,9 @@ public class AiToolService {
     @Transactional
     public AiToolEntity create(String name, String label, String description,
                                String httpMethod, String url, String headersJson,
-                               String bodyTemplate, String contentType, String paramsSchemaJson) {
+                               String bodyTemplate, String contentType,
+                               String methodName, String dataParamsJson,
+                               String responseParamsJson, String paramsSchemaJson) {
         validate(name, description, url, paramsSchemaJson);
         AiToolEntity e = new AiToolEntity();
         e.setName(name.trim());
@@ -56,6 +58,9 @@ public class AiToolService {
         e.setHeadersJson(StringUtils.hasText(headersJson) ? headersJson.trim() : null);
         e.setBodyTemplate(StringUtils.hasText(bodyTemplate) ? bodyTemplate.trim() : null);
         e.setContentType(StringUtils.hasText(contentType) ? contentType.trim() : "application/json");
+        e.setMethodName(StringUtils.hasText(methodName) ? methodName.trim() : null);
+        e.setDataParamsJson(StringUtils.hasText(dataParamsJson) ? dataParamsJson.trim() : null);
+        e.setResponseParamsJson(StringUtils.hasText(responseParamsJson) ? responseParamsJson.trim() : null);
         e.setParamsSchemaJson(paramsSchemaJson.trim());
         return aiToolRepository.save(e);
     }
@@ -63,7 +68,9 @@ public class AiToolService {
     @Transactional
     public AiToolEntity update(Long id, String name, String label, String description,
                                String httpMethod, String url, String headersJson,
-                               String bodyTemplate, String contentType, String paramsSchemaJson, Boolean enabled) {
+                               String bodyTemplate, String contentType,
+                               String methodName, String dataParamsJson,
+                               String responseParamsJson, String paramsSchemaJson, Boolean enabled) {
         AiToolEntity e = aiToolRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("工具不存在：" + id));
         if (StringUtils.hasText(name)) e.setName(name.trim());
@@ -74,6 +81,9 @@ public class AiToolService {
         if (headersJson != null) e.setHeadersJson(StringUtils.hasText(headersJson) ? headersJson.trim() : null);
         if (bodyTemplate != null) e.setBodyTemplate(StringUtils.hasText(bodyTemplate) ? bodyTemplate.trim() : null);
         if (contentType != null) e.setContentType(StringUtils.hasText(contentType) ? contentType.trim() : "application/json");
+        if (methodName != null) e.setMethodName(StringUtils.hasText(methodName) ? methodName.trim() : null);
+        if (dataParamsJson != null) e.setDataParamsJson(StringUtils.hasText(dataParamsJson) ? dataParamsJson.trim() : null);
+        if (responseParamsJson != null) e.setResponseParamsJson(StringUtils.hasText(responseParamsJson) ? responseParamsJson.trim() : null);
         if (StringUtils.hasText(paramsSchemaJson)) e.setParamsSchemaJson(paramsSchemaJson.trim());
         if (enabled != null) e.setEnabled(enabled);
         return aiToolRepository.save(e);
@@ -84,7 +94,6 @@ public class AiToolService {
         if (!aiToolRepository.existsById(id)) {
             throw new IllegalArgumentException("工具不存在：" + id);
         }
-        // 先清除所有应用与此工具的绑定关系，再删工具本体
         aiAppToolRepository.deleteByToolId(id);
         aiToolRepository.deleteById(id);
     }

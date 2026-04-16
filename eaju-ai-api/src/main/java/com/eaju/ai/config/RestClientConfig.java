@@ -18,23 +18,24 @@ import javax.net.ssl.SSLContext;
 /**
  * REST 客户端性能优化配置
  * 使用 Apache HttpClient 连接池提升性能
+ * 支持本地部署的 HTTPS 服务（忽略 SSL 证书验证）
  */
 @Configuration
 public class RestClientConfig {
 
-    @Value("${app.http-client.connect-timeout-ms:10000}")
+    @Value("${app.http-client.connect-timeout-ms:30000}")
     private int connectTimeout;
 
-    @Value("${app.http-client.read-timeout-ms:120000}")
+    @Value("${app.http-client.read-timeout-ms:600000}")
     private int readTimeout;
 
-    @Value("${app.http-client.connection-request-timeout-ms:5000}")
+    @Value("${app.http-client.connection-request-timeout-ms:10000}")
     private int connectionRequestTimeout;
 
-    @Value("${app.http-client.max-total:100}")
+    @Value("${app.http-client.max-total:200}")
     private int maxTotal;
 
-    @Value("${app.http-client.max-per-route:20}")
+    @Value("${app.http-client.max-per-route:50}")
     private int maxPerRoute;
 
     @Value("${app.http-client.validate-after-inactivity-ms:1000}")
@@ -44,7 +45,12 @@ public class RestClientConfig {
     private int timeToLiveMinutes;
 
     @Bean
-    public RestTemplate restTemplate() {
+    public RestTemplate restTemplate() throws Exception {
+        // 配置 SSL 上下文（信任所有证书，用于本地部署的 HTTPS 服务）
+        SSLContext sslContext = new SSLContextBuilder()
+                .loadTrustMaterial(null, (chain, authType) -> true)
+                .build();
+
         // 配置连接池
         PoolingHttpClientConnectionManager connectionManager = new PoolingHttpClientConnectionManager();
         connectionManager.setMaxTotal(maxTotal);
@@ -56,8 +62,17 @@ public class RestClientConfig {
                 .setConnectTimeout(connectTimeout)
                 .setSocketTimeout(readTimeout)
                 .setConnectionRequestTimeout(connectionRequestTimeout)
-                .setExpectContinueEnabled(false)
+                .setExpectContinueEnabled(false)  // 禁用 Expect: 100-continue，避免 chunked 编码问题
+                .setStaleConnectionCheckEnabled(true)  // 启用过期连接检查
                 .build();
+
+        // 配置 SSL Socket Factory
+        SSLConnectionSocketFactory socketFactory = new SSLConnectionSocketFactory(
+                sslContext,
+                new String[]{"TLSv1.2", "TLSv1.3"},
+                null,
+                NoopHostnameVerifier.INSTANCE // 忽略主机名验证
+        );
 
         // 构建 HttpClient
         CloseableHttpClient httpClient = HttpClientBuilder.create()
@@ -66,6 +81,8 @@ public class RestClientConfig {
                 .setConnectionTimeToLive(timeToLiveMinutes, java.util.concurrent.TimeUnit.MINUTES)
                 .evictIdleConnections(30, java.util.concurrent.TimeUnit.SECONDS)
                 .evictExpiredConnections()
+                .setSSLSocketFactory(socketFactory)
+                .disableRedirectHandling()  // 禁用自动重定向
                 .build();
 
         HttpComponentsClientHttpRequestFactory factory = new HttpComponentsClientHttpRequestFactory(httpClient);

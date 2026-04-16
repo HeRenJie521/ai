@@ -10,6 +10,9 @@ export interface AiToolRow {
   headersJson: string | null
   bodyTemplate: string | null
   contentType: string | null
+  methodName: string | null
+  dataParamsJson: string | null
+  responseParamsJson: string | null
   paramsSchemaJson: string
   enabled: boolean
   createdAt: string | null
@@ -24,6 +27,9 @@ export interface AiToolSavePayload {
   headersJson?: string
   bodyTemplate?: string
   contentType?: string
+  methodName?: string
+  dataParamsJson?: string
+  responseParamsJson?: string
   paramsSchemaJson: string
   enabled?: boolean
 }
@@ -56,4 +62,14 @@ export async function adminGetAppTools(appId: number): Promise<AiToolRow[]> {
 /** 更新应用的工具绑定（传工具 id 数组，顺序即 sortOrder；传空数组表示解绑全部） */
 export async function adminBindAppTools(appId: number, toolIds: number[]): Promise<void> {
   await http.put(`/api/admin/ai-apps/${appId}/tools`, { toolIds })
+}
+
+/** 测试工具调用 */
+export async function adminTestTool(
+  id: number,
+  testContext: Record<string, string>,
+  toolArgs?: string,
+): Promise<{ result: string; elapsedMs: number }> {
+  const { data } = await http.post(`/api/admin/tools/${id}/test`, { testContext, toolArgs })
+  return data
 }

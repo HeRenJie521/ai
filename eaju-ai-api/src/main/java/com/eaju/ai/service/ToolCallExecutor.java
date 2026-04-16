@@ -12,18 +12,26 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestTemplate;
-import org.springframework.web.util.UriComponentsBuilder;
 
 import java.io.UnsupportedEncodingException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * 执行单次 AI 工具 HTTP 调用，支持 {{var}} 模板变量替换。
- * 变量来源：工具调用入参（LLM 生成）+ 用户上下文（Redis 存储）。
+ * 执行单次 AI 工具 HTTP 调用。
+ *
+ * 请求体构建优先级：
+ * 1. dataParamsJson 存在 → 按参数树构建（支持静态值、用户上下文引用、对象参数）
+ * 2. bodyTemplate 存在  → {{var}} 模板替换
+ * 3. 默认              → 将 LLM 入参序列化为 JSON 或 form-urlencoded
+ *
+ * contentType = application/json            → 整体包装为 JSON
+ * contentType = application/x-www-form-urlencoded → 整理为 key=value&key=value
  */
 @Component
 public class ToolCallExecutor {
@@ -39,159 +47,239 @@ public class ToolCallExecutor {
         this.objectMapper = objectMapper;
     }
 
-    /**
-     * 执行工具调用并返回结果字符串（供 LLM 作为 tool 消息内容）。
-     *
-     * @param tool       工具定义
-     * @param toolArgs   LLM 生成的工具入参 JSON 字符串
-     * @param userCtx    用户上下文 Map（来自 Redis）
-     * @return 工具执行结果字符串
-     */
     public String execute(AiToolEntity tool, String toolArgs, Map<String, Object> userCtx) {
         try {
-            // 解析 LLM 生成的入参
             Map<String, Object> argsMap = parseArgs(toolArgs);
-
-            // 合并上下文：用户上下文优先级低于工具入参
-            Map<String, Object> vars = new java.util.HashMap<>();
+            Map<String, Object> vars = new LinkedHashMap<>();
             if (userCtx != null) vars.putAll(userCtx);
             vars.putAll(argsMap);
 
-            // 构建请求 URL
             String url = substitute(tool.getUrl(), vars);
 
-            // 构建请求头
             HttpHeaders headers = new HttpHeaders();
             if (StringUtils.hasText(tool.getHeadersJson())) {
                 Map<String, Object> rawHeaders = objectMapper.readValue(
                         substitute(tool.getHeadersJson(), vars),
                         new TypeReference<Map<String, Object>>() {});
-                rawHeaders.forEach((k, v) -> {
-                    if (v != null) headers.set(k, v.toString());
-                });
+                rawHeaders.forEach((k, v) -> { if (v != null) headers.set(k, v.toString()); });
             }
 
-            // 构建请求体（POST/PUT 时使用）
-            String body = null;
             String method = tool.getHttpMethod() != null ? tool.getHttpMethod().toUpperCase() : "POST";
-            if (("POST".equals(method) || "PUT".equals(method) || "PATCH".equals(method))) {
-                // 设置 Content-Type
-                String contentType = tool.getContentType() != null ? tool.getContentType() : "application/json";
+            String body = null;
+
+            if ("POST".equals(method) || "PUT".equals(method) || "PATCH".equals(method)) {
+                String contentType = StringUtils.hasText(tool.getContentType())
+                        ? tool.getContentType() : "application/json";
                 headers.set("Content-Type", contentType);
-                
-                if (StringUtils.hasText(tool.getBodyTemplate())) {
+
+                if (StringUtils.hasText(tool.getDataParamsJson())) {
+                    body = buildParamBody(tool, argsMap, userCtx, contentType);
+                } else if (StringUtils.hasText(tool.getBodyTemplate())) {
                     body = substitute(tool.getBodyTemplate(), vars);
-                    // 如果是 form-urlencoded 且使用模板，需要手动转换
                     if ("application/x-www-form-urlencoded".equals(contentType)) {
                         body = convertJsonToFormUrlEncoded(body);
                     }
                 } else {
-                    // 默认将 argsMap 作为 body
-                    if ("application/x-www-form-urlencoded".equals(contentType)) {
-                        // 将 argsMap 转换为 form-urlencoded 格式
-                        body = convertMapToFormUrlEncoded(argsMap);
-                    } else {
-                        // JSON 格式
-                        body = objectMapper.writeValueAsString(argsMap);
-                    }
+                    body = "application/x-www-form-urlencoded".equals(contentType)
+                            ? convertMapToFormUrlEncoded(argsMap)
+                            : objectMapper.writeValueAsString(argsMap);
                 }
             }
 
             HttpEntity<String> entity = new HttpEntity<>(body, headers);
-            HttpMethod httpMethod = HttpMethod.valueOf(method);
-
             log.debug("工具调用: {} {} body={}", method, url, body);
-            ResponseEntity<String> response = restTemplate.exchange(url, httpMethod, entity, String.class);
-
+            ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.valueOf(method), entity, String.class);
             String result = response.getBody();
             log.debug("工具响应: status={} body={}", response.getStatusCode(), result);
-            return result != null ? result : "";
+            String rawResult = result != null ? result : "";
+
+            // 若配置了出参说明，追加字段注释帮助 LLM 理解
+            if (StringUtils.hasText(tool.getResponseParamsJson())) {
+                String fieldDesc = buildResponseFieldDesc(tool.getResponseParamsJson());
+                if (StringUtils.hasText(fieldDesc)) {
+                    rawResult = rawResult + "\n\n[返回字段说明]\n" + fieldDesc;
+                }
+            }
+            return rawResult;
+
         } catch (Exception e) {
             log.warn("工具调用失败: tool={} error={}", tool.getName(), e.getMessage());
             return "{\"error\": \"工具调用失败: " + e.getMessage().replace("\"", "'") + "\"}";
         }
     }
 
-    private Map<String, Object> parseArgs(String toolArgs) {
-        if (!StringUtils.hasText(toolArgs)) {
-            return new java.util.HashMap<>();
+    /**
+     * 从 dataParamsJson 参数树构建请求体。
+     * 参数树格式（每项）：
+     *   {"key":"methodName","valueType":"static","value":"xxx"}
+     *   {"key":"userId","valueType":"context","fieldKey":"esusMobile"}
+     *   {"key":"data","valueType":"object","children":[...]}
+     */
+    private String buildParamBody(AiToolEntity tool, Map<String, Object> argsMap,
+                                   Map<String, Object> userCtx, String contentType) throws Exception {
+        List<Map<String, Object>> paramDefs = objectMapper.readValue(
+                tool.getDataParamsJson(), new TypeReference<List<Map<String, Object>>>() {});
+
+        Map<String, Object> bodyMap = resolveParamList(paramDefs, argsMap, userCtx);
+
+        // LLM 入参合并（低优先级，不覆盖已配置的 key）
+        for (Map.Entry<String, Object> entry : argsMap.entrySet()) {
+            bodyMap.putIfAbsent(entry.getKey(), entry.getValue());
         }
+
+        if ("application/x-www-form-urlencoded".equals(contentType)) {
+            return convertMapToFormUrlEncoded(bodyMap);
+        }
+        return objectMapper.writeValueAsString(bodyMap);
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> resolveParamList(List<Map<String, Object>> paramDefs,
+                                                  Map<String, Object> argsMap,
+                                                  Map<String, Object> userCtx) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        if (paramDefs == null) return result;
+        for (Map<String, Object> def : paramDefs) {
+            String key = (String) def.get("key");
+            if (!StringUtils.hasText(key)) continue;
+            String valueType = (String) def.get("valueType");
+            Object value;
+            if ("object".equals(valueType)) {
+                // 递归构建子参数 Map
+                List<Map<String, Object>> children =
+                        (List<Map<String, Object>>) def.get("children");
+                value = resolveParamList(children, argsMap, userCtx);
+            } else if ("context".equals(valueType)) {
+                String fieldKey = (String) def.get("fieldKey");
+                value = (userCtx != null && StringUtils.hasText(fieldKey))
+                        ? userCtx.get(fieldKey) : null;
+            } else {
+                // static（支持 {{var}} 模板）
+                String raw = (String) def.get("value");
+                value = raw != null ? substitute(raw, argsMap) : null;
+            }
+            if (value != null) result.put(key, value);
+        }
+        return result;
+    }
+
+    private Map<String, Object> parseArgs(String toolArgs) {
+        if (!StringUtils.hasText(toolArgs)) return new LinkedHashMap<>();
         try {
-            Map<String, Object> map = objectMapper.readValue(toolArgs.trim(),
-                    new TypeReference<Map<String, Object>>() {});
-            return map != null ? map : new java.util.HashMap<>();
+            Map<String, Object> map = objectMapper.readValue(
+                    toolArgs.trim(), new TypeReference<Map<String, Object>>() {});
+            return map != null ? map : new LinkedHashMap<>();
         } catch (Exception e) {
             log.warn("解析工具入参失败: {}", e.getMessage());
-            return new java.util.HashMap<>();
+            return new LinkedHashMap<>();
         }
     }
 
-    /**
-     * 将字符串中的 {{varName}} 替换为 vars 中对应值（toString），未找到则保留原占位符。
-     */
     static String substitute(String template, Map<String, Object> vars) {
-        if (!StringUtils.hasText(template) || vars == null || vars.isEmpty()) {
-            return template;
-        }
+        if (!StringUtils.hasText(template) || vars == null || vars.isEmpty()) return template;
         Matcher m = PLACEHOLDER.matcher(template);
         StringBuffer sb = new StringBuffer();
         while (m.find()) {
             String varName = m.group(1);
             Object val = vars.get(varName);
-            String replacement = val != null ? Matcher.quoteReplacement(val.toString()) : m.group(0);
-            m.appendReplacement(sb, replacement);
+            m.appendReplacement(sb, val != null ? Matcher.quoteReplacement(val.toString()) : m.group(0));
         }
         m.appendTail(sb);
         return sb.toString();
     }
 
     /**
-     * 将 Map 转换为 form-urlencoded 格式
-     * 例如：{"key": "value"} -> "key=value"
+     * 将 Map 转为 form-urlencoded 字符串。
+     * 值若为 Map/List（对象参数子级），JSON 序列化后 URL 编码。
      */
     private String convertMapToFormUrlEncoded(Map<String, Object> map) {
-        if (map == null || map.isEmpty()) {
-            return "";
-        }
+        if (map == null || map.isEmpty()) return "";
         StringBuilder sb = new StringBuilder();
         boolean first = true;
         for (Map.Entry<String, Object> entry : map.entrySet()) {
-            if (!first) {
-                sb.append("&");
-            }
+            if (!first) sb.append("&");
             try {
                 sb.append(URLEncoder.encode(entry.getKey(), StandardCharsets.UTF_8.name()));
                 sb.append("=");
                 if (entry.getValue() != null) {
-                    sb.append(URLEncoder.encode(entry.getValue().toString(), StandardCharsets.UTF_8.name()));
+                    String strVal;
+                    if (entry.getValue() instanceof Map || entry.getValue() instanceof List) {
+                        strVal = objectMapper.writeValueAsString(entry.getValue());
+                    } else {
+                        strVal = entry.getValue().toString();
+                    }
+                    sb.append(URLEncoder.encode(strVal, StandardCharsets.UTF_8.name()));
                 }
-            } catch (UnsupportedEncodingException e) {
-                // 不会发生，UTF-8 总是受支持
-            }
+            } catch (Exception ignored) {}
             first = false;
         }
         return sb.toString();
     }
 
-    /**
-     * 尝试将 JSON 字符串转换为 form-urlencoded 格式
-     * 如果输入已经是 form-urlencoded 格式，则直接返回
-     */
     private String convertJsonToFormUrlEncoded(String jsonBody) {
-        if (jsonBody == null || jsonBody.isEmpty()) {
-            return "";
-        }
-        // 尝试解析为 JSON
+        if (!StringUtils.hasText(jsonBody)) return "";
         try {
-            Map<String, Object> map = objectMapper.readValue(jsonBody,
-                    new TypeReference<Map<String, Object>>() {});
-            if (map != null && !map.isEmpty()) {
-                return convertMapToFormUrlEncoded(map);
-            }
+            Map<String, Object> map = objectMapper.readValue(
+                    jsonBody, new TypeReference<Map<String, Object>>() {});
+            if (map != null && !map.isEmpty()) return convertMapToFormUrlEncoded(map);
         } catch (Exception e) {
-            // 如果不是有效 JSON，可能是已经是 form-urlencoded 格式或模板，直接返回
             log.debug("JSON 解析失败，可能已是 form-urlencoded 格式：{}", e.getMessage());
         }
         return jsonBody;
+    }
+
+    /**
+     * 从 responseParamsJson 生成字段说明文本，供 LLM 理解返回值含义。
+     * 格式示例：
+     *   - code (String): 响应码
+     *   - data (Object): 数据体
+     *     - data.ebcdCode (String): 数据字典编码 | 可用于数据提交
+     *     - data.items (Array): 明细列表
+     *       - data.items[*].itemId (String): 明细ID
+     */
+    @SuppressWarnings("unchecked")
+    private String buildResponseFieldDesc(String responseParamsJson) {
+        try {
+            List<Map<String, Object>> params = objectMapper.readValue(
+                    responseParamsJson, new TypeReference<List<Map<String, Object>>>() {});
+            StringBuilder sb = new StringBuilder();
+            appendFieldDesc(params, "", sb, 0);
+            return sb.toString().trim();
+        } catch (Exception e) {
+            log.debug("解析出参说明 JSON 失败: {}", e.getMessage());
+            return "";
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private void appendFieldDesc(List<Map<String, Object>> params, String prefix,
+                                  StringBuilder sb, int depth) {
+        if (params == null || depth > 2) return; // 最多 3 级（0/1/2）
+        StringBuilder indentSb = new StringBuilder();
+        for (int d = 0; d < depth; d++) indentSb.append("  ");
+        String indent = indentSb.toString();
+        for (Map<String, Object> param : params) {
+            String key = (String) param.get("key");
+            if (!StringUtils.hasText(key)) continue;
+            String fieldType  = (String) param.getOrDefault("fieldType", "String");
+            String label      = (String) param.getOrDefault("label", "");
+            String desc       = (String) param.getOrDefault("description", "");
+            String fullKey    = prefix.isEmpty() ? key : prefix + "." + key;
+
+            sb.append(indent).append("- ").append(fullKey)
+              .append(" (").append(fieldType).append("): ").append(label);
+            if (StringUtils.hasText(desc)) {
+                sb.append(" | ").append(desc);
+            }
+            sb.append("\n");
+
+            List<Map<String, Object>> children = (List<Map<String, Object>>) param.get("children");
+            if (children != null && !children.isEmpty()) {
+                // Array 类型子路径加 [*] 标识
+                String childPrefix = "Array".equalsIgnoreCase(fieldType)
+                        ? fullKey + "[*]" : fullKey;
+                appendFieldDesc(children, childPrefix, sb, depth + 1);
+            }
+        }
     }
 }

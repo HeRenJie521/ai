@@ -2,8 +2,10 @@ package com.eaju.ai.web;
 
 import com.eaju.ai.dto.admin.AiToolDto;
 import com.eaju.ai.dto.admin.AiToolSaveRequestDto;
+import com.eaju.ai.dto.admin.AiToolTestRequestDto;
 import com.eaju.ai.persistence.entity.AiToolEntity;
 import com.eaju.ai.service.AiToolService;
+import com.eaju.ai.service.ToolCallExecutor;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -16,7 +18,10 @@ import org.springframework.web.bind.annotation.RestController;
 
 import javax.validation.Valid;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/admin/tools")
@@ -24,9 +29,11 @@ import java.util.List;
 public class AdminAiToolController {
 
     private final AiToolService service;
+    private final ToolCallExecutor toolCallExecutor;
 
-    public AdminAiToolController(AiToolService service) {
+    public AdminAiToolController(AiToolService service, ToolCallExecutor toolCallExecutor) {
         this.service = service;
+        this.toolCallExecutor = toolCallExecutor;
     }
 
     @GetMapping
@@ -43,7 +50,9 @@ public class AdminAiToolController {
         AiToolEntity e = service.create(
                 body.getName(), body.getLabel(), body.getDescription(),
                 body.getHttpMethod(), body.getUrl(),
-                body.getHeadersJson(), body.getBodyTemplate(), body.getContentType(), body.getParamsSchemaJson());
+                body.getHeadersJson(), body.getBodyTemplate(), body.getContentType(),
+                body.getMethodName(), body.getDataParamsJson(),
+                body.getResponseParamsJson(), body.getParamsSchemaJson());
         return toDto(e);
     }
 
@@ -53,14 +62,38 @@ public class AdminAiToolController {
         AiToolEntity e = service.update(
                 id, body.getName(), body.getLabel(), body.getDescription(),
                 body.getHttpMethod(), body.getUrl(),
-                body.getHeadersJson(), body.getBodyTemplate(), body.getContentType(), body.getParamsSchemaJson(),
-                body.getEnabled());
+                body.getHeadersJson(), body.getBodyTemplate(), body.getContentType(),
+                body.getMethodName(), body.getDataParamsJson(),
+                body.getResponseParamsJson(), body.getParamsSchemaJson(), body.getEnabled());
         return toDto(e);
     }
 
     @DeleteMapping("/{id}")
     public void delete(@PathVariable("id") Long id) {
         service.delete(id);
+    }
+
+    /** 测试工具调用，testContext 提供 context 类型参数的测试值 */
+    @PostMapping("/{id}/test")
+    public Map<String, Object> test(@PathVariable("id") Long id,
+                                    @RequestBody(required = false) AiToolTestRequestDto body) {
+        AiToolEntity tool = service.listAll().stream()
+                .filter(t -> t.getId().equals(id))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("工具不存在：" + id));
+
+        Map<String, Object> testCtx = (body != null && body.getTestContext() != null)
+                ? body.getTestContext() : Collections.emptyMap();
+        String toolArgs = (body != null && body.getToolArgs() != null) ? body.getToolArgs() : "{}";
+
+        long start = System.currentTimeMillis();
+        String result = toolCallExecutor.execute(tool, toolArgs, testCtx);
+        long elapsed = System.currentTimeMillis() - start;
+
+        Map<String, Object> resp = new LinkedHashMap<>();
+        resp.put("result", result);
+        resp.put("elapsedMs", elapsed);
+        return resp;
     }
 
     private static AiToolDto toDto(AiToolEntity e) {
@@ -74,6 +107,9 @@ public class AdminAiToolController {
         dto.setHeadersJson(e.getHeadersJson());
         dto.setBodyTemplate(e.getBodyTemplate());
         dto.setContentType(e.getContentType());
+        dto.setMethodName(e.getMethodName());
+        dto.setDataParamsJson(e.getDataParamsJson());
+        dto.setResponseParamsJson(e.getResponseParamsJson());
         dto.setParamsSchemaJson(e.getParamsSchemaJson());
         dto.setEnabled(e.isEnabled());
         dto.setCreatedAt(e.getCreatedAt() != null ? e.getCreatedAt().toString() : null);

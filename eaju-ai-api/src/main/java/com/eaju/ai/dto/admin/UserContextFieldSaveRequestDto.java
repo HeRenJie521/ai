@@ -10,6 +10,12 @@ public class UserContextFieldSaveRequestDto {
     @NotBlank
     private String label;
 
+    /** String / Object / Array */
+    private String fieldType;
+
+    /** dot-notation 路径，如 data.esusMobile */
+    private String parseExpression;
+
     private String description;
 
     private Boolean enabled;
@@ -19,6 +25,12 @@ public class UserContextFieldSaveRequestDto {
 
     public String getLabel() { return label; }
     public void setLabel(String label) { this.label = label; }
+
+    public String getFieldType() { return fieldType; }
+    public void setFieldType(String fieldType) { this.fieldType = fieldType; }
+
+    public String getParseExpression() { return parseExpression; }
+    public void setParseExpression(String parseExpression) { this.parseExpression = parseExpression; }
 
     public String getDescription() { return description; }
     public void setDescription(String description) { this.description = description; }

@@ -1,15 +1,17 @@
 -- migrate_v6.sql
 -- AI 工具调用 + 用户上下文注入系统
 
--- 用户上下文字段配置表：定义从登录请求中提取哪些字段存入 Redis
+-- 用户数据管理表：定义从 DMS 登录响应中提取哪些字段存入 Redis，供工具调用时变量替换
 CREATE TABLE IF NOT EXISTS user_context_field (
-    id          BIGSERIAL PRIMARY KEY,
-    field_key   VARCHAR(128) NOT NULL UNIQUE,
-    label       VARCHAR(256) NOT NULL,
-    description TEXT,
-    enabled     BOOLEAN NOT NULL DEFAULT TRUE,
-    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    id               BIGSERIAL PRIMARY KEY,
+    field_key        VARCHAR(128) NOT NULL UNIQUE,
+    label            VARCHAR(256) NOT NULL,
+    field_type       VARCHAR(32)  NOT NULL DEFAULT 'String',  -- String / Object / Array
+    parse_expression TEXT         NOT NULL DEFAULT '',        -- dot-notation 路径，如 data.esusMobile
+    description      TEXT,
+    enabled          BOOLEAN      NOT NULL DEFAULT TRUE,
+    created_at       TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    updated_at       TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );
 
 -- AI 工具定义表
@@ -22,7 +24,11 @@ CREATE TABLE IF NOT EXISTS ai_tool (
     url                TEXT         NOT NULL,
     headers_json       TEXT,
     body_template      TEXT,
-    params_schema_json TEXT         NOT NULL,
+    content_type       VARCHAR(128) NOT NULL DEFAULT 'application/json',
+    method_name           VARCHAR(256),              -- DMS 接口方法名，如 miniAppMenuFunctionQuery
+    data_params_json      TEXT,                     -- 入参配置 JSON（静态值或用户数据引用）
+    response_params_json  TEXT,                     -- 出参字段说明 JSON（帮助 LLM 理解返回值）
+    params_schema_json    TEXT         NOT NULL,
     enabled            BOOLEAN      NOT NULL DEFAULT TRUE,
     created_at         TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
     updated_at         TIMESTAMPTZ  NOT NULL DEFAULT NOW()

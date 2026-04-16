@@ -15,6 +15,7 @@ import org.springframework.util.StringUtils;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -28,16 +29,22 @@ public class AuthService {
     private final DmsExternalLoginClient dmsExternalLoginClient;
     private final JwtTokenProvider jwtTokenProvider;
     private final LoginSessionCacheService loginSessionCacheService;
+    private final UserContextFieldService userContextFieldService;
+    private final UserContextCacheService userContextCacheService;
     private final Set<String> adminPhones;
 
     public AuthService(
             DmsExternalLoginClient dmsExternalLoginClient,
             JwtTokenProvider jwtTokenProvider,
             LoginSessionCacheService loginSessionCacheService,
+            UserContextFieldService userContextFieldService,
+            UserContextCacheService userContextCacheService,
             @Value("${app.auth.admin-phones:}") String adminPhonesRaw) {
         this.dmsExternalLoginClient = dmsExternalLoginClient;
         this.jwtTokenProvider = jwtTokenProvider;
         this.loginSessionCacheService = loginSessionCacheService;
+        this.userContextFieldService = userContextFieldService;
+        this.userContextCacheService = userContextCacheService;
         this.adminPhones = parseAdminPhones(adminPhonesRaw);
     }
 
@@ -96,8 +103,20 @@ public class AuthService {
         snap.setUsername(displayName);
         snap.setAdmin(admin);
         snap.setIssuedAtEpochMs(System.currentTimeMillis());
-        snap.setDmsResponseExcerpt(truncateJson(root, 8000));
+        // 存完整 JSON 供字段解析；截断版仅用于日志诊断
+        String dmsFullJson = root.toString();
+        snap.setDmsResponseExcerpt(dmsFullJson);
         loginSessionCacheService.save(issued.getJti(), snap);
+
+        // 按用户数据字段配置，从 DMS 登录响应中提取上下文并缓存
+        try {
+            Map<String, Object> ctx = userContextFieldService.extractContext(dmsFullJson);
+            if (!ctx.isEmpty()) {
+                userContextCacheService.save(issued.getJti(), ctx);
+            }
+        } catch (Exception ex) {
+            log.warn("提取用户上下文失败，不影响登录: {}", ex.getMessage());
+        }
 
         LoginResponseDto dto = new LoginResponseDto();
         dto.setToken(issued.getToken());

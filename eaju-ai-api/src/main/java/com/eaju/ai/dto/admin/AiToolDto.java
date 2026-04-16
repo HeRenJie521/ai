@@ -11,6 +11,9 @@ public class AiToolDto {
     private String headersJson;
     private String bodyTemplate;
     private String contentType;
+    private String methodName;
+    private String dataParamsJson;
+    private String responseParamsJson;
     private String paramsSchemaJson;
     private boolean enabled;
     private String createdAt;
@@ -41,6 +44,15 @@ public class AiToolDto {
 
     public String getContentType() { return contentType; }
     public void setContentType(String contentType) { this.contentType = contentType; }
+
+    public String getMethodName() { return methodName; }
+    public void setMethodName(String methodName) { this.methodName = methodName; }
+
+    public String getDataParamsJson() { return dataParamsJson; }
+    public void setDataParamsJson(String dataParamsJson) { this.dataParamsJson = dataParamsJson; }
+
+    public String getResponseParamsJson() { return responseParamsJson; }
+    public void setResponseParamsJson(String responseParamsJson) { this.responseParamsJson = responseParamsJson; }
 
     public String getParamsSchemaJson() { return paramsSchemaJson; }
     public void setParamsSchemaJson(String paramsSchemaJson) { this.paramsSchemaJson = paramsSchemaJson; }
