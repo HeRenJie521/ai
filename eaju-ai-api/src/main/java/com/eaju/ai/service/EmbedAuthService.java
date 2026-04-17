@@ -128,8 +128,22 @@ public class EmbedAuthService {
         snap.setDmsResponseExcerpt("{\"embed\":true,\"appId\":" + app.getId() + "}");
         loginSessionCacheService.save(issued.getJti(), snap);
 
-        // 提取并存储用户上下文字段（过滤白名单）
-        storeUserContext(issued.getJti(), req.getExtraContext());
+        // 将登录数据（userId/username）与 extraContext 合并后存入用户上下文缓存
+        // userId 即手机号，预先铺开到常见手机字段别名，方便 parseExpression 回退时命中
+        Map<String, Object> loginData = new HashMap<>();
+        loginData.put("userId", userId);
+        loginData.put("username", displayName);
+        loginData.put("phone", userId);
+        loginData.put("mobile", userId);
+        loginData.put("esusMobile", userId);
+        Map<String, Object> dataSection = new HashMap<>();
+        dataSection.put("esusMobile", userId);
+        dataSection.put("phone", userId);
+        loginData.put("data", dataSection);
+        if (req.getExtraContext() != null) {
+            loginData.putAll(req.getExtraContext());
+        }
+        storeUserContext(issued.getJti(), loginData);
 
         log.info("AppEmbedLogin 成功: appId={}, userId={}", app.getId(), userId);
 
@@ -147,26 +161,56 @@ public class EmbedAuthService {
     }
 
     /**
-     * 根据 user_context_field 白名单过滤 extraContext，将允许的字段存入 Redis。
+     * 将登录数据存入 Redis 用户上下文缓存。
+     * <p>
+     * 存储规则：
+     * 1. userId / username 无条件存入（工具参数可直接用 fieldKey: "userId"、"username"）
+     * 2. 遍历 user_context_field 白名单：
+     *    - parseExpression 有值 → 按 dot-notation 路径从 loginData 取值（如 "userId"、"data.mobile"）
+     *    - parseExpression 为空 → 直接用 fieldKey 从 loginData 取值
      */
-    private void storeUserContext(String jti, Map<String, Object> extraContext) {
-        if (!StringUtils.hasText(jti) || extraContext == null || extraContext.isEmpty()) {
+    private void storeUserContext(String jti, Map<String, Object> loginData) {
+        if (!StringUtils.hasText(jti) || loginData == null || loginData.isEmpty()) {
             return;
         }
+        Map<String, Object> ctx = new HashMap<>();
+
+        // 无条件存入基础登录字段
+        if (loginData.get("userId") != null)   ctx.put("userId",   loginData.get("userId"));
+        if (loginData.get("username") != null)  ctx.put("username", loginData.get("username"));
+
+        // 按白名单字段配置解析额外字段
         List<UserContextFieldEntity> allowedFields = userContextFieldRepository.findByEnabledIsTrueOrderByIdAsc();
-        if (allowedFields.isEmpty()) {
-            return;
-        }
-        Map<String, Object> filtered = new HashMap<>();
         for (UserContextFieldEntity field : allowedFields) {
-            if (extraContext.containsKey(field.getFieldKey())) {
-                filtered.put(field.getFieldKey(), extraContext.get(field.getFieldKey()));
+            String expr = StringUtils.hasText(field.getParseExpression())
+                    ? field.getParseExpression() : field.getFieldKey();
+            Object value = navigateDotPath(loginData, expr);
+            // parseExpression 路径未命中时，直接用 fieldKey 从平铺 loginData 取值
+            if (value == null) {
+                value = loginData.get(field.getFieldKey());
+            }
+            if (value != null) {
+                ctx.put(field.getFieldKey(), value);
             }
         }
-        if (!filtered.isEmpty()) {
-            userContextCacheService.save(jti, filtered);
-            log.debug("存储用户上下文: jti={} keys={}", jti, filtered.keySet());
+
+        userContextCacheService.save(jti, ctx);
+        log.info("存储用户上下文: jti={} keys={} values={}", jti, ctx.keySet(), ctx);
+    }
+
+    /**
+     * 按 dot-notation 路径从 Map 中取值，如 "userId" 或 "data.esusMobile"。
+     */
+    @SuppressWarnings("unchecked")
+    private Object navigateDotPath(Map<String, Object> data, String path) {
+        String[] parts = path.split("\\.");
+        Object current = data;
+        for (String part : parts) {
+            if (!(current instanceof Map)) return null;
+            current = ((Map<String, Object>) current).get(part);
+            if (current == null) return null;
         }
+        return current;
     }
 
     private static String sha256Hex(String s) {

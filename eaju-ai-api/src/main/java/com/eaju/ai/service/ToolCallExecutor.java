@@ -51,6 +51,18 @@ public class ToolCallExecutor {
     public String execute(AiToolEntity tool, String toolArgs, Map<String, Object> userCtx) {
         try {
             Map<String, Object> argsMap = parseArgs(toolArgs);
+
+            // ── 入参诊断日志 ──────────────────────────────────────────────
+            log.info("[工具调用] 工具={} ({})", tool.getLabel(), tool.getName());
+            log.info("[工具调用] LLM传入参数: {}", toolArgs);
+            if (userCtx == null || userCtx.isEmpty()) {
+                log.info("[工具调用] 用户上下文: (空)");
+            } else {
+                log.info("[工具调用] 用户上下文 keys: {}", userCtx.keySet());
+                log.info("[工具调用] 用户上下文 values: {}", userCtx);
+            }
+            // ─────────────────────────────────────────────────────────────
+
             Map<String, Object> vars = new LinkedHashMap<>();
             if (userCtx != null) vars.putAll(userCtx);
             vars.putAll(argsMap);
@@ -87,11 +99,15 @@ public class ToolCallExecutor {
                 }
             }
 
+            log.info("[工具调用] 请求: {} {}", method, url);
+            log.info("[工具调用] 请求体: {}", body);
+
             HttpEntity<String> entity = new HttpEntity<>(body, headers);
-            log.debug("工具调用: {} {} body={}", method, url, body);
             ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.valueOf(method), entity, String.class);
             String result = response.getBody();
-            log.debug("工具响应: status={} body={}", response.getStatusCode(), result);
+            log.info("[工具调用] 响应状态: {}", response.getStatusCode());
+            log.info("[工具调用] 响应体: {}", result);
+
             String rawResult = result != null ? result : "";
 
             // 若配置了出参说明，追加字段注释帮助 LLM 理解
@@ -104,7 +120,7 @@ public class ToolCallExecutor {
             return rawResult;
 
         } catch (Exception e) {
-            log.warn("工具调用失败: tool={} error={}", tool.getName(), e.getMessage());
+            log.warn("[工具调用] 失败: tool={} error={}", tool.getName(), e.getMessage());
             return "{\"error\": \"工具调用失败: " + e.getMessage().replace("\"", "'") + "\"}";
         }
     }
@@ -157,11 +173,6 @@ public class ToolCallExecutor {
                 tool.getDataParamsJson(), new TypeReference<List<Map<String, Object>>>() {});
 
         Map<String, Object> bodyMap = resolveParamTree(paramDefs, argsMap, userCtx);
-
-        // LLM 入参合并（低优先级，不覆盖已配置的 key）
-        for (Map.Entry<String, Object> entry : argsMap.entrySet()) {
-            bodyMap.putIfAbsent(entry.getKey(), entry.getValue());
-        }
 
         if ("application/x-www-form-urlencoded".equals(contentType)) {
             return convertMapToFormUrlEncoded(bodyMap);
@@ -223,23 +234,28 @@ public class ToolCallExecutor {
     private Object resolveLeafValue(Map<String, Object> def,
                                      Map<String, Object> argsMap,
                                      Map<String, Object> userCtx) {
+        String paramKey = (String) def.get("key");
         String valueSource = (String) def.getOrDefault("valueSource", def.get("valueType"));
         if (valueSource == null) valueSource = "static";
+
+        Object resolved;
         if ("context".equals(valueSource)) {
             String fieldKey = (String) def.get("fieldKey");
-            return (userCtx != null && StringUtils.hasText(fieldKey)) ? userCtx.get(fieldKey) : null;
+            resolved = (userCtx != null && StringUtils.hasText(fieldKey)) ? userCtx.get(fieldKey) : null;
+            log.info("[参数解析] key={} 来源=用户上下文 fieldKey={} 取到值={}", paramKey, fieldKey, resolved);
         } else if ("llm".equals(valueSource)) {
-            // LLM参数：值由 LLM 根据 paramsSchemaJson 提供，从 argsMap 中按参数名取值
-            String key = (String) def.get("key");
-            return StringUtils.hasText(key) ? argsMap.get(key) : null;
+            resolved = StringUtils.hasText(paramKey) ? argsMap.get(paramKey) : null;
+            log.info("[参数解析] key={} 来源=LLM入参 取到值={}", paramKey, resolved);
         } else if ("response".equals(valueSource)) {
-            // 出参传递：由应用编排层在运行时注入，工具配置阶段跳过
-            return null;
+            resolved = null;
+            log.info("[参数解析] key={} 来源=出参传递 跳过", paramKey);
         } else {
             String raw = (String) def.get("sourceValue");
             if (raw == null) raw = (String) def.get("value");
-            return raw != null ? substitute(raw, argsMap) : null;
+            resolved = raw != null ? substitute(raw, argsMap) : null;
+            log.info("[参数解析] key={} 来源=静态值 原始值={} 替换后={}", paramKey, raw, resolved);
         }
+        return resolved;
     }
 
     private Map<String, Object> parseArgs(String toolArgs) {

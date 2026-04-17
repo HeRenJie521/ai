@@ -68,6 +68,7 @@ export interface AppEmbedLoginPayload {
   appId: number
   userId: string
   username?: string
+  extraContext?: Record<string, unknown>
 }
 
 /**
