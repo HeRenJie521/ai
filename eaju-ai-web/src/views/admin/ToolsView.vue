@@ -565,19 +565,30 @@ const testElapsed = ref<number | null>(null)
 
 interface FlatContextParam { label: string; fieldKey: string }
 
-// 从 dataParamsJson 里收集所有 valueType=context 的参数（含子参数）
+// 从 dataParamsJson 里收集所有 valueSource=context 的参数（含子参数和数组元素）
 function collectContextParams(row: AiToolRow): FlatContextParam[] {
   if (!row.dataParamsJson) return []
   try {
     const items = JSON.parse(row.dataParamsJson) as ToolParam[]
     const result: FlatContextParam[] = []
     for (const p of items) {
+      // 检查主参数
       if (p.valueSource === 'context') {
         result.push({ label: p.key, fieldKey: p.fieldKey })
-      } else if (p.fieldType === 'Object') {
+      }
+      // 检查 Object 类型的子参数
+      if (p.fieldType === 'Object') {
         for (const c of p.children) {
           if (c.valueSource === 'context') {
             result.push({ label: `${p.key}.${c.key}`, fieldKey: c.fieldKey })
+          }
+        }
+      }
+      // 检查 Array 类型的数组元素
+      if (p.fieldType === 'Array') {
+        for (const child of p.children) {
+          if (child.valueSource === 'context') {
+            result.push({ label: `${p.key}[]`, fieldKey: child.fieldKey })
           }
         }
       }
