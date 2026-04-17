@@ -110,6 +110,40 @@ public class ToolCallExecutor {
     }
 
     /**
+     * 仅构建请求体，不发起 HTTP 调用，供测试接口展示实际入参。
+     */
+    public String buildRequestBody(AiToolEntity tool, String toolArgs, Map<String, Object> userCtx) {
+        try {
+            Map<String, Object> argsMap = parseArgs(toolArgs);
+            Map<String, Object> vars = new LinkedHashMap<>();
+            if (userCtx != null) vars.putAll(userCtx);
+            vars.putAll(argsMap);
+
+            String method = tool.getHttpMethod() != null ? tool.getHttpMethod().toUpperCase() : "POST";
+            if (!("POST".equals(method) || "PUT".equals(method) || "PATCH".equals(method))) {
+                return null;
+            }
+            String contentType = StringUtils.hasText(tool.getContentType())
+                    ? tool.getContentType() : "application/json";
+
+            if (StringUtils.hasText(tool.getDataParamsJson())) {
+                return buildParamBody(tool, argsMap, userCtx, contentType);
+            } else if (StringUtils.hasText(tool.getBodyTemplate())) {
+                String body = substitute(tool.getBodyTemplate(), vars);
+                return "application/x-www-form-urlencoded".equals(contentType)
+                        ? convertJsonToFormUrlEncoded(body) : body;
+            } else {
+                return "application/x-www-form-urlencoded".equals(contentType)
+                        ? convertMapToFormUrlEncoded(argsMap)
+                        : objectMapper.writeValueAsString(argsMap);
+            }
+        } catch (Exception e) {
+            log.debug("构建测试请求体失败: {}", e.getMessage());
+            return null;
+        }
+    }
+
+    /**
      * 从 dataParamsJson 参数树构建请求体。
      * 参数树格式（每项）：
      *   {"key":"methodName","valueType":"static","value":"xxx"}

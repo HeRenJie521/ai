@@ -86,11 +86,14 @@ public class AdminAiToolController {
                 ? body.getTestContext() : Collections.emptyMap();
         String toolArgs = (body != null && body.getToolArgs() != null) ? body.getToolArgs() : "{}";
 
+        String requestBody = toolCallExecutor.buildRequestBody(tool, toolArgs, testCtx);
+
         long start = System.currentTimeMillis();
         String result = toolCallExecutor.execute(tool, toolArgs, testCtx);
         long elapsed = System.currentTimeMillis() - start;
 
         Map<String, Object> resp = new LinkedHashMap<>();
+        resp.put("requestBody", requestBody);
         resp.put("result", result);
         resp.put("elapsedMs", elapsed);
         return resp;

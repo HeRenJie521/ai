@@ -394,6 +394,7 @@ const testTool = ref<AiToolRow | null>(null)
 // context 类型参数的测试输入值，key = fieldKey
 const testContextInputs = ref<Record<string, string>>({})
 const testRunning = ref(false)
+const testRequestBody = ref('')
 const testResult = ref('')
 const testElapsed = ref<number | null>(null)
 
@@ -422,6 +423,7 @@ function collectContextParams(row: AiToolRow): FlatContextParam[] {
 
 function openTest(row: AiToolRow) {
   testTool.value = row
+  testRequestBody.value = ''
   testResult.value = ''
   testElapsed.value = null
   // 预填默认空值
@@ -435,16 +437,19 @@ function openTest(row: AiToolRow) {
 async function runTest() {
   if (!testTool.value) return
   testRunning.value = true
+  testRequestBody.value = ''
   testResult.value = ''
   testElapsed.value = null
   try {
-    const { result, elapsedMs } = await adminTestTool(testTool.value.id, testContextInputs.value)
-    // 尝试格式化 JSON
-    try {
-      testResult.value = JSON.stringify(JSON.parse(result), null, 2)
-    } catch {
-      testResult.value = result
+    const { result, elapsedMs, requestBody } = await adminTestTool(testTool.value.id, testContextInputs.value)
+    // 尝试格式化入参 JSON
+    if (requestBody) {
+      try { testRequestBody.value = JSON.stringify(JSON.parse(requestBody), null, 2) }
+      catch { testRequestBody.value = requestBody }
     }
+    // 尝试格式化响应 JSON
+    try { testResult.value = JSON.stringify(JSON.parse(result), null, 2) }
+    catch { testResult.value = result }
     testElapsed.value = elapsedMs
   } catch (e: unknown) {
     const err = e as { response?: { data?: { message?: string } }; message?: string }
@@ -475,7 +480,7 @@ function paramCount(row: AiToolRow): number {
 
 const columns: DataTableColumns<AiToolRow> = [
   {
-    title: '工具名称', key: 'name', width: 180, align: 'center', titleAlign: 'center',
+    title: '接口名称', key: 'name', width: 180, align: 'center', titleAlign: 'center',
     render: (row) => h(NText, { code: true, style: 'font-size:12px' }, { default: () => row.name }),
   },
   {
@@ -638,7 +643,17 @@ onMounted(() => { void loadAll() })
         </NButton>
 
         <!-- 结果展示 -->
-        <template v-if="testResult || testElapsed !== null">
+        <template v-if="testResult || testRequestBody || testElapsed !== null">
+          <template v-if="testRequestBody">
+            <NDivider title-placement="left" style="margin:0 0 8px">实际入参</NDivider>
+            <NInput
+              :value="testRequestBody"
+              type="textarea"
+              :rows="5"
+              readonly
+              style="font-family:monospace; font-size:12px; margin-bottom:12px"
+            />
+          </template>
           <NDivider title-placement="left" style="margin:0 0 8px">
             响应结果
             <span v-if="testElapsed !== null" style="font-size:11px; color:#aaa; font-weight:normal; margin-left:8px">
@@ -648,7 +663,7 @@ onMounted(() => { void loadAll() })
           <NInput
             :value="testResult"
             type="textarea"
-            :rows="12"
+            :rows="10"
             readonly
             style="font-family:monospace; font-size:12px"
           />
