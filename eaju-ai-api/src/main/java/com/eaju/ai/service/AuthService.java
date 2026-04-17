@@ -329,7 +329,10 @@ public class AuthService {
         return "登录失败（服务端未识别 DMS 成功标识，请查看接口返回 JSON 与日志）";
     }
 
-    private static String resolvePhone(JsonNode root, String requestPhone) {
+    /**
+     * 从 DMS 登录响应中解析手机号（供 EmbedAuthService 复用）。
+     */
+    public static String resolvePhone(JsonNode root, String requestPhone) {
         JsonNode result = findFieldIgnoreCase(root, "result");
         if (result != null && result.isObject()) {
             String flat = tryPhoneOnObject(result);
@@ -411,7 +414,10 @@ public class AuthService {
         return raw.replaceAll("\\D", "");
     }
 
-    private static String resolveDisplayName(JsonNode root, String fallbackPhone) {
+    /**
+     * 从 DMS 登录响应中解析显示名称（供 EmbedAuthService 复用）。
+     */
+    public static String resolveDisplayName(JsonNode root, String fallbackPhone) {
         JsonNode result = findFieldIgnoreCase(root, "result");
         if (result != null && result.isObject()) {
             for (String key : Arrays.asList("NAME", "name", "nickName", "nickname", "userName", "realName")) {

@@ -1,5 +1,7 @@
 package com.eaju.ai.dto.auth;
 
+import java.util.Map;
+
 public class LoginResponseDto {
 
     private String token;
@@ -89,5 +91,16 @@ public class LoginResponseDto {
 
     public void setIntegrationName(String integrationName) {
         this.integrationName = integrationName;
+    }
+
+    /** 用户上下文字段缓存的 key-value，仅用于 appEmbedLogin 返回给前端测试展示 */
+    private Map<String, Object> userContext;
+
+    public Map<String, Object> getUserContext() {
+        return userContext;
+    }
+
+    public void setUserContext(Map<String, Object> userContext) {
+        this.userContext = userContext;
     }
 }

@@ -53,13 +53,13 @@ public class ToolCallExecutor {
             Map<String, Object> argsMap = parseArgs(toolArgs);
 
             // ── 入参诊断日志 ──────────────────────────────────────────────
-            log.info("[工具调用] 工具={} ({})", tool.getLabel(), tool.getName());
-            log.info("[工具调用] LLM传入参数: {}", toolArgs);
+            log.debug("[工具调用] 工具={} ({})", tool.getLabel(), tool.getName());
+            log.debug("[工具调用] LLM传入参数: {}", toolArgs);
             if (userCtx == null || userCtx.isEmpty()) {
-                log.info("[工具调用] 用户上下文: (空)");
+                log.debug("[工具调用] 用户上下文: (空)");
             } else {
-                log.info("[工具调用] 用户上下文 keys: {}", userCtx.keySet());
-                log.info("[工具调用] 用户上下文 values: {}", userCtx);
+                log.debug("[工具调用] 用户上下文 keys: {}", userCtx.keySet());
+                log.debug("[工具调用] 用户上下文 values: {}", userCtx);
             }
             // ─────────────────────────────────────────────────────────────
 
@@ -99,14 +99,14 @@ public class ToolCallExecutor {
                 }
             }
 
-            log.info("[工具调用] 请求: {} {}", method, url);
-            log.info("[工具调用] 请求体: {}", body);
+            log.debug("[工具调用] 请求: {} {}", method, url);
+            log.debug("[工具调用] 请求体: {}", body);
 
             HttpEntity<String> entity = new HttpEntity<>(body, headers);
             ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.valueOf(method), entity, String.class);
             String result = response.getBody();
-            log.info("[工具调用] 响应状态: {}", response.getStatusCode());
-            log.info("[工具调用] 响应体: {}", result);
+            log.debug("[工具调用] 响应状态: {}", response.getStatusCode());
+            log.debug("[工具调用] 响应体: {}", result);
 
             String rawResult = result != null ? result : "";
 

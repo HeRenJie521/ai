@@ -12,6 +12,7 @@ import com.eaju.ai.persistence.repository.ApiKeyRepository;
 import com.eaju.ai.persistence.repository.UserContextFieldRepository;
 import com.eaju.ai.security.JwtIssueResult;
 import com.eaju.ai.security.JwtTokenProvider;
+import com.fasterxml.jackson.databind.JsonNode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -23,6 +24,7 @@ import java.security.NoSuchAlgorithmException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * 嵌入网站（WEB_EMBED）免密单点登录服务。
@@ -42,25 +44,31 @@ public class EmbedAuthService {
     private final LoginSessionCacheService loginSessionCacheService;
     private final UserContextFieldRepository userContextFieldRepository;
     private final UserContextCacheService userContextCacheService;
+    private final UserContextFieldService userContextFieldService;
+    private final DmsExternalLoginClient dmsExternalLoginClient;
 
     public EmbedAuthService(ApiKeyRepository apiKeyRepository,
                             AiAppRepository aiAppRepository,
                             JwtTokenProvider jwtTokenProvider,
                             LoginSessionCacheService loginSessionCacheService,
                             UserContextFieldRepository userContextFieldRepository,
-                            UserContextCacheService userContextCacheService) {
+                            UserContextCacheService userContextCacheService,
+                            UserContextFieldService userContextFieldService,
+                            DmsExternalLoginClient dmsExternalLoginClient) {
         this.apiKeyRepository = apiKeyRepository;
         this.aiAppRepository = aiAppRepository;
         this.jwtTokenProvider = jwtTokenProvider;
         this.loginSessionCacheService = loginSessionCacheService;
         this.userContextFieldRepository = userContextFieldRepository;
         this.userContextCacheService = userContextCacheService;
+        this.userContextFieldService = userContextFieldService;
+        this.dmsExternalLoginClient = dmsExternalLoginClient;
     }
 
     public LoginResponseDto embedLogin(EmbedLoginRequestDto req) {
         String userId = req.getUserId() != null ? req.getUserId().trim() : "";
         if (!StringUtils.hasText(userId)) {
-            throw new IllegalArgumentException("用户ID不能为空");
+            throw new IllegalArgumentException("用户 ID 不能为空");
         }
 
         ApiKeyEntity integration = apiKeyRepository
@@ -74,7 +82,7 @@ public class EmbedAuthService {
 
         String providedHash = sha256Hex(req.getToken().trim());
         if (!storedHash.equals(providedHash)) {
-            log.warn("EmbedLogin 凭证不匹配: integrationId={}, userId={}", req.getIntegrationId(), userId);
+            log.warn("EmbedLogin 凭证不匹配：integrationId={}, userId={}", req.getIntegrationId(), userId);
             throw new IllegalArgumentException("嵌入凭证不正确");
         }
 
@@ -89,7 +97,7 @@ public class EmbedAuthService {
         snap.setDmsResponseExcerpt("{\"embed\":true,\"integrationId\":" + integration.getId() + "}");
         loginSessionCacheService.save(issued.getJti(), snap);
 
-        log.info("EmbedLogin 成功: integrationId={}, userId={}", integration.getId(), userId);
+        log.info("EmbedLogin 成功：integrationId={}, userId={}", integration.getId(), userId);
 
         LoginResponseDto dto = new LoginResponseDto();
         dto.setToken(issued.getToken());
@@ -105,51 +113,176 @@ public class EmbedAuthService {
     }
 
     /**
-     * 应用管理嵌入登录：无需集成凭证，直接通过 appId 登录。
-     * JWT 中携带 appId claim，ChatService 据此直接加载 AI 应用配置。
+     * 应用管理嵌入登录：通过 DMS 登录接口验证用户，缓存用户数据字段。
+     * <p>
+     * 登录流程：
+     * 1. 调用 DMS appUserLogin 接口验证手机号
+     * 2. 登录失败则抛出异常，前端功能不可用
+     * 3. 登录成功后，根据 user_context_field 配置解析用户数据字段
+     * 4. 将解析后的 key-value 缓存到 Redis（ctx:{jti}）
+     * 5. 返回缓存的 key-value 给前端（仅用于测试展示）
      */
     public LoginResponseDto appEmbedLogin(AppEmbedLoginRequestDto req) {
         String userId = req.getUserId() != null ? req.getUserId().trim() : "";
         if (!StringUtils.hasText(userId)) {
-            throw new IllegalArgumentException("用户ID不能为空");
+            throw new IllegalArgumentException("用户 ID 不能为空");
         }
 
         AiAppEntity app = aiAppRepository.findByIdAndDeletedIsFalse(req.getAppId())
-                .orElseThrow(() -> new IllegalArgumentException("AI应用不存在或已删除"));
+                .orElseThrow(() -> new IllegalArgumentException("AI 应用不存在或已删除"));
 
-        String displayName = StringUtils.hasText(req.getUsername()) ? req.getUsername().trim() : userId;
-        JwtIssueResult issued = jwtTokenProvider.createAppEmbedToken(userId, displayName, app.getId());
+        // 调用 DMS 登录接口（loginType=2 为免密登录）
+        JsonNode dmsResponse;
+        try {
+            dmsResponse = dmsExternalLoginClient.loginWithLoginType(userId, "2");
+        } catch (Exception ex) {
+            log.warn("AppEmbedLogin: DMS 登录失败：appId={}, userId={}, error={}", app.getId(), userId, ex.getMessage());
+            throw new IllegalArgumentException("登录失败：" + ex.getMessage());
+        }
 
+        // 验证 DMS 登录是否成功
+        if (!isDmsLoginSuccess(dmsResponse)) {
+            String errorMsg = extractDmsErrorMessage(dmsResponse);
+            log.warn("AppEmbedLogin: DMS 登录失败：appId={}, userId={}, error={}", app.getId(), userId, errorMsg);
+            throw new IllegalArgumentException("登录失败：" + errorMsg);
+        }
+
+        // 从 DMS 响应中解析手机号和用户名
+        String phoneFromDms = AuthService.resolvePhone(dmsResponse, userId);
+        String displayName = AuthService.resolveDisplayName(dmsResponse, phoneFromDms);
+        if (StringUtils.hasText(req.getUsername())) {
+            displayName = req.getUsername().trim();
+        }
+
+        // 签发 JWT
+        JwtIssueResult issued = jwtTokenProvider.createAppEmbedToken(phoneFromDms, displayName, app.getId());
+
+        // 保存登录会话快照
         LoginSessionSnapshot snap = new LoginSessionSnapshot();
-        snap.setPhone(userId);
+        snap.setPhone(phoneFromDms);
         snap.setUsername(displayName);
         snap.setAdmin(false);
         snap.setIssuedAtEpochMs(System.currentTimeMillis());
-        snap.setDmsResponseExcerpt("{\"embed\":true,\"appId\":" + app.getId() + "}");
+        snap.setDmsResponseExcerpt(dmsResponse.toString());
         loginSessionCacheService.save(issued.getJti(), snap);
 
-        // 将登录数据（userId/username）与 extraContext 合并后存入用户上下文缓存
-        Map<String, Object> loginData = new HashMap<>();
-        loginData.put("userId", userId);
-        loginData.put("username", displayName);
-        if (req.getExtraContext() != null) {
-            loginData.putAll(req.getExtraContext());
+        // 根据用户数据字段配置，从 DMS 登录响应中提取上下文并缓存
+        Map<String, Object> userContext = new HashMap<>();
+        try {
+            userContext = userContextFieldService.extractContext(dmsResponse.toString());
+            // 合并 extraContext
+            if (req.getExtraContext() != null && !req.getExtraContext().isEmpty()) {
+                // 仅将白名单字段存入缓存
+                List<UserContextFieldEntity> allowedFields = userContextFieldRepository.findByEnabledIsTrueOrderByIdAsc();
+                List<String> allowedKeys = allowedFields.stream()
+                        .map(UserContextFieldEntity::getFieldKey)
+                        .collect(Collectors.toList());
+                for (Map.Entry<String, Object> entry : req.getExtraContext().entrySet()) {
+                    if (allowedKeys.contains(entry.getKey())) {
+                        userContext.put(entry.getKey(), entry.getValue());
+                    }
+                }
+            }
+            if (!userContext.isEmpty()) {
+                userContextCacheService.save(issued.getJti(), userContext);
+                log.info("AppEmbedLogin: 缓存用户上下文：jti={} keys={} values={}", issued.getJti(), userContext.keySet(), userContext);
+            }
+        } catch (Exception ex) {
+            log.warn("AppEmbedLogin: 提取用户上下文失败：{}", ex.getMessage());
         }
-        storeUserContext(issued.getJti(), loginData);
 
-        log.info("AppEmbedLogin 成功: appId={}, userId={}", app.getId(), userId);
+        log.info("AppEmbedLogin 成功：appId={}, userId={}, phone={}, username={}", app.getId(), userId, phoneFromDms, displayName);
 
         LoginResponseDto dto = new LoginResponseDto();
         dto.setToken(issued.getToken());
         dto.setJti(issued.getJti());
         dto.setExpiresIn(jwtTokenProvider.getExpirationSeconds());
-        dto.setUserId(userId);
-        dto.setPhone(userId);
+        dto.setUserId(phoneFromDms);
+        dto.setPhone(phoneFromDms);
         dto.setUsername(displayName);
         dto.setAdmin(false);
         dto.setDefaultModel(app.getModelId());
         dto.setIntegrationName(app.getName());
+        // 返回缓存的 key-value，仅用于前端测试展示
+        dto.setUserContext(userContext);
         return dto;
+    }
+
+    /**
+     * 判断 DMS 登录响应是否成功。
+     */
+    private boolean isDmsLoginSuccess(JsonNode root) {
+        if (root == null || root.isNull()) {
+            return false;
+        }
+        // DMS：根节点 returnCode=200（字符串或数字）即登录成功
+        JsonNode returnCodeNode = findFieldIgnoreCase(root, "returnCode");
+        if (returnCodeNode != null && !returnCodeNode.isNull()) {
+            if (returnCodeNode.isTextual()) {
+                String rc = returnCodeNode.asText().trim();
+                return "200".equals(rc) || "0".equals(rc) || "0000".equals(rc);
+            }
+            if (returnCodeNode.isIntegralNumber()) {
+                int rc = returnCodeNode.intValue();
+                return rc == 200 || rc == 0;
+            }
+        }
+        // 兼容其他成功标识
+        if (root.path("success").asBoolean(false)) {
+            return true;
+        }
+        JsonNode codeNode = findFieldIgnoreCase(root, "code");
+        if (codeNode != null && !codeNode.isNull()) {
+            if (codeNode.isIntegralNumber() && (codeNode.intValue() == 0 || codeNode.intValue() == 200)) {
+                return true;
+            }
+            if (codeNode.isTextual()) {
+                String c = codeNode.asText().trim();
+                return "0".equals(c) || "200".equals(c) || "0000".equals(c);
+            }
+        }
+        return false;
+    }
+
+    /**
+     * 提取 DMS 登录失败错误消息。
+     */
+    private String extractDmsErrorMessage(JsonNode root) {
+        if (root == null) {
+            return "登录失败（无响应）";
+        }
+        // 尝试常见错误字段
+        for (String key : new String[]{"info", "msg", "message", "errorMsg", "errMsg", "error", "returnMsg"}) {
+            JsonNode n = findFieldIgnoreCase(root, key);
+            if (n != null && n.isTextual() && StringUtils.hasText(n.asText())) {
+                return n.asText().trim();
+            }
+        }
+        // 尝试 data.errorMsg
+        JsonNode data = findFieldIgnoreCase(root, "data");
+        if (data != null && data.isObject()) {
+            for (String key : new String[]{"errorMsg", "error", "msg", "message"}) {
+                JsonNode n = findFieldIgnoreCase(data, key);
+                if (n != null && n.isTextual() && StringUtils.hasText(n.asText())) {
+                    return n.asText().trim();
+                }
+            }
+        }
+        return "登录失败（未识别 DMS 错误信息）";
+    }
+
+    private static JsonNode findFieldIgnoreCase(JsonNode root, String target) {
+        if (root == null || !root.isObject()) {
+            return null;
+        }
+        java.util.Iterator<String> it = root.fieldNames();
+        while (it.hasNext()) {
+            String name = it.next();
+            if (target.equalsIgnoreCase(name)) {
+                return root.get(name);
+            }
+        }
+        return null;
     }
 
     /**
@@ -187,7 +320,7 @@ public class EmbedAuthService {
         }
 
         userContextCacheService.save(jti, ctx);
-        log.info("存储用户上下文: jti={} keys={} values={}", jti, ctx.keySet(), ctx);
+        log.info("存储用户上下文：jti={} keys={} values={}", jti, ctx.keySet(), ctx);
     }
 
     /**

@@ -71,11 +71,16 @@ export interface AppEmbedLoginPayload {
   extraContext?: Record<string, unknown>
 }
 
+export interface AppEmbedLoginResult extends LoginResult {
+  /** 用户上下文字段缓存的 key-value，仅用于测试展示 */
+  userContext?: Record<string, unknown>
+}
+
 /**
  * 应用管理嵌入登录（应用直接嵌入方式）。
  * 通过 URL 参数 aid/uid/username 无需签名直接登录，JWT 中携带 appId。
  */
-export async function appEmbedLoginApi(payload: AppEmbedLoginPayload): Promise<LoginResult> {
+export async function appEmbedLoginApi(payload: AppEmbedLoginPayload): Promise<AppEmbedLoginResult> {
   const { data } = await http.post<Record<string, unknown>>('/api/embed/app-login', payload)
   const uid = String(data.userId ?? data.phone ?? '')
   return {
@@ -88,5 +93,6 @@ export async function appEmbedLoginApi(payload: AppEmbedLoginPayload): Promise<L
     admin: data.admin === true,
     defaultModel: data.defaultModel ? String(data.defaultModel) : null,
     integrationName: data.integrationName ? String(data.integrationName) : null,
+    userContext: data.userContext as Record<string, unknown> | undefined,
   }
 }

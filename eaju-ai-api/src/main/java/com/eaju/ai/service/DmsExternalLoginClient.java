@@ -80,4 +80,43 @@ public class DmsExternalLoginClient {
             throw new IllegalArgumentException("无法连接登录服务，请稍后重试");
         }
     }
+
+    /**
+     * 使用指定 loginType 登录（用于免密登录场景）。
+     * @param phone 手机号
+     * @param loginType 登录类型（如 "22" 表示免密登录）
+     * @return 登录成功后的 JSON 根节点
+     */
+    public JsonNode loginWithLoginType(String phone, String loginType) throws Exception {
+        ObjectNode payload = objectMapper.createObjectNode();
+        payload.put("phone", phone.trim());
+        payload.put("type", loginType);
+        String dataJson = objectMapper.writeValueAsString(payload);
+
+        URI uri = UriComponentsBuilder.fromHttpUrl(baseUrl)
+                .queryParam("method", loginMethod)
+                .queryParam("data", dataJson)
+                .build()
+                .encode()
+                .toUri();
+
+        try {
+            ResponseEntity<String> response = restTemplate.getForEntity(uri, String.class);
+            if (!response.getStatusCode().is2xxSuccessful() || response.getBody() == null) {
+                throw new IllegalArgumentException("登录服务返回异常状态：" + response.getStatusCodeValue());
+            }
+            String body = response.getBody().trim();
+            if (!StringUtils.hasText(body)) {
+                throw new IllegalArgumentException("登录服务返回空内容");
+            }
+            if (body.startsWith("<")) {
+                log.warn("登录接口返回非 JSON（疑似 HTML）: {}", body.substring(0, Math.min(120, body.length())));
+                throw new IllegalArgumentException("登录服务返回非 JSON");
+            }
+            return objectMapper.readTree(body);
+        } catch (RestClientException ex) {
+            log.warn("调用登录接口失败：{}", ex.toString());
+            throw new IllegalArgumentException("无法连接登录服务，请稍后重试");
+        }
+    }
 }

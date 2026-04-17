@@ -42,6 +42,10 @@ let iid = 0       // WEB_EMBED 集成 ID
 let aid = 0       // 应用管理嵌入 AppID
 const integrationName = ref('AI 助手')
 
+// ---- 用户上下文（用于测试展示） ----
+const userContext = ref<Record<string, unknown> | null>(null)
+const showUserContext = ref(false)
+
 // ---- 聊天核心 ----
 const providers = ref<LlmProviderOption[]>([])
 const selectedProvider = ref('')
@@ -149,10 +153,15 @@ onMounted(async () => {
       authStore.setFromLogin(result)
       if (result.defaultModel) integrationDefaultModel.value = result.defaultModel
       if (result.integrationName) integrationName.value = result.integrationName
+      // 保存用户上下文用于测试展示
+      if (result.userContext && Object.keys(result.userContext).length > 0) {
+        userContext.value = result.userContext
+      }
     } catch (e: unknown) {
       const err = e as { response?: { data?: { message?: string } }; message?: string }
       status.value = 'error'
       errorMsg.value = err.response?.data?.message || err.message || '应用登录失败'
+      // 登录失败时，页面上的功能均不可用
       return
     }
   } else if (iid) {
@@ -717,7 +726,7 @@ function onMdAreaClick(ev: MouseEvent) {
         </div>
       </aside>
 
-      <!-- 顶部栏：仅展示 集成名称 + 历史会话 入口 -->
+      <!-- 顶部栏：仅展示 集成名称 + 历史会话 入口 + 用户上下文测试 -->
       <header class="topbar">
         <button class="icon-btn" title="历史会话" @click="showSidebar = true">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -725,7 +734,38 @@ function onMdAreaClick(ev: MouseEvent) {
           </svg>
         </button>
         <span class="topbar-logo">{{ integrationName }}</span>
+        <!-- 用户上下文测试按钮（仅当有用户数据时显示） -->
+        <button
+          v-if="userContext && Object.keys(userContext).length > 0"
+          class="icon-btn"
+          :class="{ 'icon-btn--active': showUserContext }"
+          title="用户上下文（测试）"
+          @click="showUserContext = !showUserContext"
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+            <circle cx="12" cy="7" r="4"/>
+          </svg>
+        </button>
       </header>
+
+      <!-- 用户上下文展示面板（测试用） -->
+      <div v-if="showUserContext && userContext" class="user-context-panel">
+        <div class="user-context-header">
+          <span class="user-context-title">用户上下文数据（缓存于 Redis）</span>
+          <button class="icon-btn" title="关闭" @click="showUserContext = false">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+        <div class="user-context-list">
+          <div v-for="(value, key) in userContext" :key="key" class="user-context-item">
+            <span class="user-context-key">{{ key }}:</span>
+            <span class="user-context-value">{{ typeof value === 'object' ? JSON.stringify(value) : String(value) }}</span>
+          </div>
+        </div>
+      </div>
 
       <!-- 消息区域 -->
       <div ref="msgScrollRef" class="msg-list" @click="onMdAreaClick">
@@ -779,7 +819,7 @@ function onMdAreaClick(ev: MouseEvent) {
       </div>
 
       <!-- 输入区域 -->
-      <footer class="composer">
+      <footer class="composer" :class="{ 'composer--disabled': status === 'error' }">
         <!-- 语音提示条 -->
         <div v-if="voiceHint" class="voice-hint">
           <span class="voice-hint-dot" :class="{ 'voice-hint-dot--pulse': isRecording }" />
@@ -789,9 +829,9 @@ function onMdAreaClick(ev: MouseEvent) {
           <textarea
             v-model="input"
             class="composer-textarea"
-            :placeholder="isMobile ? '请输入内容...' : '输入消息，Enter 发送，Shift+Enter 换行...'"
+            :placeholder="status === 'error' ? '登录失败，功能不可用' : (isMobile ? '请输入内容...' : '输入消息，Enter 发送，Shift+Enter 换行...')"
             rows="2"
-            :disabled="sending"
+            :disabled="sending || status === 'error'"
             @keydown="handleKeydown"
           />
           <div class="composer-toolbar">
@@ -800,6 +840,7 @@ function onMdAreaClick(ev: MouseEvent) {
               <span class="thinking-label">深度思考</span>
               <button
                 :class="['toggle-btn', { 'toggle-btn--on': thinkingOn }]"
+                :disabled="status === 'error'"
                 @click="thinkingOn = !thinkingOn"
               >
                 <span class="toggle-knob" />
@@ -810,7 +851,7 @@ function onMdAreaClick(ev: MouseEvent) {
             <button
               :class="['voice-btn', { 'voice-btn--recording': isRecording }]"
               :title="isRecording ? '停止录音' : '语音输入'"
-              :disabled="sending"
+              :disabled="sending || status === 'error'"
               @click="toggleVoice"
             >
               <svg v-if="!isRecording" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -826,7 +867,7 @@ function onMdAreaClick(ev: MouseEvent) {
             <!-- 发送按钮 -->
             <button
               class="send-btn"
-              :disabled="sending || !input.trim()"
+              :disabled="sending || !input.trim() || status === 'error'"
               @click="() => sendMessage()"
             >
               <div v-if="sending" class="btn-spinner" />
@@ -1019,6 +1060,35 @@ function onMdAreaClick(ev: MouseEvent) {
   transition: background 0.12s, color 0.12s;
 }
 .icon-btn:hover { background: #f3f4f6; color: #111827; }
+.icon-btn--active { background: #dbeafe; color: #2563eb; }
+
+/* ===== 用户上下文面板 ===== */
+.user-context-panel {
+  background: #fff; border-bottom: 1px solid #e5e7eb;
+  padding: 12px 16px;
+}
+.user-context-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 10px;
+}
+.user-context-title {
+  font-weight: 600; font-size: 13px; color: #111827;
+}
+.user-context-list {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 8px;
+}
+.user-context-item {
+  display: flex; flex-direction: column;
+  padding: 8px 10px; background: #f9fafb;
+  border-radius: 8px; font-size: 12px;
+}
+.user-context-key {
+  font-weight: 600; color: #6b7280; margin-bottom: 4px;
+}
+.user-context-value {
+  color: #111827; word-break: break-all;
+}
 
 /* ===== 消息列表 ===== */
 .msg-list {
@@ -1076,6 +1146,7 @@ details[open] .thinking-summary::before { content: '▼ '; }
 
 /* ===== 输入区域 ===== */
 .composer { flex-shrink: 0; padding: 10px 12px; background: #f5f6f8; }
+.composer--disabled { opacity: 0.6; pointer-events: none; }
 
 /* 语音提示条 */
 .voice-hint {
