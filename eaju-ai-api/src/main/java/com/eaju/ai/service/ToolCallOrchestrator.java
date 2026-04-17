@@ -58,9 +58,9 @@ public class ToolCallOrchestrator {
      * @param onProgress 进度回调，每次调用工具前后发送提示文本；流式场景传入，非流式传 null
      * @return 最终 LLM 文本响应
      */
-    public ChatResponseDto chat(ChatRequestDto request, LlmProviderConfigSnapshot cfg,
-                                List<AiToolEntity> tools, Map<String, Object> userCtx,
-                                Consumer<String> onProgress) {
+    public OrchestratorResult chat(ChatRequestDto request, LlmProviderConfigSnapshot cfg,
+                                   List<AiToolEntity> tools, Map<String, Object> userCtx,
+                                   Consumer<String> onProgress) {
         // 构建 tools 数组（OpenAI function calling 格式）
         ArrayNode toolsArray = buildToolsArray(tools);
 
@@ -123,7 +123,21 @@ public class ToolCallOrchestrator {
             }
         }
 
-        return lastResponse;
+        return new OrchestratorResult(lastResponse, workMessages);
+    }
+
+    /** 工具调用编排结果：最终 LLM 响应 + 完整消息链（含工具调用中间消息） */
+    public static class OrchestratorResult {
+        private final ChatResponseDto response;
+        private final List<ChatMessageDto> workMessages;
+
+        public OrchestratorResult(ChatResponseDto response, List<ChatMessageDto> workMessages) {
+            this.response = response;
+            this.workMessages = workMessages;
+        }
+
+        public ChatResponseDto getResponse() { return response; }
+        public List<ChatMessageDto> getWorkMessages() { return workMessages; }
     }
 
     private ArrayNode buildToolsArray(List<AiToolEntity> tools) {

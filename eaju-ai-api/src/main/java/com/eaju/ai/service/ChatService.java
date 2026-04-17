@@ -12,6 +12,7 @@ import com.eaju.ai.persistence.entity.AiToolEntity;
 import com.eaju.ai.persistence.entity.UserContextFieldEntity;
 import com.eaju.ai.persistence.repository.AiAppRepository;
 import com.eaju.ai.persistence.repository.UserContextFieldRepository;
+import com.eaju.ai.service.ToolCallOrchestrator.OrchestratorResult;
 import com.eaju.ai.session.ChatSessionService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
@@ -24,6 +25,9 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.Closeable;
 import java.io.IOException;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -83,12 +87,13 @@ public class ChatService {
         ChatResponseDto response;
         if (!tools.isEmpty()) {
             Map<String, Object> userCtx = userContextCacheService.get(request.getInternalJti());
-            response = toolCallOrchestrator.chat(forLlm, cfg, tools, userCtx, null);
+            OrchestratorResult result = toolCallOrchestrator.chat(forLlm, cfg, tools, userCtx, null);
+            response = result.getResponse();
+            chatSessionService.appendToolCallToSession(request, result.getWorkMessages(), response);
         } else {
             response = openAiLlmExecutor.chat(forLlm, cfg);
+            chatSessionService.appendAssistantToSession(request, effective, response);
         }
-
-        chatSessionService.appendAssistantToSession(request, effective, response);
         chatRecordService.saveBlockingTurn(request, effective, response, false);
         if (!cfg.resolveThinkingContentWanted(forLlm)) {
             response.setReasoningContent(null);
@@ -124,8 +129,9 @@ public class ChatService {
                 if (!tools.isEmpty()) {
                     Map<String, Object> userCtx = userContextCacheService.get(request.getInternalJti());
                     Consumer<String> onProgress = buildProgressEmitter(emitter);
-                    ChatResponseDto response = toolCallOrchestrator.chat(forLlm, cfg, tools, userCtx, onProgress);
-                    chatSessionService.appendAssistantToSession(request, effective, response);
+                    OrchestratorResult result = toolCallOrchestrator.chat(forLlm, cfg, tools, userCtx, onProgress);
+                    ChatResponseDto response = result.getResponse();
+                    chatSessionService.appendToolCallToSession(request, result.getWorkMessages(), response);
                     chatRecordService.saveBlockingTurn(request, effective, response, false);
                     if (!cfg.resolveThinkingContentWanted(forLlm)) {
                         response.setReasoningContent(null);
@@ -229,11 +235,16 @@ public class ChatService {
             if (sb.length() > 0) sb.append("\n\n");
             sb.append("【限制条件】\n").append(constraints.trim());
         }
+        // 注入当前日期时间，确保 AI 在生成工具参数时使用正确的时间
+        if (sb.length() > 0) sb.append("\n\n");
+        String now = LocalDateTime.now(ZoneId.of("Asia/Shanghai"))
+                .format(DateTimeFormatter.ofPattern("yyyy年MM月dd日 HH:mm:ss（E）"));
+        sb.append("【当前时间】\n").append(now);
+
         // 注入用户信息（非 Object 类型字段），仅在 system prompt 中可见，前端无法获取
         String userInfo = buildUserInfoSection(jti);
         if (StringUtils.hasText(userInfo)) {
-            if (sb.length() > 0) sb.append("\n\n");
-            sb.append(userInfo);
+            sb.append("\n\n").append(userInfo);
         }
         return sb.toString();
     }

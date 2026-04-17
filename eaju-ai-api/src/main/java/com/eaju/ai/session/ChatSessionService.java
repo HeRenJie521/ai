@@ -85,6 +85,31 @@ public class ChatSessionService {
         }
     }
 
+    /**
+     * 工具调用结束后：将完整消息链（含 tool_calls / tool 结果）写入 Redis，使下轮对话能复用工具结果。
+     * 系统消息（role=system）不写入，避免下轮 withSystemPrompt 重复注入时产生重复。
+     */
+    public void appendToolCallToSession(ChatRequestDto original,
+                                        List<ChatMessageDto> workMessages,
+                                        ChatResponseDto response) {
+        if (!StringUtils.hasText(original.getSessionId())) return;
+        try {
+            List<ChatMessageDto> next = new ArrayList<>();
+            for (ChatMessageDto msg : workMessages) {
+                if (!"system".equals(msg.getRole())) {
+                    next.add(msg);
+                }
+            }
+            ChatMessageDto assistant = new ChatMessageDto();
+            assistant.setRole("assistant");
+            assistant.setContent(response.getContent() != null ? response.getContent() : "");
+            next.add(assistant);
+            saveHistory(original.getSessionId().trim(), next);
+        } catch (Exception ex) {
+            log.warn("更新工具调用 Redis 会话失败 sessionId={}: {}", original.getSessionId(), ex.getMessage());
+        }
+    }
+
     public List<ChatMessageDto> loadHistory(String sessionId) {
         try {
             String key = keyPrefix + sessionId;
