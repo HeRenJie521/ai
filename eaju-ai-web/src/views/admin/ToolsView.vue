@@ -6,6 +6,8 @@ import {
   NCard,
   NDataTable,
   NDivider,
+  NDrawer,
+  NDrawerContent,
   NForm,
   NFormItem,
   NInput,
@@ -38,7 +40,10 @@ import {
   type ApiDefinitionSavePayload,
 } from '@/api/adminApiDefinitions'
 import {
+  adminCreateContextField,
+  adminDeleteContextField,
   adminListContextFields,
+  adminUpdateContextField,
   type ContextFieldRow,
 } from '@/api/adminContextFields'
 
@@ -50,6 +55,14 @@ const loading = ref(false)
 const rows = ref<AiToolRow[]>([])
 const apiDefinitions = ref<ApiDefinitionRow[]>([])
 const contextFields = ref<ContextFieldRow[]>([])
+
+// ==================== 接口上下文配置 Drawer ====================
+const showContextDrawer = ref(false)
+const showContextForm = ref(false)
+const contextEditId = ref<number | null>(null)
+const contextForm = ref<ContextFieldRow>({
+  id: 0, fieldKey: '', label: '', fieldType: 'String', parseExpression: '', description: '', enabled: true, createdAt: null,
+})
 
 // ==================== 参数结构 ====================
 interface ChildParam {
@@ -66,8 +79,7 @@ interface ToolParam {
   children: ChildParam[]
 }
 
-// ==================== 系统API配置 Modal ====================
-const showApiModal = ref(false)
+// ==================== 系统API配置 ====================
 const apiLoading = ref(false)
 const apiEditId = ref<number | null>(null)
 const showApiForm = ref(false)
@@ -84,6 +96,12 @@ const httpMethodOptions = [
 const contentTypeOptions = [
   { label: 'application/json', value: 'application/json' },
   { label: 'application/x-www-form-urlencoded', value: 'application/x-www-form-urlencoded' },
+]
+const fieldTypeOptions = [
+  { label: 'String', value: 'String' }, { label: 'Number', value: 'Number' },
+  { label: 'Boolean', value: 'Boolean' }, { label: 'JSONObject', value: 'JSONObject' },
+  { label: 'JSONArray', value: 'JSONArray' }, { label: 'Object', value: 'Object' },
+  { label: 'Array', value: 'Array' },
 ]
 
 const apiColumns: DataTableColumns<ApiDefinitionRow> = [
@@ -111,17 +129,44 @@ const apiColumns: DataTableColumns<ApiDefinitionRow> = [
     render: (row) =>
       h(NSpace, { size: 'small' }, {
         default: () => [
-          h(NButton, { size: 'small', onClick: () => openApiEdit(row) }, { default: () => '编辑' }),
+          h(NButton, { size: 'small', onClick: () => openApiEditInDrawer(row) }, { default: () => '编辑' }),
           h(NButton, { size: 'small', type: 'error', onClick: () => confirmApiDelete(row) }, { default: () => '删除' }),
         ],
       }),
   },
 ]
 
-function openApiModal() {
-  showApiModal.value = true
-  showApiForm.value = false
-}
+const contextColumns: DataTableColumns<ContextFieldRow> = [
+  {
+    title: '字段 Key', key: 'fieldKey', width: 150,
+    render: (row) => h(NText, { code: true, style: 'font-size:12px' }, { default: () => row.fieldKey }),
+  },
+  {
+    title: '显示名', key: 'label', width: 120,
+    render: (row) => h('span', { style: 'font-size:12px' }, { default: () => row.label }),
+  },
+  {
+    title: '字段类型', key: 'fieldType', width: 100,
+    render: (row) => h(NTag, { size: 'small', type: 'info' }, { default: () => row.fieldType || 'String' }),
+  },
+  {
+    title: '解析逻辑', key: 'parseExpression', ellipsis: { tooltip: true },
+    render: (row) => h('span', { style: 'font-size:11px; color:#666; font-family:monospace' }, { default: () => row.parseExpression || '-' }),
+  },
+  {
+    title: '状态', key: 'enabled', width: 70,
+    render: (row) => h(NTag, { size: 'small', type: row.enabled ? 'success' : 'default' }, { default: () => (row.enabled ? '启用' : '禁用') }),
+  },
+  {
+    title: '操作', key: 'actions', width: 140, fixed: 'right',
+    render: (row) => h(NSpace, { size: 'small' }, {
+      default: () => [
+        h(NButton, { size: 'small', onClick: () => openContextEdit(row) }, { default: () => '编辑' }),
+        h(NButton, { size: 'small', type: 'error', onClick: () => handleContextDelete(row) }, { default: () => '删除' }),
+      ],
+    }),
+  },
+]
 
 function openApiCreate() {
   apiEditId.value = null
@@ -129,10 +174,84 @@ function openApiCreate() {
   showApiForm.value = true
 }
 
-function openApiEdit(row: ApiDefinitionRow) {
-  apiEditId.value = row.id
-  apiForm.value = { systemName: row.systemName, requestUrl: row.requestUrl, httpMethod: row.httpMethod, contentType: row.contentType, remark: row.remark ?? '' }
+function openApiEditInDrawer(row?: ApiDefinitionRow) {
+  if (row) {
+    apiEditId.value = row.id
+    apiForm.value = { systemName: row.systemName, requestUrl: row.requestUrl, httpMethod: row.httpMethod, contentType: row.contentType, remark: row.remark ?? '' }
+  } else {
+    apiEditId.value = null
+    apiForm.value = { systemName: '', requestUrl: '', httpMethod: 'POST', contentType: 'application/json', remark: '' }
+  }
   showApiForm.value = true
+}
+
+// ==================== 系统API配置 Drawer ====================
+const showApiDrawer = ref(false)
+
+function openApiModal() {
+  showApiDrawer.value = true
+  showApiForm.value = false
+}
+
+// ==================== 接口上下文配置方法 ====================
+// @ts-ignore - 在模板中使用
+function openContextDrawer() {
+  showContextDrawer.value = true
+  showContextForm.value = false
+}
+
+function openContextCreate() {
+  contextEditId.value = null
+  contextForm.value = { id: 0, fieldKey: '', label: '', fieldType: 'String', parseExpression: '', description: '', enabled: true, createdAt: null }
+  showContextForm.value = true
+}
+
+function openContextEdit(row: ContextFieldRow) {
+  contextEditId.value = row.id
+  contextForm.value = { ...row }
+  showContextForm.value = true
+}
+
+async function handleContextSave() {
+  if (!contextForm.value.fieldKey.trim()) { message.warning('请填写字段 Key'); return }
+  if (!contextForm.value.label.trim()) { message.warning('请填写显示名'); return }
+  try {
+    const payload = {
+      fieldKey: contextForm.value.fieldKey.trim(),
+      label: contextForm.value.label.trim(),
+      fieldType: contextForm.value.fieldType || 'String',
+      parseExpression: contextForm.value.parseExpression?.trim() || undefined,
+      description: contextForm.value.description?.trim() || undefined,
+      enabled: contextForm.value.enabled,
+    }
+    if (contextEditId.value && contextEditId.value > 0) {
+      await adminUpdateContextField(contextEditId.value, payload)
+      message.success('已更新')
+    } else {
+      await adminCreateContextField(payload)
+      message.success('已创建')
+    }
+    showContextForm.value = false
+    // 重新加载
+    const fieldsRes = await adminListContextFields()
+    contextFields.value = fieldsRes
+  } catch (e: unknown) {
+    const err = e as { response?: { data?: { message?: string } }; message?: string }
+    message.error(err.response?.data?.message || err.message || '保存失败')
+  }
+}
+
+async function handleContextDelete(row: ContextFieldRow) {
+  try {
+    await adminDeleteContextField(row.id)
+    message.success('已删除')
+    // 重新加载
+    const fieldsRes = await adminListContextFields()
+    contextFields.value = fieldsRes
+  } catch (e: unknown) {
+    const err = e as { response?: { data?: { message?: string } }; message?: string }
+    message.error(err.response?.data?.message || err.message || '删除失败')
+  }
 }
 
 async function handleApiSave() {
@@ -286,6 +405,7 @@ const showRespModal = ref(false)
 const respToolId = ref<number | null>(null)
 const respToolName = ref('')
 const respSaving = ref(false)
+const respParams = ref<ResponseParam[]>([])
 
 interface ResponseParam {
   key: string
@@ -295,15 +415,6 @@ interface ResponseParam {
   children: ResponseParam[]
 }
 
-const fieldTypeOptions = [
-  { label: 'String', value: 'String' },
-  { label: 'Number', value: 'Number' },
-  { label: 'Boolean', value: 'Boolean' },
-  { label: 'Object', value: 'Object' },
-  { label: 'Array', value: 'Array' },
-]
-
-const respParams = ref<ResponseParam[]>([])
 
 function newRespParam(): ResponseParam {
   return { key: '', label: '', fieldType: 'String', description: '', children: [] }
@@ -473,6 +584,7 @@ onMounted(() => { void loadAll() })
       <template #header-extra>
         <NSpace>
           <NButton @click="openApiModal">系统API配置</NButton>
+          <NButton @click="openContextDrawer">接口上下文配置</NButton>
           <NButton type="primary" @click="openCreate">+ 新建接口</NButton>
         </NSpace>
       </template>
@@ -480,53 +592,6 @@ onMounted(() => { void loadAll() })
         <NDataTable :columns="columns" :data="rows" :bordered="false" size="small" />
       </NSpin>
     </NCard>
-
-    <!-- ===== 系统API配置 ===== -->
-    <NModal v-model:show="showApiModal" preset="card" title="系统API配置" style="width:860px" :mask-closable="false">
-      <template #header-extra>
-        <NButton size="small" type="primary" @click="openApiCreate">+ 新建接口</NButton>
-      </template>
-
-      <!-- 列表 -->
-      <NSpin :show="apiLoading">
-        <NDataTable :columns="apiColumns" :data="apiDefinitions" :bordered="false" size="small" />
-      </NSpin>
-
-      <!-- 新建 / 编辑表单 -->
-      <template v-if="showApiForm">
-        <NDivider style="margin:16px 0 12px" />
-        <div style="font-size:14px; font-weight:600; margin-bottom:12px; color:#333">
-          {{ apiEditId ? '编辑接口' : '新建接口' }}
-        </div>
-        <NForm :model="apiForm" label-placement="left" label-width="90px" size="small">
-          <NFormItem label="系统名称" required>
-            <NInput v-model:value="apiForm.systemName" placeholder="如：请假系统" />
-          </NFormItem>
-          <NFormItem label="请求路径" required>
-            <NInput v-model:value="apiForm.requestUrl" placeholder="完整 URL，如 https://api.example.com/leave" />
-          </NFormItem>
-          <NFormItem label="请求方式" required>
-            <NSelect v-model:value="apiForm.httpMethod" :options="httpMethodOptions" style="width:120px" />
-          </NFormItem>
-          <NFormItem label="参数格式" required>
-            <NSelect v-model:value="apiForm.contentType" :options="contentTypeOptions" style="width:100%" />
-          </NFormItem>
-          <NFormItem label="备注">
-            <NInput v-model:value="apiForm.remark" placeholder="可选说明" />
-          </NFormItem>
-        </NForm>
-        <NSpace justify="end" style="margin-top:4px">
-          <NButton size="small" @click="showApiForm = false">取消</NButton>
-          <NButton size="small" type="primary" @click="handleApiSave">保存</NButton>
-        </NSpace>
-      </template>
-
-      <template #footer>
-        <NSpace justify="end">
-          <NButton @click="showApiModal = false">关闭</NButton>
-        </NSpace>
-      </template>
-    </NModal>
 
     <!-- ===== 新建 / 编辑接口 ===== -->
     <NModal v-model:show="showModal" preset="card" :title="editId ? '编辑接口' : '新建接口'" style="width:620px" :mask-closable="false">
@@ -729,5 +794,90 @@ onMounted(() => { void loadAll() })
         </NSpace>
       </template>
     </NModal>
+
+    <!-- ===== 接口上下文配置 Drawer ===== -->
+    <NDrawer v-model:show="showContextDrawer" placement="right" :width="900">
+      <NDrawerContent title="接口上下文配置" :native-scrollbar="false" closable>
+        <!-- 操作栏 -->
+        <div style="display:flex; justify-content:flex-end; margin-bottom:12px">
+          <NButton type="primary" @click="openContextCreate">+ 新建上下文字段</NButton>
+        </div>
+
+        <!-- 列表 -->
+        <NDataTable :columns="contextColumns" :data="contextFields" :bordered="false" size="small" />
+
+      <!-- 新建/编辑表单 Modal -->
+      <NModal v-model:show="showContextForm" preset="card" :title="contextEditId ? '编辑上下文字段' : '新建上下文字段'" style="width:680px" :mask-closable="false">
+        <NForm :model="contextForm" label-placement="left" label-width="110px">
+          <NFormItem label="字段 Key" required>
+            <NInput v-model:value="contextForm.fieldKey" placeholder="如：esusMobile" :disabled="!!contextEditId && contextEditId > 0" />
+          </NFormItem>
+          <NFormItem label="显示名" required>
+            <NInput v-model:value="contextForm.label" placeholder="如：用户手机号" />
+          </NFormItem>
+          <NFormItem label="字段类型" required>
+            <NSelect v-model:value="contextForm.fieldType" :options="fieldTypeOptions" style="width:200px" />
+          </NFormItem>
+          <NFormItem label="解析逻辑">
+            <NInput v-model:value="contextForm.parseExpression" type="textarea" :rows="3" placeholder='如：JSON.parseObject("").getJSONObject("data").getString("esusMobile")' />
+          </NFormItem>
+          <NFormItem label="说明">
+            <NInput v-model:value="contextForm.description" type="textarea" :rows="3" placeholder="如：用户手机号，系统唯一" />
+          </NFormItem>
+          <NFormItem label="状态">
+            <NSwitch v-model:value="contextForm.enabled" />
+          </NFormItem>
+        </NForm>
+        <template #footer>
+          <NSpace justify="end">
+            <NButton @click="showContextForm = false">取消</NButton>
+            <NButton type="primary" @click="handleContextSave">保存</NButton>
+          </NSpace>
+        </template>
+      </NModal>
+      </NDrawerContent>
+    </NDrawer>
+
+    <!-- ===== 系统API配置 Drawer ===== -->
+    <NDrawer v-model:show="showApiDrawer" placement="right" :width="900">
+      <NDrawerContent title="系统API配置" :native-scrollbar="false" closable>
+        <!-- 操作栏 -->
+        <div style="display:flex; justify-content:flex-end; margin-bottom:12px">
+          <NButton type="primary" @click="openApiCreate">+ 新建接口</NButton>
+        </div>
+
+        <!-- 列表 -->
+        <NSpin :show="apiLoading">
+          <NDataTable :columns="apiColumns" :data="apiDefinitions" :bordered="false" size="small" />
+        </NSpin>
+
+        <!-- 新建/编辑表单 Modal -->
+        <NModal v-model:show="showApiForm" preset="card" :title="apiEditId ? '编辑接口' : '新建接口'" style="width:680px" :mask-closable="false">
+          <NForm :model="apiForm" label-placement="left" label-width="90px" size="small">
+            <NFormItem label="系统名称" required>
+              <NInput v-model:value="apiForm.systemName" placeholder="如：请假系统" />
+            </NFormItem>
+            <NFormItem label="请求路径" required>
+              <NInput v-model:value="apiForm.requestUrl" placeholder="完整 URL，如 https://api.example.com/leave" />
+            </NFormItem>
+            <NFormItem label="请求方式" required>
+              <NSelect v-model:value="apiForm.httpMethod" :options="httpMethodOptions" style="width:120px" />
+            </NFormItem>
+            <NFormItem label="参数格式" required>
+              <NSelect v-model:value="apiForm.contentType" :options="contentTypeOptions" style="width:100%" />
+            </NFormItem>
+            <NFormItem label="备注">
+              <NInput v-model:value="apiForm.remark" placeholder="可选说明" />
+            </NFormItem>
+          </NForm>
+          <template #footer>
+            <NSpace justify="end">
+              <NButton size="small" @click="showApiForm = false">取消</NButton>
+              <NButton size="small" type="primary" @click="handleApiSave">保存</NButton>
+            </NSpace>
+          </template>
+        </NModal>
+      </NDrawerContent>
+    </NDrawer>
   </div>
 </template>

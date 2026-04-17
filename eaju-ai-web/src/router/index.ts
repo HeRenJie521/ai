@@ -57,12 +57,6 @@ const router = createRouter({
       meta: { auth: true, admin: true },
     },
     {
-      path: '/settings/context-fields',
-      name: 'settings-context-fields',
-      component: () => import('@/views/admin/SystemSettingsView.vue'),
-      meta: { auth: true, admin: true },
-    },
-    {
       path: '/settings',
       redirect: '/settings/llm',
     },

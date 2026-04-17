@@ -247,7 +247,7 @@ onMounted(() => {
   <div>
     <NCard :bordered="false" class="card" title="用户数据管理">
       <template #header-extra>
-        <NButton type="primary" @click="openCreate">+ 新建字段</NButton>
+        <NButton type="primary" size="large" @click="openCreate">+ 新建字段</NButton>
       </template>
       <div style="color:#888; font-size:12px; margin-bottom:12px;">
         配置从 DMS 登录响应中提取的字段，登录时自动解析并缓存，可在工具调用时通过引用注入请求参数。
@@ -284,7 +284,7 @@ onMounted(() => {
         <NFormItem label="解析路径" required>
           <div style="width:100%">
             <div style="display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin-bottom:8px;">
-              <template v-for="(seg, i) in parseSegments" :key="i">
+              <template v-for="(_, i) in parseSegments" :key="i">
                 <span v-if="i > 0" style="color:#aaa; font-size:13px; font-weight:bold">.</span>
                 <div style="display:flex; align-items:center; gap:2px">
                   <NInput
