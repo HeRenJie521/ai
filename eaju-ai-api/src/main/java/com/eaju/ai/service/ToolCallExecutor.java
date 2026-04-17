@@ -194,6 +194,10 @@ public class ToolCallExecutor {
         if ("context".equals(valueSource)) {
             String fieldKey = (String) def.get("fieldKey");
             return (userCtx != null && StringUtils.hasText(fieldKey)) ? userCtx.get(fieldKey) : null;
+        } else if ("llm".equals(valueSource)) {
+            // LLM参数：值由 LLM 根据 paramsSchemaJson 提供，从 argsMap 中按参数名取值
+            String key = (String) def.get("key");
+            return StringUtils.hasText(key) ? argsMap.get(key) : null;
         } else if ("response".equals(valueSource)) {
             // 出参传递：由应用编排层在运行时注入，工具配置阶段跳过
             return null;

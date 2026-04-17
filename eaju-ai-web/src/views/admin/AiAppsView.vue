@@ -18,6 +18,7 @@ import {
   NTabPane,
   NText,
   NSelect,
+  NSwitch,
   useDialog,
   useMessage,
 } from 'naive-ui'
@@ -37,6 +38,14 @@ import { listLlmProviders, type LlmProviderOption } from '@/api/llmProviders'
 import type { ChatMessage } from '@/api/conversations'
 import { useAuthStore } from '@/stores/auth'
 import { renderChatMarkdown } from '@/utils/chatMarkdown'
+import {
+  adminCreateContextField,
+  adminDeleteContextField,
+  adminListContextFields,
+  adminTestContextField,
+  adminUpdateContextField,
+  type ContextFieldRow,
+} from '@/api/adminContextFields'
 
 const message = useMessage()
 const dialog = useDialog()
@@ -44,6 +53,187 @@ const authStore = useAuthStore()
 
 const loading = ref(false)
 const rows = ref<AiAppRow[]>([])
+
+// ==================== 用户数据管理（原接口上下文配置） ====================
+const showContextDrawer = ref(false)
+const showContextForm = ref(false)
+const contextEditId = ref<number | null>(null)
+const contextForm = ref<ContextFieldRow>({
+  id: 0, fieldKey: '', label: '', fieldType: 'String', parseExpression: null, description: null, enabled: true, createdAt: null,
+})
+
+// 解析路径分段（用于分层级输入框）
+const parseExpressionSegments = ref<string[]>([])
+
+function initParseExpressionSegments() {
+  const expr = contextForm.value.parseExpression
+  if (!expr) {
+    parseExpressionSegments.value = []
+  } else {
+    parseExpressionSegments.value = expr.split('.').filter(s => s.trim() !== '')
+  }
+}
+
+function updateParseExpression() {
+  contextForm.value.parseExpression = parseExpressionSegments.value.filter(s => s.trim() !== '').join('.')
+}
+
+function addParseExpressionSegment() {
+  parseExpressionSegments.value.push('')
+}
+
+function removeParseExpressionSegment() {
+  parseExpressionSegments.value.pop()
+  updateParseExpression()
+}
+
+const fieldTypeOptions = [
+  { label: 'String', value: 'String' }, { label: 'Number', value: 'Number' },
+  { label: 'Boolean', value: 'Boolean' }, { label: 'Object', value: 'Object' },
+  { label: 'Array', value: 'Array' },
+]
+
+const contextFields = ref<ContextFieldRow[]>([])
+
+const contextColumns: DataTableColumns<ContextFieldRow> = [
+  {
+    title: '字段 Key', key: 'fieldKey', width: 150,
+    render: (row) => h(NText, { code: true, style: 'font-size:12px' }, { default: () => row.fieldKey }),
+  },
+  {
+    title: '显示名', key: 'label', width: 120,
+    render: (row) => h('span', { style: 'font-size:12px' }, { default: () => row.label }),
+  },
+  {
+    title: '字段类型', key: 'fieldType', width: 100,
+    render: (row) => h(NTag, { size: 'small', type: 'info' }, { default: () => row.fieldType || 'String' }),
+  },
+  {
+    title: '解析逻辑', key: 'parseExpression', ellipsis: { tooltip: true },
+    render: (row) => h('span', { style: 'font-size:11px; color:#666; font-family:monospace' }, { default: () => row.parseExpression || '-' }),
+  },
+  {
+    title: '状态', key: 'enabled', width: 70,
+    render: (row) => h(NTag, { size: 'small', type: row.enabled ? 'success' : 'default' }, { default: () => (row.enabled ? '启用' : '禁用') }),
+  },
+  {
+    title: '操作', key: 'actions', width: 220, fixed: 'right',
+    render: (row) => h(NSpace, { size: 4, wrap: false }, {
+      default: () => [
+        h(NButton, { size: 'small', onClick: () => openContextEdit(row) }, { default: () => '编辑' }),
+        h(NButton, { size: 'small', type: 'info', ghost: true, onClick: () => openContextTest(row) }, { default: () => '测试运行' }),
+        h(NButton, { size: 'small', type: 'error', onClick: () => handleContextDelete(row) }, { default: () => '删除' }),
+      ],
+    }),
+  },
+]
+
+// 上下文字段测试
+const showCtxTestModal = ref(false)
+const ctxTestField = ref<ContextFieldRow | null>(null)
+const ctxTestRunning = ref(false)
+const ctxTestFound = ref<boolean | null>(null)
+const ctxTestValue = ref<string | null>(null)
+const ctxTestError = ref<string | null>(null)
+const ctxTestExpression = ref('')
+
+function openContextTest(row: ContextFieldRow) {
+  ctxTestField.value = row
+  ctxTestFound.value = null
+  ctxTestValue.value = null
+  ctxTestError.value = null
+  ctxTestExpression.value = row.parseExpression || ''
+  showCtxTestModal.value = true
+}
+
+async function runContextTest() {
+  if (!ctxTestField.value) return
+  ctxTestRunning.value = true
+  ctxTestFound.value = null
+  ctxTestValue.value = null
+  ctxTestError.value = null
+  try {
+    const res = await adminTestContextField(ctxTestField.value.id)
+    ctxTestFound.value = res.found
+    ctxTestValue.value = res.value
+    ctxTestExpression.value = res.expression
+    if (res.error) ctxTestError.value = res.error
+  } catch (e: unknown) {
+    const err = e as { response?: { data?: { message?: string } }; message?: string }
+    ctxTestError.value = err.response?.data?.message || err.message || '请求失败'
+  } finally {
+    ctxTestRunning.value = false
+  }
+}
+
+function openContextDrawer() {
+  showContextDrawer.value = true
+  showContextForm.value = false
+  void loadContextFields()
+}
+
+function openContextCreate() {
+  contextEditId.value = null
+  contextForm.value = { id: 0, fieldKey: '', label: '', fieldType: 'String', parseExpression: null, description: null, enabled: true, createdAt: null }
+  parseExpressionSegments.value = []
+  showContextForm.value = true
+}
+
+function openContextEdit(row: ContextFieldRow) {
+  contextEditId.value = row.id
+  contextForm.value = { ...row }
+  initParseExpressionSegments()
+  showContextForm.value = true
+}
+
+async function handleContextSave() {
+  if (!contextForm.value.fieldKey.trim()) { message.warning('请填写字段 Key'); return }
+  if (!contextForm.value.label.trim()) { message.warning('请填写显示名'); return }
+  try {
+    updateParseExpression()
+    const payload = {
+      fieldKey: contextForm.value.fieldKey.trim(),
+      label: contextForm.value.label.trim(),
+      fieldType: contextForm.value.fieldType || 'String',
+      parseExpression: contextForm.value.parseExpression?.trim() || undefined,
+      description: contextForm.value.description?.trim() || undefined,
+      enabled: contextForm.value.enabled,
+    }
+    if (contextEditId.value && contextEditId.value > 0) {
+      await adminUpdateContextField(contextEditId.value, payload)
+      message.success('已更新')
+    } else {
+      await adminCreateContextField(payload)
+      message.success('已创建')
+    }
+    showContextForm.value = false
+    await loadContextFields()
+  } catch (e: unknown) {
+    const err = e as { response?: { data?: { message?: string } }; message?: string }
+    message.error(err.response?.data?.message || err.message || '保存失败')
+  }
+}
+
+async function handleContextDelete(row: ContextFieldRow) {
+  try {
+    await adminDeleteContextField(row.id)
+    message.success('已删除')
+    await loadContextFields()
+  } catch (e: unknown) {
+    const err = e as { response?: { data?: { message?: string } }; message?: string }
+    message.error(err.response?.data?.message || err.message || '删除失败')
+  }
+}
+
+async function loadContextFields() {
+  try {
+    const fieldsRes = await adminListContextFields()
+    contextFields.value = fieldsRes
+  } catch (e: unknown) {
+    const err = e as { response?: { data?: { message?: string } }; message?: string }
+    message.error(err.response?.data?.message || err.message || '加载失败')
+  }
+}
 
 // ---- 模型选项 ----
 const llmProviders = ref<LlmProviderOption[]>([])
@@ -157,6 +347,7 @@ onMounted(() => {
   void load()
   void loadLlmProviders()
   void loadAllTools()
+  void loadContextFields()
 })
 
 // ---------- 新建 ----------
@@ -355,10 +546,18 @@ const embedUrl = computed(() => {
   const aid = embedRow.value?.id ?? ''
   const params = new URLSearchParams()
   params.set('aid', String(aid))
-  params.set('userid', authStore.userId || '')
+  params.set('uid', authStore.userId || '')
   params.set('username', authStore.username || '')
   return `${embedOrigin.value}/embed?${params.toString()}`
 })
+
+function previewUrl(row: AiAppRow): string {
+  const params = new URLSearchParams()
+  params.set('aid', String(row.id))
+  params.set('uid', authStore.userId || '')
+  params.set('username', authStore.username || '')
+  return `${window.location.origin}/embed?${params.toString()}`
+}
 
 const embedCodePc = computed(() => {
   return `<iframe
@@ -505,7 +704,7 @@ const columns: DataTableColumns<AiAppRow> = [
   {
     title: '操作',
     key: 'actions',
-    width: 320,
+    width: 380,
     render: (r) =>
       h(NSpace, { size: 8, wrap: false, justify: 'center' }, () => [
         h(NButton, { size: 'small', onClick: () => openUsage(r) }, { default: () => '用量' }),
@@ -514,6 +713,11 @@ const columns: DataTableColumns<AiAppRow> = [
           NButton,
           { size: 'small', type: 'info', ghost: true, onClick: () => openPrompt(r) },
           { default: () => 'Prompt' },
+        ),
+        h(
+          NButton,
+          { size: 'small', type: 'success', ghost: true, onClick: () => window.open(previewUrl(r), '_blank') },
+          { default: () => '预览' },
         ),
         h(
           NButton,
@@ -534,7 +738,10 @@ const columns: DataTableColumns<AiAppRow> = [
   <div class="inner">
     <n-card :bordered="false" class="card" title="应用管理">
       <template #header-extra>
-        <n-button type="primary" @click="openCreate">+ 新建应用</n-button>
+        <n-space>
+          <n-button @click="openContextDrawer">用户数据</n-button>
+          <n-button type="primary" @click="openCreate">+ 新建应用</n-button>
+        </n-space>
       </template>
       <n-spin :show="loading">
         <n-data-table
@@ -552,9 +759,16 @@ const columns: DataTableColumns<AiAppRow> = [
     v-model:show="showCreate"
     preset="card"
     title="新建应用"
-    style="width: min(640px, 96vw)"
+    style="width: min(800px, 96vw)"
     :mask-closable="false"
   >
+    <template #header>
+      <div style="display:flex; align-items:center; justify-content:space-between; width:100%">
+        <n-button size="small" type="info" ghost @click="openContextDrawer">用户数据</n-button>
+        <span style="font-size:16px; font-weight:600">新建应用</span>
+        <span style="width:60px"></span>
+      </div>
+    </template>
     <n-form label-placement="top">
       <n-form-item label="应用名称" required>
         <n-input v-model:value="createForm.name" placeholder="如 官网客服助手" />
@@ -617,10 +831,17 @@ const columns: DataTableColumns<AiAppRow> = [
     :show="editId != null"
     preset="card"
     title="编辑应用"
-    style="width: min(640px, 96vw)"
+    style="width: min(800px, 96vw)"
     :mask-closable="false"
     @update:show="(v: boolean) => { if (!v) editId = null }"
   >
+    <template #header>
+      <div style="display:flex; align-items:center; justify-content:space-between; width:100%">
+        <n-button size="small" type="info" ghost @click="openContextDrawer">用户数据</n-button>
+        <span style="font-size:16px; font-weight:600">编辑应用</span>
+        <span style="width:60px"></span>
+      </div>
+    </template>
     <n-form v-if="editId != null" label-placement="top">
       <n-form-item label="应用名称" required>
         <n-input v-model:value="editForm.name" />
@@ -836,6 +1057,99 @@ const columns: DataTableColumns<AiAppRow> = [
       </n-space>
     </template>
   </n-modal>
+
+  <!-- ============ 用户数据管理 Drawer ============ -->
+  <n-drawer v-model:show="showContextDrawer" placement="right" :width="900">
+    <n-drawer-content title="用户数据" :native-scrollbar="false" closable>
+      <!-- 操作栏 -->
+      <div style="display:flex; justify-content:flex-end; margin-bottom:12px">
+        <n-button type="primary" @click="openContextCreate">+ 新建用户数据字段</n-button>
+      </div>
+
+      <!-- 列表 -->
+      <n-data-table :columns="contextColumns" :data="contextFields" :bordered="false" size="small" />
+
+      <!-- 新建/编辑表单 Modal -->
+      <n-modal v-model:show="showContextForm" preset="card" :title="contextEditId ? '编辑用户数据字段' : '新建用户数据字段'" style="width:680px" :mask-closable="false">
+        <n-form :model="contextForm" label-placement="left" label-width="110px">
+          <n-form-item label="字段 Key" required>
+            <n-input v-model:value="contextForm.fieldKey" placeholder="如：esusMobile" :disabled="!!contextEditId && contextEditId > 0" />
+          </n-form-item>
+          <n-form-item label="显示名" required>
+            <n-input v-model:value="contextForm.label" placeholder="如：用户手机号" />
+          </n-form-item>
+          <n-form-item label="字段类型" required>
+            <n-select v-model:value="contextForm.fieldType" :options="fieldTypeOptions" style="width:200px" />
+          </n-form-item>
+          <n-form-item label="解析逻辑">
+            <div style="display:flex; flex-wrap:wrap; gap:6px; align-items:center">
+              <template v-for="(_seg, index) in parseExpressionSegments" :key="index">
+                <n-input v-model:value="parseExpressionSegments[index]" placeholder="路径段" style="width:140px" @blur="updateParseExpression" @keydown.enter.prevent="updateParseExpression" />
+                <span v-if="index < parseExpressionSegments.length - 1" style="color:#999">.</span>
+              </template>
+              <n-button size="small" type="primary" @click="addParseExpressionSegment">+</n-button>
+              <n-button v-if="parseExpressionSegments.length > 0" size="small" type="error" @click="removeParseExpressionSegment">-</n-button>
+            </div>
+          </n-form-item>
+          <n-form-item label="说明">
+            <n-input v-model:value="contextForm.description" type="textarea" :rows="3" placeholder="如：用户手机号，系统唯一" />
+          </n-form-item>
+          <n-form-item label="状态">
+            <n-switch v-model:value="contextForm.enabled" />
+          </n-form-item>
+        </n-form>
+        <template #footer>
+          <n-space justify="end">
+            <n-button @click="showContextForm = false">取消</n-button>
+            <n-button type="primary" @click="handleContextSave">保存</n-button>
+          </n-space>
+        </template>
+      </n-modal>
+
+      <!-- 用户数据字段测试 Modal -->
+      <n-modal v-model:show="showCtxTestModal" preset="card" :title="`测试运行 · ${ctxTestField?.label || ctxTestField?.fieldKey || ''}`" style="width:520px" :mask-closable="false">
+        <template v-if="ctxTestField">
+          <div style="font-size:12px; color:#888; margin-bottom:12px; line-height:1.8">
+            <div>字段 Key：<span style="font-family:monospace; color:#333">{{ ctxTestField.fieldKey }}</span></div>
+            <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin-top:4px">
+              <span>解析路径：</span>
+              <template v-if="ctxTestField.parseExpression">
+                <template v-for="(seg, i) in ctxTestField.parseExpression.split('.')" :key="i">
+                  <span v-if="i > 0" style="color:#aaa">→</span>
+                  <n-tag size="tiny" style="font-family:monospace">{{ seg }}</n-tag>
+                </template>
+              </template>
+              <span v-else style="color:#bbb">未配置路径</span>
+            </div>
+          </div>
+          <n-button type="primary" :loading="ctxTestRunning" style="width:100%; margin-bottom:14px" @click="runContextTest">
+            {{ ctxTestRunning ? '解析中...' : '从当前登录数据中提取' }}
+          </n-button>
+          <template v-if="ctxTestFound !== null || ctxTestError">
+            <n-divider title-placement="left" style="margin:0 0 10px">解析结果</n-divider>
+            <div v-if="ctxTestError" style="background:#fff2f0; border:1px solid #ffccc7; border-radius:6px; padding:10px 14px; font-size:13px; color:#cf1322">
+              {{ ctxTestError }}
+            </div>
+            <template v-else-if="ctxTestFound">
+              <div style="background:#f6ffed; border:1px solid #b7eb8f; border-radius:6px; padding:10px 14px">
+                <div style="font-size:12px; color:#52c41a; margin-bottom:6px; font-weight:600">✓ 解析成功</div>
+                <div style="font-size:12px; color:#555; margin-bottom:4px">提取到的值：</div>
+                <n-input :value="ctxTestValue ?? ''" type="textarea" :rows="4" readonly style="font-family:monospace; font-size:12px" />
+              </div>
+            </template>
+            <div v-else style="background:#fffbe6; border:1px solid #ffe58f; border-radius:6px; padding:10px 14px; font-size:13px; color:#d46b08">
+              ⚠ 路径 <span style="font-family:monospace">{{ ctxTestExpression }}</span> 在登录数据中未找到对应值，请检查路径是否正确
+            </div>
+          </template>
+        </template>
+        <template #footer>
+          <n-space justify="end">
+            <n-button @click="showCtxTestModal = false">关闭</n-button>
+          </n-space>
+        </template>
+      </n-modal>
+    </n-drawer-content>
+  </n-drawer>
 </template>
 
 <style scoped>

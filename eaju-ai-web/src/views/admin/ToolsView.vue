@@ -6,8 +6,6 @@ import {
   NCard,
   NDataTable,
   NDivider,
-  NDrawer,
-  NDrawerContent,
   NForm,
   NFormItem,
   NInput,
@@ -38,11 +36,7 @@ import {
   type ApiDefinitionSavePayload,
 } from '@/api/adminApiDefinitions'
 import {
-  adminCreateContextField,
-  adminDeleteContextField,
   adminListContextFields,
-  adminTestContextField,
-  adminUpdateContextField,
   type ContextFieldRow,
 } from '@/api/adminContextFields'
 import ParamNodeEditor, { type ParamNode } from '@/components/ParamNodeEditor.vue'
@@ -56,14 +50,6 @@ const loading = ref(false)
 const rows = ref<AiToolRow[]>([])
 const apiDefinitions = ref<ApiDefinitionRow[]>([])
 const contextFields = ref<ContextFieldRow[]>([])
-
-// ==================== 接口上下文配置 Drawer ====================
-const showContextDrawer = ref(false)
-const showContextForm = ref(false)
-const contextEditId = ref<number | null>(null)
-const contextForm = ref<ContextFieldRow>({
-  id: 0, fieldKey: '', label: '', fieldType: 'String', parseExpression: '', description: '', enabled: true, createdAt: null,
-})
 
 // ToolParam / ChildParam 统一用 ParamNode（来自 ParamNodeEditor.vue，支持无限嵌套）
 // ResponseParam 来自 ResponseParamEditor.vue
@@ -90,11 +76,11 @@ const contentTypeOptions = [
   { label: 'application/json', value: 'application/json' },
   { label: 'application/x-www-form-urlencoded', value: 'application/x-www-form-urlencoded' },
 ]
-const fieldTypeOptions = [
-  { label: 'String', value: 'String' }, { label: 'Number', value: 'Number' },
-  { label: 'Boolean', value: 'Boolean' }, { label: 'Object', value: 'Object' },
-  { label: 'Array', value: 'Array' },
-]
+// const fieldTypeOptions = [
+//   { label: 'String', value: 'String' }, { label: 'Number', value: 'Number' },
+//   { label: 'Boolean', value: 'Boolean' }, { label: 'Object', value: 'Object' },
+//   { label: 'Array', value: 'Array' },
+// ]
 
 const apiColumns: DataTableColumns<ApiDefinitionRow> = [
   {
@@ -124,77 +110,6 @@ const apiColumns: DataTableColumns<ApiDefinitionRow> = [
   },
 ]
 
-const contextColumns: DataTableColumns<ContextFieldRow> = [
-  {
-    title: '字段 Key', key: 'fieldKey', width: 150,
-    render: (row) => h(NText, { code: true, style: 'font-size:12px' }, { default: () => row.fieldKey }),
-  },
-  {
-    title: '显示名', key: 'label', width: 120,
-    render: (row) => h('span', { style: 'font-size:12px' }, { default: () => row.label }),
-  },
-  {
-    title: '字段类型', key: 'fieldType', width: 100,
-    render: (row) => h(NTag, { size: 'small', type: 'info' }, { default: () => row.fieldType || 'String' }),
-  },
-  {
-    title: '解析逻辑', key: 'parseExpression', ellipsis: { tooltip: true },
-    render: (row) => h('span', { style: 'font-size:11px; color:#666; font-family:monospace' }, { default: () => row.parseExpression || '-' }),
-  },
-  {
-    title: '状态', key: 'enabled', width: 70,
-    render: (row) => h(NTag, { size: 'small', type: row.enabled ? 'success' : 'default' }, { default: () => (row.enabled ? '启用' : '禁用') }),
-  },
-  {
-    title: '操作', key: 'actions', width: 220, fixed: 'right',
-    render: (row) => h(NSpace, { size: 4, wrap: false }, {
-      default: () => [
-        h(NButton, { size: 'small', onClick: () => openContextEdit(row) }, { default: () => '编辑' }),
-        h(NButton, { size: 'small', type: 'info', ghost: true, onClick: () => openContextTest(row) }, { default: () => '测试运行' }),
-        h(NButton, { size: 'small', type: 'error', onClick: () => handleContextDelete(row) }, { default: () => '删除' }),
-      ],
-    }),
-  },
-]
-
-// ==================== 上下文字段测试 ====================
-const showCtxTestModal = ref(false)
-const ctxTestField = ref<ContextFieldRow | null>(null)
-const ctxTestRunning = ref(false)
-const ctxTestFound = ref<boolean | null>(null)
-const ctxTestValue = ref<string | null>(null)
-const ctxTestError = ref<string | null>(null)
-const ctxTestExpression = ref('')
-
-function openContextTest(row: ContextFieldRow) {
-  ctxTestField.value = row
-  ctxTestFound.value = null
-  ctxTestValue.value = null
-  ctxTestError.value = null
-  ctxTestExpression.value = row.parseExpression || ''
-  showCtxTestModal.value = true
-}
-
-async function runContextTest() {
-  if (!ctxTestField.value) return
-  ctxTestRunning.value = true
-  ctxTestFound.value = null
-  ctxTestValue.value = null
-  ctxTestError.value = null
-  try {
-    const res = await adminTestContextField(ctxTestField.value.id)
-    ctxTestFound.value = res.found
-    ctxTestValue.value = res.value
-    ctxTestExpression.value = res.expression
-    if (res.error) ctxTestError.value = res.error
-  } catch (e: unknown) {
-    const err = e as { response?: { data?: { message?: string } }; message?: string }
-    ctxTestError.value = err.response?.data?.message || err.message || '请求失败'
-  } finally {
-    ctxTestRunning.value = false
-  }
-}
-
 function openApiCreate() {
   apiEditId.value = null
   apiForm.value = { systemName: '', requestUrl: '', httpMethod: 'POST', contentType: 'application/json', remark: '' }
@@ -218,67 +133,6 @@ const showApiDrawer = ref(false)
 function openApiModal() {
   showApiDrawer.value = true
   showApiForm.value = false
-}
-
-// ==================== 接口上下文配置方法 ====================
-// @ts-ignore - 在模板中使用
-function openContextDrawer() {
-  showContextDrawer.value = true
-  showContextForm.value = false
-}
-
-function openContextCreate() {
-  contextEditId.value = null
-  contextForm.value = { id: 0, fieldKey: '', label: '', fieldType: 'String', parseExpression: '', description: '', enabled: true, createdAt: null }
-  showContextForm.value = true
-}
-
-function openContextEdit(row: ContextFieldRow) {
-  contextEditId.value = row.id
-  contextForm.value = { ...row }
-  showContextForm.value = true
-}
-
-async function handleContextSave() {
-  if (!contextForm.value.fieldKey.trim()) { message.warning('请填写字段 Key'); return }
-  if (!contextForm.value.label.trim()) { message.warning('请填写显示名'); return }
-  try {
-    const payload = {
-      fieldKey: contextForm.value.fieldKey.trim(),
-      label: contextForm.value.label.trim(),
-      fieldType: contextForm.value.fieldType || 'String',
-      parseExpression: contextForm.value.parseExpression?.trim() || undefined,
-      description: contextForm.value.description?.trim() || undefined,
-      enabled: contextForm.value.enabled,
-    }
-    if (contextEditId.value && contextEditId.value > 0) {
-      await adminUpdateContextField(contextEditId.value, payload)
-      message.success('已更新')
-    } else {
-      await adminCreateContextField(payload)
-      message.success('已创建')
-    }
-    showContextForm.value = false
-    // 重新加载
-    const fieldsRes = await adminListContextFields()
-    contextFields.value = fieldsRes
-  } catch (e: unknown) {
-    const err = e as { response?: { data?: { message?: string } }; message?: string }
-    message.error(err.response?.data?.message || err.message || '保存失败')
-  }
-}
-
-async function handleContextDelete(row: ContextFieldRow) {
-  try {
-    await adminDeleteContextField(row.id)
-    message.success('已删除')
-    // 重新加载
-    const fieldsRes = await adminListContextFields()
-    contextFields.value = fieldsRes
-  } catch (e: unknown) {
-    const err = e as { response?: { data?: { message?: string } }; message?: string }
-    message.error(err.response?.data?.message || err.message || '删除失败')
-  }
 }
 
 async function handleApiSave() {
@@ -424,13 +278,37 @@ function validateParamNodes(nodes: ParamNode[], path = ''): string | null {
     if (!p.key.trim()) return `"${path || '根节点'}" 下有参数名未填`
     if (p.fieldType !== 'Object' && p.fieldType !== 'Array') {
       if (p.valueSource === 'static' && !p.sourceValue.trim()) return `参数 "${fullKey}" 的静态值不能为空`
-      if (p.valueSource === 'context' && !p.fieldKey) return `参数 "${fullKey}" 未选择接口上下文字段`
+      if (p.valueSource === 'context' && !p.fieldKey) return `参数 "${fullKey}" 未选择用户数据字段`
+      // 'llm' 和 'response' 无需额外校验
     } else {
       const childErr = validateParamNodes(p.children, fullKey)
       if (childErr) return childErr
     }
   }
   return null
+}
+
+const FIELD_TYPE_MAP: Record<string, string> = {
+  String: 'string', Number: 'number', Boolean: 'boolean', Array: 'array', Object: 'object',
+}
+
+/** 遍历参数树，收集所有 valueSource=llm 的参数，构建 paramsSchemaJson */
+function buildParamsSchema(nodes: ParamNode[]): string {
+  const properties: Record<string, { type: string; description?: string }> = {}
+  function walk(list: ParamNode[]) {
+    for (const node of list) {
+      if (node.valueSource === 'llm' && node.key.trim()) {
+        const entry: { type: string; description?: string } = { type: FIELD_TYPE_MAP[node.fieldType] ?? 'string' }
+        if (node.sourceValue.trim()) entry.description = node.sourceValue.trim()
+        properties[node.key.trim()] = entry
+      }
+      if ((node.fieldType === 'Object' || node.fieldType === 'Array') && node.children.length) {
+        walk(node.children)
+      }
+    }
+  }
+  walk(nodes)
+  return JSON.stringify({ type: 'object', properties, required: [] })
 }
 
 async function saveParams() {
@@ -440,7 +318,8 @@ async function saveParams() {
   paramsSaving.value = true
   try {
     const dataParamsJson = params.value.length > 0 ? JSON.stringify(params.value) : undefined
-    await adminUpdateTool(paramsToolId.value, { dataParamsJson })
+    const paramsSchemaJson = buildParamsSchema(params.value)
+    await adminUpdateTool(paramsToolId.value, { dataParamsJson, paramsSchemaJson })
     message.success('参数已保存'); showParamsModal.value = false; await loadAll()
   } catch (e: unknown) {
     const err = e as { response?: { data?: { message?: string } }; message?: string }
@@ -653,7 +532,6 @@ onMounted(() => { void loadAll() })
       <template #header-extra>
         <NSpace>
           <NButton @click="openApiModal">系统API配置</NButton>
-          <NButton @click="openContextDrawer">接口上下文配置</NButton>
           <NButton type="primary" @click="openCreate">+ 新建接口</NButton>
         </NSpace>
       </template>
@@ -673,9 +551,6 @@ onMounted(() => { void loadAll() })
         </NFormItem>
         <NFormItem label="业务系统" required>
           <NSelect v-model:value="selectedApiDefId" :options="apiDefOptions" placeholder="选择业务系统（自动填充接口地址）" clearable style="width:100%" @update:value="onApiDefChange" />
-        </NFormItem>
-        <NFormItem label="LLM 参数 Schema">
-          <NInput v-model:value="form.paramsSchemaJson" type="textarea" :rows="3" placeholder='{"type":"object","properties":{},"required":[]}' />
         </NFormItem>
         <NFormItem label="状态">
           <NSwitch v-model:value="form.enabled" />
@@ -787,95 +662,9 @@ onMounted(() => { void loadAll() })
       </template>
     </NModal>
 
-    <!-- ===== 接口上下文配置 Drawer ===== -->
-    <NDrawer v-model:show="showContextDrawer" placement="right" :width="900">
-      <NDrawerContent title="接口上下文配置" :native-scrollbar="false" closable>
-        <!-- 操作栏 -->
-        <div style="display:flex; justify-content:flex-end; margin-bottom:12px">
-          <NButton type="primary" @click="openContextCreate">+ 新建上下文字段</NButton>
-        </div>
-
-        <!-- 列表 -->
-        <NDataTable :columns="contextColumns" :data="contextFields" :bordered="false" size="small" />
-
-      <!-- 新建/编辑表单 Modal -->
-      <NModal v-model:show="showContextForm" preset="card" :title="contextEditId ? '编辑上下文字段' : '新建上下文字段'" style="width:680px" :mask-closable="false">
-        <NForm :model="contextForm" label-placement="left" label-width="110px">
-          <NFormItem label="字段 Key" required>
-            <NInput v-model:value="contextForm.fieldKey" placeholder="如：esusMobile" :disabled="!!contextEditId && contextEditId > 0" />
-          </NFormItem>
-          <NFormItem label="显示名" required>
-            <NInput v-model:value="contextForm.label" placeholder="如：用户手机号" />
-          </NFormItem>
-          <NFormItem label="字段类型" required>
-            <NSelect v-model:value="contextForm.fieldType" :options="fieldTypeOptions" style="width:200px" />
-          </NFormItem>
-          <NFormItem label="解析逻辑">
-            <NInput v-model:value="contextForm.parseExpression" type="textarea" :rows="3" placeholder='如：JSON.parseObject("").getJSONObject("data").getString("esusMobile")' />
-          </NFormItem>
-          <NFormItem label="说明">
-            <NInput v-model:value="contextForm.description" type="textarea" :rows="3" placeholder="如：用户手机号，系统唯一" />
-          </NFormItem>
-          <NFormItem label="状态">
-            <NSwitch v-model:value="contextForm.enabled" />
-          </NFormItem>
-        </NForm>
-        <template #footer>
-          <NSpace justify="end">
-            <NButton @click="showContextForm = false">取消</NButton>
-            <NButton type="primary" @click="handleContextSave">保存</NButton>
-          </NSpace>
-        </template>
-      </NModal>
-
-      <!-- 上下文字段测试 Modal -->
-      <NModal v-model:show="showCtxTestModal" preset="card" :title="`测试运行 · ${ctxTestField?.label || ctxTestField?.fieldKey || ''}`" style="width:520px" :mask-closable="false">
-        <template v-if="ctxTestField">
-          <div style="font-size:12px; color:#888; margin-bottom:12px; line-height:1.8">
-            <div>字段 Key：<span style="font-family:monospace; color:#333">{{ ctxTestField.fieldKey }}</span></div>
-            <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin-top:4px">
-              <span>解析路径：</span>
-              <template v-if="ctxTestField.parseExpression">
-                <template v-for="(seg, i) in ctxTestField.parseExpression.split('.')" :key="i">
-                  <span v-if="i > 0" style="color:#aaa">→</span>
-                  <NTag size="tiny" style="font-family:monospace">{{ seg }}</NTag>
-                </template>
-              </template>
-              <span v-else style="color:#bbb">未配置路径</span>
-            </div>
-          </div>
-          <NButton type="primary" :loading="ctxTestRunning" style="width:100%; margin-bottom:14px" @click="runContextTest">
-            {{ ctxTestRunning ? '解析中...' : '从当前登录数据中提取' }}
-          </NButton>
-          <template v-if="ctxTestFound !== null || ctxTestError">
-            <NDivider title-placement="left" style="margin:0 0 10px">解析结果</NDivider>
-            <div v-if="ctxTestError" style="background:#fff2f0; border:1px solid #ffccc7; border-radius:6px; padding:10px 14px; font-size:13px; color:#cf1322">
-              {{ ctxTestError }}
-            </div>
-            <template v-else-if="ctxTestFound">
-              <div style="background:#f6ffed; border:1px solid #b7eb8f; border-radius:6px; padding:10px 14px">
-                <div style="font-size:12px; color:#52c41a; margin-bottom:6px; font-weight:600">✓ 解析成功</div>
-                <div style="font-size:12px; color:#555; margin-bottom:4px">提取到的值：</div>
-                <NInput :value="ctxTestValue ?? ''" type="textarea" :rows="4" readonly style="font-family:monospace; font-size:12px" />
-              </div>
-            </template>
-            <div v-else style="background:#fffbe6; border:1px solid #ffe58f; border-radius:6px; padding:10px 14px; font-size:13px; color:#d46b08">
-              ⚠ 路径 <span style="font-family:monospace">{{ ctxTestExpression }}</span> 在登录数据中未找到对应值，请检查路径是否正确
-            </div>
-          </template>
-        </template>
-        <template #footer>
-          <NSpace justify="end">
-            <NButton @click="showCtxTestModal = false">关闭</NButton>
-          </NSpace>
-        </template>
-      </NModal>
-      </NDrawerContent>
-    </NDrawer>
-
-    <!-- ===== 系统API配置 Drawer ===== -->
+    <!-- ===== 系统 API 配置 Drawer ===== -->
     <NDrawer v-model:show="showApiDrawer" placement="right" :width="900">
-      <NDrawerContent title="系统API配置" :native-scrollbar="false" closable>
+      <NDrawerContent title="系统 API 配置" :native-scrollbar="false" closable>
         <!-- 操作栏 -->
         <div style="display:flex; justify-content:flex-end; margin-bottom:12px">
           <NButton type="primary" @click="openApiCreate">+ 新建接口</NButton>

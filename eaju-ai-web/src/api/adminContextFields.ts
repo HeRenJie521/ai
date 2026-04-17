@@ -5,7 +5,7 @@ export interface ContextFieldRow {
   fieldKey: string
   label: string
   fieldType: string
-  parseExpression: string
+  parseExpression: string | null
   description: string | null
   enabled: boolean
   createdAt: string | null

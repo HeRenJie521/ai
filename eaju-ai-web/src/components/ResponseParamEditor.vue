@@ -36,9 +36,9 @@ function removeNode(i: number) {
   props.nodes.splice(i, 1)
 }
 
-function addChild(node: ResponseParam) {
-  node.children.push(newNode())
-}
+// function addChild(node: ResponseParam) {
+//   node.children.push(newNode())
+// }
 
 function borderColor(depth: number) {
   return depth === 0 ? '#e0e0e0' : depth === 1 ? '#eceef2' : '#f3f4f6'
