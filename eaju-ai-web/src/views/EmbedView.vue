@@ -46,6 +46,9 @@ const integrationName = ref('AI 助手')
 const userContext = ref<Record<string, unknown> | null>(null)
 const showUserContext = ref(false)
 
+// ---- 辅助函数：检查是否为错误状态 ----
+const isErrorStatus = () => status.value === 'error'
+
 // ---- 聊天核心 ----
 const providers = ref<LlmProviderOption[]>([])
 const selectedProvider = ref('')
@@ -660,7 +663,7 @@ function onMdAreaClick(ev: MouseEvent) {
     </div>
 
     <!-- 错误 -->
-    <div v-else-if="status === 'error'" class="state-center state-error">
+    <div v-else-if="isErrorStatus()" class="state-center state-error">
       <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
         <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
       </svg>
@@ -819,7 +822,7 @@ function onMdAreaClick(ev: MouseEvent) {
       </div>
 
       <!-- 输入区域 -->
-      <footer class="composer" :class="{ 'composer--disabled': status === 'error' }">
+      <footer class="composer" :class="{ 'composer--disabled': isErrorStatus() }">
         <!-- 语音提示条 -->
         <div v-if="voiceHint" class="voice-hint">
           <span class="voice-hint-dot" :class="{ 'voice-hint-dot--pulse': isRecording }" />
@@ -829,9 +832,9 @@ function onMdAreaClick(ev: MouseEvent) {
           <textarea
             v-model="input"
             class="composer-textarea"
-            :placeholder="status === 'error' ? '登录失败，功能不可用' : (isMobile ? '请输入内容...' : '输入消息，Enter 发送，Shift+Enter 换行...')"
+            :placeholder="isErrorStatus() ? '登录失败，功能不可用' : (isMobile ? '请输入内容...' : '输入消息，Enter 发送，Shift+Enter 换行...')"
             rows="2"
-            :disabled="sending || status === 'error'"
+            :disabled="sending || isErrorStatus()"
             @keydown="handleKeydown"
           />
           <div class="composer-toolbar">
@@ -840,7 +843,7 @@ function onMdAreaClick(ev: MouseEvent) {
               <span class="thinking-label">深度思考</span>
               <button
                 :class="['toggle-btn', { 'toggle-btn--on': thinkingOn }]"
-                :disabled="status === 'error'"
+                :disabled="isErrorStatus()"
                 @click="thinkingOn = !thinkingOn"
               >
                 <span class="toggle-knob" />
@@ -851,7 +854,7 @@ function onMdAreaClick(ev: MouseEvent) {
             <button
               :class="['voice-btn', { 'voice-btn--recording': isRecording }]"
               :title="isRecording ? '停止录音' : '语音输入'"
-              :disabled="sending || status === 'error'"
+              :disabled="sending || isErrorStatus()"
               @click="toggleVoice"
             >
               <svg v-if="!isRecording" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -867,7 +870,7 @@ function onMdAreaClick(ev: MouseEvent) {
             <!-- 发送按钮 -->
             <button
               class="send-btn"
-              :disabled="sending || !input.trim() || status === 'error'"
+              :disabled="sending || !input.trim() || isErrorStatus()"
               @click="() => sendMessage()"
             >
               <div v-if="sending" class="btn-spinner" />
