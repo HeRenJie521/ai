@@ -12,8 +12,6 @@ import {
   NFormItem,
   NInput,
   NModal,
-  NRadioButton,
-  NRadioGroup,
   NSelect,
   NSpace,
   NSpin,
@@ -43,6 +41,7 @@ import {
   adminCreateContextField,
   adminDeleteContextField,
   adminListContextFields,
+  adminTestContextField,
   adminUpdateContextField,
   type ContextFieldRow,
 } from '@/api/adminContextFields'
@@ -67,17 +66,28 @@ const contextForm = ref<ContextFieldRow>({
 // ==================== 参数结构 ====================
 interface ChildParam {
   key: string
-  valueType: 'static' | 'context'
-  value: string
+  valueSource: 'static' | 'context' | 'response'
+  sourceValue: string
   fieldKey: string
+  fieldType?: string  // 子参数的数据类型（可选）
 }
 interface ToolParam {
   key: string
-  valueType: 'static' | 'context' | 'object'
-  value: string
+  fieldType: string  // 参数数据类型: String/Number/Boolean/Object/Array
+  valueSource: 'static' | 'context' | 'response'  // 去掉 'object'
+  sourceValue: string
   fieldKey: string
   children: ChildParam[]
 }
+
+// ==================== 出参数据 ====================
+interface ResponseSource {
+  toolName: string
+  paramName: string
+  paramLabel: string
+}
+
+const responseSources = ref<ResponseSource[]>([])
 
 // ==================== 系统API配置 ====================
 const apiLoading = ref(false)
@@ -99,8 +109,7 @@ const contentTypeOptions = [
 ]
 const fieldTypeOptions = [
   { label: 'String', value: 'String' }, { label: 'Number', value: 'Number' },
-  { label: 'Boolean', value: 'Boolean' }, { label: 'JSONObject', value: 'JSONObject' },
-  { label: 'JSONArray', value: 'JSONArray' }, { label: 'Object', value: 'Object' },
+  { label: 'Boolean', value: 'Boolean' }, { label: 'Object', value: 'Object' },
   { label: 'Array', value: 'Array' },
 ]
 
@@ -116,10 +125,6 @@ const apiColumns: DataTableColumns<ApiDefinitionRow> = [
   {
     title: '方式', key: 'httpMethod', width: 65,
     render: (row) => h(NTag, { size: 'small', type: 'info' }, { default: () => row.httpMethod }),
-  },
-  {
-    title: '参数格式', key: 'contentType', width: 90,
-    render: (row) => h(NTag, { size: 'small' }, { default: () => row.contentType === 'application/json' ? 'JSON' : 'Form' }),
   },
   {
     title: '备注', key: 'remark', width: 120, ellipsis: { tooltip: true },
@@ -158,15 +163,54 @@ const contextColumns: DataTableColumns<ContextFieldRow> = [
     render: (row) => h(NTag, { size: 'small', type: row.enabled ? 'success' : 'default' }, { default: () => (row.enabled ? '启用' : '禁用') }),
   },
   {
-    title: '操作', key: 'actions', width: 140, fixed: 'right',
-    render: (row) => h(NSpace, { size: 'small' }, {
+    title: '操作', key: 'actions', width: 220, fixed: 'right',
+    render: (row) => h(NSpace, { size: 4, wrap: false }, {
       default: () => [
         h(NButton, { size: 'small', onClick: () => openContextEdit(row) }, { default: () => '编辑' }),
+        h(NButton, { size: 'small', type: 'info', ghost: true, onClick: () => openContextTest(row) }, { default: () => '测试运行' }),
         h(NButton, { size: 'small', type: 'error', onClick: () => handleContextDelete(row) }, { default: () => '删除' }),
       ],
     }),
   },
 ]
+
+// ==================== 上下文字段测试 ====================
+const showCtxTestModal = ref(false)
+const ctxTestField = ref<ContextFieldRow | null>(null)
+const ctxTestRunning = ref(false)
+const ctxTestFound = ref<boolean | null>(null)
+const ctxTestValue = ref<string | null>(null)
+const ctxTestError = ref<string | null>(null)
+const ctxTestExpression = ref('')
+
+function openContextTest(row: ContextFieldRow) {
+  ctxTestField.value = row
+  ctxTestFound.value = null
+  ctxTestValue.value = null
+  ctxTestError.value = null
+  ctxTestExpression.value = row.parseExpression || ''
+  showCtxTestModal.value = true
+}
+
+async function runContextTest() {
+  if (!ctxTestField.value) return
+  ctxTestRunning.value = true
+  ctxTestFound.value = null
+  ctxTestValue.value = null
+  ctxTestError.value = null
+  try {
+    const res = await adminTestContextField(ctxTestField.value.id)
+    ctxTestFound.value = res.found
+    ctxTestValue.value = res.value
+    ctxTestExpression.value = res.expression
+    if (res.error) ctxTestError.value = res.error
+  } catch (e: unknown) {
+    const err = e as { response?: { data?: { message?: string } }; message?: string }
+    ctxTestError.value = err.response?.data?.message || err.message || '请求失败'
+  } finally {
+    ctxTestRunning.value = false
+  }
+}
 
 function openApiCreate() {
   apiEditId.value = null
@@ -306,7 +350,7 @@ const apiDefOptions = computed(() =>
 )
 const contextFieldOptions = computed(() =>
   contextFields.value.filter((f) => f.enabled)
-    .map((f) => ({ label: `${f.label}（${f.fieldKey}）`, value: f.fieldKey }))
+    .map((f) => ({ label: f.label, value: f.fieldKey }))
 )
 
 function onApiDefChange(id: number | null) {
@@ -320,6 +364,7 @@ async function loadAll() {
   try {
     const [toolsRes, defsRes, fieldsRes] = await Promise.all([adminListTools(), adminListApiDefinitions(), adminListContextFields()])
     rows.value = toolsRes; apiDefinitions.value = defsRes; contextFields.value = fieldsRes
+    collectResponseSources()
   } catch (e: unknown) {
     const err = e as { response?: { data?: { message?: string } }; message?: string }
     message.error(err.response?.data?.message || err.message || '加载失败')
@@ -366,25 +411,57 @@ const paramsSaving = ref(false)
 function openParams(row: AiToolRow) {
   paramsToolId.value = row.id; paramsToolName.value = row.label || row.name
   paramsToolContentType.value = row.contentType ?? 'application/json'
-  try { params.value = row.dataParamsJson ? JSON.parse(row.dataParamsJson) : [] } catch { params.value = [] }
+  try {
+    const parsed = row.dataParamsJson ? JSON.parse(row.dataParamsJson) : []
+    // 兼容旧数据
+    params.value = parsed.map((p: any) => ({
+      key: p.key,
+      fieldType: p.fieldType || (p.paramType === 'array' ? 'Array' : 'String'),
+      valueSource: p.valueSource || (p.valueType === 'object' ? 'static' : p.valueType === 'context' ? 'context' : 'static'),
+      sourceValue: p.sourceValue || p.value || '',
+      fieldKey: p.fieldKey || '',
+      children: p.children?.map((c: any) => ({
+        key: c.key,
+        fieldType: c.fieldType || 'String',
+        valueSource: c.valueSource || (c.valueType === 'context' ? 'context' : 'static'),
+        sourceValue: c.sourceValue || c.value || '',
+        fieldKey: c.fieldKey || '',
+      })) || []
+    }))
+  } catch { params.value = [] }
+  collectResponseSources()
   showParamsModal.value = true
 }
-function addRootParam() { params.value.push({ key: '', valueType: 'static', value: '', fieldKey: '', children: [] }) }
+function addRootParam() { params.value.push({ key: '', fieldType: 'String', valueSource: 'static', sourceValue: '', fieldKey: '', children: [] }) }
 function removeRootParam(i: number) { params.value.splice(i, 1) }
-function addChildParam(i: number) { if (!params.value[i].children) params.value[i].children = []; params.value[i].children.push({ key: '', valueType: 'static', value: '', fieldKey: '' }) }
+function addChildParam(i: number) { if (!params.value[i].children) params.value[i].children = []; params.value[i].children.push({ key: '', valueSource: 'static', sourceValue: '', fieldKey: '' }) }
 function removeChildParam(i: number, j: number) { params.value[i].children.splice(j, 1) }
-function onRootValueTypeChange(param: ToolParam) { if (param.valueType !== 'object') param.children = [] }
+function onRootValueSourceChange(param: ToolParam) { param.children = [] }
 
 async function saveParams() {
   for (const p of params.value) {
     if (!p.key.trim()) { message.warning('参数名不能为空'); return }
-    if (p.valueType === 'static' && !p.value.trim()) { message.warning(`参数 "${p.key}" 的静态值不能为空`); return }
-    if (p.valueType === 'context' && !p.fieldKey) { message.warning(`参数 "${p.key}" 未选择用户数据字段`); return }
-    if (p.valueType === 'object') {
-      for (const c of p.children) {
-        if (!c.key.trim()) { message.warning(`"${p.key}" 的子参数名不能为空`); return }
-        if (c.valueType === 'static' && !c.value.trim()) { message.warning(`"${p.key}.${c.key}" 静态值不能为空`); return }
-        if (c.valueType === 'context' && !c.fieldKey) { message.warning(`"${p.key}.${c.key}" 未选择用户数据字段`); return }
+    if (p.fieldType === 'Array') {
+      // 数组参数需要至少有一个元素
+      if (!p.children || p.children.length === 0) { message.warning(`参数 "${p.key}" 是数组类型，至少需要配置一个元素`); return }
+      for (const child of p.children) {
+        if (!child.key.trim()) { message.warning(`"${p.key}" 的数组元素名不能为空`); return }
+        if (child.valueSource === 'static' && !child.sourceValue.trim()) { message.warning(`参数 "${p.key}" 的数组元素静态值不能为空`); return }
+        if (child.valueSource === 'context' && !child.fieldKey) { message.warning(`参数 "${p.key}" 的数组元素未选择用户数据字段`); return }
+        if (child.valueSource === 'response' && !child.sourceValue.trim()) { message.warning(`参数 "${p.key}" 的数组元素未选择出参字段`); return }
+      }
+    } else {
+      // 单个值参数（String/Number/Boolean）
+      if (p.valueSource === 'static' && !p.sourceValue.trim()) { message.warning(`参数 "${p.key}" 的静态值不能为空`); return }
+      if (p.valueSource === 'context' && !p.fieldKey) { message.warning(`参数 "${p.key}" 未选择用户数据字段`); return }
+      if (p.valueSource === 'response' && !p.sourceValue.trim()) { message.warning(`参数 "${p.key}" 未选择出参字段`); return }
+      if (p.fieldType === 'Object') {
+        for (const child of p.children) {
+          if (!child.key.trim()) { message.warning(`"${p.key}" 的子参数名不能为空`); return }
+          if (child.valueSource === 'static' && !child.sourceValue.trim()) { message.warning(`"${p.key}.${child.key}" 静态值不能为空`); return }
+          if (child.valueSource === 'context' && !child.fieldKey) { message.warning(`"${p.key}.${child.key}" 未选择用户数据字段`); return }
+          if (child.valueSource === 'response' && !child.sourceValue.trim()) { message.warning(`"${p.key}.${child.key}" 未选择出参字段`); return }
+        }
       }
     }
   }
@@ -398,6 +475,32 @@ async function saveParams() {
     const err = e as { response?: { data?: { message?: string } }; message?: string }
     message.error(err.response?.data?.message || err.message || '保存失败')
   } finally { paramsSaving.value = false }
+}
+
+// 收集所有工具的出参，用于入参的出参传递选项
+function collectResponseSources() {
+  const sources: ResponseSource[] = []
+  rows.value.forEach(tool => {
+    if (tool.responseParamsJson) {
+      try {
+        const params = JSON.parse(tool.responseParamsJson) as ResponseParam[]
+        params.forEach(p => {
+          sources.push({ toolName: tool.label || tool.name, paramName: p.key, paramLabel: p.label || p.key })
+          if (p.children) {
+            p.children.forEach(c => {
+              sources.push({ toolName: tool.label || tool.name, paramName: `${p.key}.${c.key}`, paramLabel: c.label || c.key })
+              if (c.children) {
+                c.children.forEach(d => {
+                  sources.push({ toolName: tool.label || tool.name, paramName: `${p.key}.${c.key}.${d.key}`, paramLabel: d.label || d.key })
+                })
+              }
+            })
+          }
+        })
+      } catch {}
+    }
+  })
+  responseSources.value = sources
 }
 
 // ==================== 出参管理 ====================
@@ -469,11 +572,11 @@ function collectContextParams(row: AiToolRow): FlatContextParam[] {
     const items = JSON.parse(row.dataParamsJson) as ToolParam[]
     const result: FlatContextParam[] = []
     for (const p of items) {
-      if (p.valueType === 'context') {
+      if (p.valueSource === 'context') {
         result.push({ label: p.key, fieldKey: p.fieldKey })
-      } else if (p.valueType === 'object' && p.children) {
+      } else if (p.fieldType === 'Object') {
         for (const c of p.children) {
-          if (c.valueType === 'context') {
+          if (c.valueSource === 'context') {
             result.push({ label: `${p.key}.${c.key}`, fieldKey: c.fieldKey })
           }
         }
@@ -538,12 +641,19 @@ function paramCount(row: AiToolRow): number {
 
 const columns: DataTableColumns<AiToolRow> = [
   {
-    title: '工具名称', key: 'name', width: 200, align: 'center', titleAlign: 'center',
+    title: '工具名称', key: 'name', width: 180, align: 'center', titleAlign: 'center',
     render: (row) => h(NText, { code: true, style: 'font-size:12px' }, { default: () => row.name }),
   },
   {
-    title: '功能描述', key: 'description', align: 'center', titleAlign: 'center', ellipsis: { tooltip: true },
-    render: (row) => h('span', { style: 'font-size:12px; color:#555' }, row.description),
+    title: '业务系统', key: 'url', width: 140, align: 'center', titleAlign: 'center',
+    render: (row) => {
+      const apiDef = apiDefinitions.value.find(d => d.requestUrl === row.url && d.httpMethod === row.httpMethod)
+      return h('span', { style: 'font-size:12px; color:#555' }, apiDef ? apiDef.systemName : (row.url || '-'))
+    },
+  },
+  {
+    title: '参数格式', key: 'contentType', width: 80, align: 'center', titleAlign: 'center',
+    render: (row) => h(NTag, { size: 'tiny', type: row.contentType === 'application/json' ? 'info' : 'default' }, { default: () => (row.contentType === 'application/json' ? 'JSON' : 'Form') }),
   },
   {
     title: '参数配置', key: 'params', align: 'center', titleAlign: 'center',
@@ -551,14 +661,18 @@ const columns: DataTableColumns<AiToolRow> = [
       const count = paramCount(row)
       if (count === 0) return h('span', { style: 'color:#bbb; font-size:12px' }, '未配置')
       try {
-        const items = JSON.parse(row.dataParamsJson!) as Array<{ key: string; valueType: string }>
-        return h('div', { style: 'font-size:12px; color:#555; line-height:1.8' },
-          items.map((p) => h('span', { style: 'margin-right:6px' }, [
+        const items = JSON.parse(row.dataParamsJson!) as Array<{ key: string; valueType?: string }>
+        return h('div', { style: 'font-size:12px; color:#555; line-height:1.6' },
+          items.map((p, i) => h('div', { key: i, style: 'margin-bottom:4px' }, [
             h(NTag, { size: 'tiny', type: p.valueType === 'object' ? 'warning' : p.valueType === 'context' ? 'success' : 'default' }, { default: () => p.key }),
           ]))
         )
       } catch { return h(NTag, { size: 'small', type: 'success' }, { default: () => `${count} 个` }) }
     },
+  },
+  {
+    title: '功能描述', key: 'description', align: 'center', titleAlign: 'center', ellipsis: { tooltip: true },
+    render: (row) => h('span', { style: 'font-size:12px; color:#555' }, row.description),
   },
   {
     title: '操作', key: 'actions', width: 330, align: 'center', titleAlign: 'center', fixed: 'right',
@@ -621,38 +735,131 @@ onMounted(() => { void loadAll() })
     </NModal>
 
     <!-- ===== 参数管理 ===== -->
-    <NModal v-model:show="showParamsModal" preset="card" :title="`入参管理 · ${paramsToolName}`" style="width:760px" :mask-closable="false">
-      <div style="margin-bottom:8px; color:#888; font-size:12px;">
-        参数格式：<NTag size="small" type="info">{{ paramsToolContentType }}</NTag>
-        <span style="margin-left:8px">{{ paramsToolContentType === 'application/json' ? '→ 整体包装为 JSON 对象发送' : '→ 整理为 key=value&key=value 格式发送' }}</span>
-      </div>
+    <NModal v-model:show="showParamsModal" preset="card" :title="`入参管理 · ${paramsToolName}`" style="width:960px" :mask-closable="false">
 
       <div v-for="(param, i) in params" :key="i" style="border:1px solid #e8e8e8; border-radius:6px; padding:10px 12px; margin-bottom:10px; background:#fafafa">
-        <div style="display:flex; align-items:center; gap:8px">
-          <span style="font-size:12px; color:#aaa; flex-shrink:0">参数名</span>
-          <NInput v-model:value="param.key" placeholder="如 methodName" style="width:160px; flex-shrink:0" size="small" />
-          <NRadioGroup v-model:value="param.valueType" size="small" @update:value="onRootValueTypeChange(param)">
-            <NRadioButton value="static">静态值</NRadioButton>
-            <NRadioButton value="context">用户数据</NRadioButton>
-            <NRadioButton value="object">对象参数</NRadioButton>
-          </NRadioGroup>
-          <NInput v-if="param.valueType === 'static'" v-model:value="param.value" placeholder="固定值" style="flex:1" size="small" />
-          <NSelect v-else-if="param.valueType === 'context'" v-model:value="param.fieldKey" :options="contextFieldOptions" placeholder="选择用户数据字段" style="flex:1" size="small" />
-          <span v-else style="flex:1; color:#aaa; font-size:12px">包含子参数，见下方</span>
+        <div style="display:flex; align-items:center; gap:8px; justify-content:space-between; flex-wrap:nowrap">
+          <div style="display:flex; align-items:center; gap:8px; flex:1; min-width:0">
+            <span style="font-size:12px; color:#aaa; flex-shrink:0">参数名</span>
+            <NInput v-model:value="param.key" placeholder="如 methodName" style="width:140px; flex-shrink:0" size="small" />
+            <span style="font-size:12px; color:#aaa; flex-shrink:0">数据类型</span>
+            <NSelect
+              v-model:value="param.fieldType"
+              :options="[
+                { label: 'String', value: 'String' },
+                { label: 'Number', value: 'Number' },
+                { label: 'Boolean', value: 'Boolean' },
+                { label: 'Object', value: 'Object' },
+                { label: 'Array', value: 'Array' }
+              ]"
+              style="width:100px; flex-shrink:0"
+              size="small"
+            />
+            <!-- 只有非Object/Array类型才显示参数来源 -->
+            <template v-if="param.fieldType !== 'Object' && param.fieldType !== 'Array'">
+              <span style="font-size:12px; color:#aaa; flex-shrink:0">参数来源</span>
+              <NSelect
+                v-model:value="param.valueSource"
+                :options="[
+                  { label: '静态值', value: 'static' },
+                  { label: '用户数据', value: 'context' },
+                  { label: '出参传递', value: 'response' }
+                ]"
+                style="width:100px; flex-shrink:0"
+                size="small"
+                @update:value="onRootValueSourceChange(param)"
+              />
+              <!-- 静态值 -->
+              <NInput v-if="param.valueSource === 'static'" v-model:value="param.sourceValue" placeholder="固定值" style="flex:1; min-width:160px" size="small" />
+              <!-- 用户数据 -->
+              <NSelect v-else-if="param.valueSource === 'context'" v-model:value="param.fieldKey" :options="contextFieldOptions" placeholder="选择用户数据字段" style="flex:1; min-width:160px" size="small" />
+              <!-- 出参传递 -->
+              <NSelect v-else-if="param.valueSource === 'response'" v-model:value="param.sourceValue" :options="responseSources.map(r => ({ label: r.toolName + ' → ' + r.paramLabel, value: r.paramName }))" placeholder="选择出参字段" style="flex:1; min-width:160px" size="small" />
+            </template>
+            <span v-else style="flex:1; color:#aaa; font-size:12px">子参数配置见下方</span>
+          </div>
           <NButton size="small" type="error" text @click="removeRootParam(i)">删除</NButton>
         </div>
-        <template v-if="param.valueType === 'object'">
+        <template v-if="param.fieldType === 'Array'">
           <NDivider style="margin:8px 0" />
           <div style="padding-left:16px">
-            <div v-for="(child, j) in param.children" :key="j" style="display:flex; align-items:center; gap:8px; margin-bottom:6px">
+            <!-- 数组元素列表 -->
+            <div v-if="param.children && param.children.length > 0" style="margin-bottom:8px">
+              <div style="font-size:12px; color:#aaa; margin-bottom:6px; font-weight:600">数组元素列表</div>
+              <div v-for="(child, j) in param.children" :key="j" style="display:flex; align-items:center; gap:8px; margin-bottom:8px; flex-wrap:nowrap; padding:8px; background:#fff; border:1px solid #e8e8e8; border-radius:4px">
+                <span style="font-size:12px; color:#aaa; flex-shrink:0">第 {{ j + 1 }} 个元素</span>
+                <span style="font-size:12px; color:#aaa; flex-shrink:0">数据类型</span>
+                <NSelect
+                  v-model:value="child.fieldType"
+                  :options="[
+                    { label: 'String', value: 'String' },
+                    { label: 'Number', value: 'Number' },
+                    { label: 'Boolean', value: 'Boolean' },
+                    { label: 'Object', value: 'Object' },
+                    { label: 'Array', value: 'Array' }
+                  ]"
+                  style="width:100px; flex-shrink:0"
+                  size="small"
+                />
+                <span style="font-size:12px; color:#aaa; flex-shrink:0">参数来源</span>
+                <NSelect
+                  v-model:value="child.valueSource"
+                  :options="[
+                    { label: '静态值', value: 'static' },
+                    { label: '用户数据', value: 'context' },
+                    { label: '出参传递', value: 'response' }
+                  ]"
+                  style="width:100px; flex-shrink:0"
+                  size="small"
+                />
+                <!-- 静态值 -->
+                <NInput v-if="child.valueSource === 'static'" v-model:value="child.sourceValue" placeholder="固定值" style="flex:1; min-width:140px" size="small" />
+                <!-- 用户数据 -->
+                <NSelect v-else-if="child.valueSource === 'context'" v-model:value="child.fieldKey" :options="contextFieldOptions" placeholder="选择用户数据字段" style="flex:1; min-width:140px" size="small" />
+                <!-- 出参传递 -->
+                <NSelect v-else v-model:value="child.sourceValue" :options="responseSources.map(r => ({ label: r.toolName + ' → ' + r.paramLabel, value: r.paramName }))" placeholder="选择出参字段" style="flex:1; min-width:140px" size="small" />
+                <NButton size="small" type="error" text @click="removeChildParam(i, j)">删除</NButton>
+              </div>
+            </div>
+            <NButton size="tiny" dashed @click="addChildParam(i)">+ 添加元素</NButton>
+          </div>
+        </template>
+        <template v-if="param.fieldType === 'Object'">
+          <NDivider style="margin:8px 0" />
+          <div style="padding-left:16px">
+            <div v-for="(child, j) in param.children" :key="j" style="display:flex; align-items:center; gap:8px; margin-bottom:6px; flex-wrap:nowrap">
               <span style="font-size:12px; color:#aaa; flex-shrink:0">└ 子参数名</span>
-              <NInput v-model:value="child.key" placeholder="如 userId" style="width:140px; flex-shrink:0" size="small" />
-              <NRadioGroup v-model:value="child.valueType" size="small">
-                <NRadioButton value="static">静态值</NRadioButton>
-                <NRadioButton value="context">用户数据</NRadioButton>
-              </NRadioGroup>
-              <NInput v-if="child.valueType === 'static'" v-model:value="child.value" placeholder="固定值" style="flex:1" size="small" />
-              <NSelect v-else v-model:value="child.fieldKey" :options="contextFieldOptions" placeholder="选择用户数据字段" style="flex:1" size="small" />
+              <NInput v-model:value="child.key" placeholder="如 userId" style="width:120px; flex-shrink:0" size="small" />
+              <span style="font-size:12px; color:#aaa; flex-shrink:0">数据类型</span>
+              <NSelect
+                v-model:value="child.fieldType"
+                :options="[
+                  { label: 'String', value: 'String' },
+                  { label: 'Number', value: 'Number' },
+                  { label: 'Boolean', value: 'Boolean' },
+                  { label: 'Object', value: 'Object' },
+                  { label: 'Array', value: 'Array' }
+                ]"
+                style="width:100px; flex-shrink:0"
+                size="small"
+              />
+              <span style="font-size:12px; color:#aaa; flex-shrink:0">参数来源</span>
+              <NSelect
+                v-model:value="child.valueSource"
+                :options="[
+                  { label: '静态值', value: 'static' },
+                  { label: '用户数据', value: 'context' },
+                  { label: '出参传递', value: 'response' }
+                ]"
+                style="width:100px; flex-shrink:0"
+                size="small"
+              />
+              <!-- 静态值 -->
+              <NInput v-if="child.valueSource === 'static'" v-model:value="child.sourceValue" placeholder="固定值" style="flex:1; min-width:140px" size="small" />
+              <!-- 用户数据 -->
+              <NSelect v-else-if="child.valueSource === 'context'" v-model:value="child.fieldKey" :options="contextFieldOptions" placeholder="选择用户数据字段" style="flex:1; min-width:140px" size="small" />
+              <!-- 出参传递 -->
+              <NSelect v-else v-model:value="child.sourceValue" :options="responseSources.map(r => ({ label: r.toolName + ' → ' + r.paramLabel, value: r.paramName }))" placeholder="选择出参字段" style="flex:1; min-width:140px" size="small" />
               <NButton size="small" type="error" text @click="removeChildParam(i, j)">删除</NButton>
             </div>
             <NButton size="tiny" dashed @click="addChildParam(i)">+ 添加子参数</NButton>
@@ -660,10 +867,9 @@ onMounted(() => { void loadAll() })
         </template>
       </div>
 
-      <NButton dashed style="width:100%" @click="addRootParam">+ 添加参数</NButton>
       <template #footer>
-        <NSpace justify="end">
-          <NButton @click="showParamsModal = false">取消</NButton>
+        <NSpace justify="space-between">
+          <NButton dashed @click="addRootParam">+ 添加参数</NButton>
           <NButton type="primary" :loading="paramsSaving" @click="saveParams">保存参数</NButton>
         </NSpace>
       </template>
@@ -671,9 +877,6 @@ onMounted(() => { void loadAll() })
 
     <!-- ===== 出参管理 ===== -->
     <NModal v-model:show="showRespModal" preset="card" :title="`出参管理 · ${respToolName}`" style="width:800px" :mask-closable="false">
-      <div style="color:#888; font-size:12px; margin-bottom:10px">
-        配置接口返回 JSON 的字段说明，帮助 AI 理解每个字段的含义，支持最多 3 级嵌套。
-      </div>
 
       <!-- 参数行公共样式 -->
       <template v-for="(p1, i) in respParams" :key="i">
@@ -721,11 +924,9 @@ onMounted(() => { void loadAll() })
         </div>
       </template>
 
-      <NButton dashed style="width:100%" @click="addRespL1">+ 添加参数</NButton>
-
       <template #footer>
-        <NSpace justify="end">
-          <NButton @click="showRespModal = false">取消</NButton>
+        <NSpace justify="space-between">
+          <NButton dashed @click="addRespL1">+ 添加参数</NButton>
           <NButton type="primary" :loading="respSaving" @click="saveResp">保存</NButton>
         </NSpace>
       </template>
@@ -832,6 +1033,49 @@ onMounted(() => { void loadAll() })
           <NSpace justify="end">
             <NButton @click="showContextForm = false">取消</NButton>
             <NButton type="primary" @click="handleContextSave">保存</NButton>
+          </NSpace>
+        </template>
+      </NModal>
+
+      <!-- 上下文字段测试 Modal -->
+      <NModal v-model:show="showCtxTestModal" preset="card" :title="`测试运行 · ${ctxTestField?.label || ctxTestField?.fieldKey || ''}`" style="width:520px" :mask-closable="false">
+        <template v-if="ctxTestField">
+          <div style="font-size:12px; color:#888; margin-bottom:12px; line-height:1.8">
+            <div>字段 Key：<span style="font-family:monospace; color:#333">{{ ctxTestField.fieldKey }}</span></div>
+            <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin-top:4px">
+              <span>解析路径：</span>
+              <template v-if="ctxTestField.parseExpression">
+                <template v-for="(seg, i) in ctxTestField.parseExpression.split('.')" :key="i">
+                  <span v-if="i > 0" style="color:#aaa">→</span>
+                  <NTag size="tiny" style="font-family:monospace">{{ seg }}</NTag>
+                </template>
+              </template>
+              <span v-else style="color:#bbb">未配置路径</span>
+            </div>
+          </div>
+          <NButton type="primary" :loading="ctxTestRunning" style="width:100%; margin-bottom:14px" @click="runContextTest">
+            {{ ctxTestRunning ? '解析中...' : '从当前登录数据中提取' }}
+          </NButton>
+          <template v-if="ctxTestFound !== null || ctxTestError">
+            <NDivider title-placement="left" style="margin:0 0 10px">解析结果</NDivider>
+            <div v-if="ctxTestError" style="background:#fff2f0; border:1px solid #ffccc7; border-radius:6px; padding:10px 14px; font-size:13px; color:#cf1322">
+              {{ ctxTestError }}
+            </div>
+            <template v-else-if="ctxTestFound">
+              <div style="background:#f6ffed; border:1px solid #b7eb8f; border-radius:6px; padding:10px 14px">
+                <div style="font-size:12px; color:#52c41a; margin-bottom:6px; font-weight:600">✓ 解析成功</div>
+                <div style="font-size:12px; color:#555; margin-bottom:4px">提取到的值：</div>
+                <NInput :value="ctxTestValue ?? ''" type="textarea" :rows="4" readonly style="font-family:monospace; font-size:12px" />
+              </div>
+            </template>
+            <div v-else style="background:#fffbe6; border:1px solid #ffe58f; border-radius:6px; padding:10px 14px; font-size:13px; color:#d46b08">
+              ⚠ 路径 <span style="font-family:monospace">{{ ctxTestExpression }}</span> 在登录数据中未找到对应值，请检查路径是否正确
+            </div>
+          </template>
+        </template>
+        <template #footer>
+          <NSpace justify="end">
+            <NButton @click="showCtxTestModal = false">关闭</NButton>
           </NSpace>
         </template>
       </NModal>
