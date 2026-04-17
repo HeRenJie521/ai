@@ -16,7 +16,9 @@
       "Read(//Users/hrj/**)",
       "Bash(jar tf *)",
       "Bash(cat /Users/hrj/developer/code/AI/zhiyi/eaju-ai-api/db/*.sql)",
-      "Bash(find *)"
+      "Bash(find *)",
+      "Bash(./mvnw compile *)",
+      "Bash(/opt/homebrew/opt/maven/bin/mvn compile *)"
     ]
   }
 }

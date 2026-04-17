@@ -87,7 +87,7 @@ app:
     session-ttl-hours: 0
   http-client:
     connect-timeout-ms: 10000
-    read-timeout-ms: 120000
+    read-timeout-ms: 180000
     connection-request-timeout-ms: 5000
     max-total: 100
     max-per-route: 20

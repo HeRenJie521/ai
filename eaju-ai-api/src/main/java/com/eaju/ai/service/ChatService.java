@@ -12,6 +12,8 @@ import com.eaju.ai.persistence.entity.AiToolEntity;
 import com.eaju.ai.persistence.repository.AiAppRepository;
 import com.eaju.ai.session.ChatSessionService;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
@@ -110,6 +112,21 @@ public class ChatService {
         chatStreamExecutor.execute(() -> {
             try {
                 LlmProviderConfigSnapshot cfg = llmProviderConfigService.requireSnapshot(forLlm.getProvider());
+
+                // 若应用绑定了工具，走非流式工具调用编排，再将最终回复模拟为 SSE 输出
+                List<AiToolEntity> tools = resolveTools(request.getInternalAppId());
+                if (!tools.isEmpty()) {
+                    Map<String, Object> userCtx = userContextCacheService.get(request.getInternalJti());
+                    ChatResponseDto response = toolCallOrchestrator.chat(forLlm, cfg, tools, userCtx);
+                    chatSessionService.appendAssistantToSession(request, effective, response);
+                    chatRecordService.saveBlockingTurn(request, effective, response, false);
+                    if (!cfg.resolveThinkingContentWanted(forLlm)) {
+                        response.setReasoningContent(null);
+                    }
+                    emitResponseAsStream(emitter, response);
+                    return;
+                }
+
                 OpenAiStreamAccumulator accum = new OpenAiStreamAccumulator(objectMapper, true);
                 String resolvedModel = cfg.resolveUpstreamModelId(forLlm.getModel(), forLlm.getMode());
                 openAiLlmExecutor.chatStream(forLlm, cfg, emitter, accum::acceptChunkJson, upstreamHolder);
@@ -131,6 +148,29 @@ public class ChatService {
             }
         });
         return emitter;
+    }
+
+    /**
+     * 将工具调用编排后的最终回复以 SSE chunk 格式发送给客户端，模拟流式输出。
+     */
+    private void emitResponseAsStream(SseEmitter emitter, ChatResponseDto response) {
+        try {
+            String content = response.getContent() != null ? response.getContent() : "";
+            ObjectNode chunk = objectMapper.createObjectNode();
+            chunk.put("id", response.getId() != null ? response.getId() : "tool-resp");
+            chunk.put("object", "chat.completion.chunk");
+            ArrayNode choices = chunk.putArray("choices");
+            ObjectNode choice = choices.addObject();
+            choice.put("index", 0);
+            ObjectNode delta = choice.putObject("delta");
+            delta.put("content", content);
+            choice.putNull("finish_reason");
+            emitter.send(SseEmitter.event().name("chunk").data(objectMapper.writeValueAsString(chunk)));
+            emitter.send(SseEmitter.event().name("done").data("[DONE]"));
+            emitter.complete();
+        } catch (Exception e) {
+            try { emitter.completeWithError(e); } catch (Exception ignored) { }
+        }
     }
 
     /**
