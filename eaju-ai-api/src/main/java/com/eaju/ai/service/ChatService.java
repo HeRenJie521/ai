@@ -235,6 +235,13 @@ public class ChatService {
             if (sb.length() > 0) sb.append("\n\n");
             sb.append("【限制条件】\n").append(constraints.trim());
         }
+        // 添加工具调用复用策略指导
+        if (sb.length() > 0) sb.append("\n\n");
+        sb.append("【工具调用策略】\n");
+        sb.append("1. 如果用户的问题可以基于历史对话中的工具调用结果直接回答，请不要再调用工具，直接使用已有数据回复。\n");
+        sb.append("2. 只有当用户明确要求重新查询、更新数据、或询问新的数据时，才调用工具接口。\n");
+        sb.append("3. 例如：用户第一次问有哪些单子，你调用了工具查询；当用户追问第一个单子的金额是多少，你应该直接使用已查到的数据回答，而不是再次调用工具。\n");
+
         // 注入当前日期时间，确保 AI 在生成工具参数时使用正确的时间
         if (sb.length() > 0) sb.append("\n\n");
         String now = LocalDateTime.now(ZoneId.of("Asia/Shanghai"))
