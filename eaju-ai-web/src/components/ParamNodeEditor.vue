@@ -74,12 +74,12 @@ function lineColor(depth: number) {
         <span style="font-size:12px; color:#aaa; flex-shrink:0">参数名</span>
         <NInput v-model:value="node.key" placeholder="参数名" style="width:130px; flex-shrink:0" size="small" />
         <span style="font-size:12px; color:#aaa; flex-shrink:0">类型</span>
-        <NSelect v-model:value="node.fieldType" :options="fieldTypeOpts" style="width:95px; flex-shrink:0" size="small" />
+        <NSelect v-model:value="node.fieldType" :options="fieldTypeOpts" style="width:120px; flex-shrink:0" size="small" />
 
         <!-- 非容器类型显示来源 -->
         <template v-if="node.fieldType !== 'Object' && node.fieldType !== 'Array'">
           <span style="font-size:12px; color:#aaa; flex-shrink:0">来源</span>
-          <NSelect v-model:value="node.valueSource" :options="valueSourceOpts" style="width:105px; flex-shrink:0" size="small" />
+          <NSelect v-model:value="node.valueSource" :options="valueSourceOpts" style="width:140px; flex-shrink:0" size="small" />
           <!-- 静态值 -->
           <NInput
             v-if="node.valueSource === 'static'"
@@ -132,3 +132,15 @@ function lineColor(depth: number) {
     </NButton>
   </div>
 </template>
+
+<style scoped>
+/* 让下拉框内容完全显示，不使用省略号 */
+:deep(.n-select .n-base-selection-label__input) {
+  text-overflow: clip !important;
+  overflow: visible !important;
+}
+:deep(.n-select .n-base-selection-label) {
+  text-overflow: clip !important;
+  overflow: visible !important;
+}
+</style>

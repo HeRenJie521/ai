@@ -62,7 +62,7 @@ function lineColor(depth: number) {
       <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap">
         <span v-if="d > 0" style="font-size:11px; color:#bbb; flex-shrink:0">└</span>
         <NInput v-model:value="node.key" placeholder="参数名（key）" style="width:120px; flex-shrink:0" size="small" />
-        <NSelect v-model:value="node.fieldType" :options="fieldTypeOpts" style="width:95px; flex-shrink:0" size="small" />
+        <NSelect v-model:value="node.fieldType" :options="fieldTypeOpts" style="width:120px; flex-shrink:0" size="small" />
         <NInput v-model:value="node.label" placeholder="字段描述（必填）" style="width:160px; flex-shrink:0" size="small" />
         <NInput v-model:value="node.description" placeholder="补充说明（可选）" style="flex:1; min-width:120px" size="small" />
         <NButton size="small" type="error" text style="flex-shrink:0" @click="removeNode(i)">删除</NButton>
@@ -84,3 +84,15 @@ function lineColor(depth: number) {
     </NButton>
   </div>
 </template>
+
+<style scoped>
+/* 让下拉框内容完全显示，不使用省略号 */
+:deep(.n-select .n-base-selection-label__input) {
+  text-overflow: clip !important;
+  overflow: visible !important;
+}
+:deep(.n-select .n-base-selection-label) {
+  text-overflow: clip !important;
+  overflow: visible !important;
+}
+</style>
