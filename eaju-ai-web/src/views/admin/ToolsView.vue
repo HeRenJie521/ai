@@ -549,7 +549,7 @@ onMounted(() => { void loadAll() })
     <NModal v-model:show="showModal" preset="card" :title="editId ? '编辑接口' : '新建接口'" style="width:620px" :mask-closable="false">
       <NForm :model="form" label-placement="left" label-width="110px">
         <NFormItem label="接口名称" required>
-          <NInput v-model:value="form.name" placeholder="英文，如 query_leave_balance" :disabled="!!editId" />
+          <NInput v-model:value="form.name" placeholder="英文，如 query_leave_balance" />
         </NFormItem>
         <NFormItem label="功能描述" required>
           <NInput v-model:value="form.description" type="textarea" :rows="3" placeholder="LLM 据此决定何时调用此接口" />

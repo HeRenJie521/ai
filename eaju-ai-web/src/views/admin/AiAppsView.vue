@@ -1073,7 +1073,7 @@ const columns: DataTableColumns<AiAppRow> = [
       <n-modal v-model:show="showContextForm" preset="card" :title="contextEditId ? '编辑用户数据字段' : '新建用户数据字段'" style="width:680px" :mask-closable="false">
         <n-form :model="contextForm" label-placement="left" label-width="110px">
           <n-form-item label="字段 Key" required>
-            <n-input v-model:value="contextForm.fieldKey" placeholder="如：esusMobile" :disabled="!!contextEditId && contextEditId > 0" />
+            <n-input v-model:value="contextForm.fieldKey" placeholder="如：esusMobile" />
           </n-form-item>
           <n-form-item label="显示名" required>
             <n-input v-model:value="contextForm.label" placeholder="如：用户手机号" />

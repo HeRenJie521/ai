@@ -119,18 +119,33 @@ onMounted(async () => {
   const params = route.query
   aid = Number(params.aid ?? 0)
   iid = Number(params.iid ?? 0)
-  const uid = String(params.uid ?? '')
+  // phone 为主，兼容旧版 uid 参数
+  const phone = String(params.phone ?? params.uid ?? '')
   const username = params.username ? String(params.username) : undefined
 
+  // 保留参数之外的所有 URL 参数自动作为 extraContext 透传
+  const RESERVED_KEYS = new Set(['aid', 'iid', 'phone', 'uid', 'username', 'token'])
+  const extraContext: Record<string, string> = {}
+  for (const [key, val] of Object.entries(params)) {
+    if (!RESERVED_KEYS.has(key) && val != null) {
+      extraContext[key] = String(val)
+    }
+  }
+
   if (aid) {
-    // 应用管理嵌入方式：通过 aid + uid 登录，无需 token
-    if (!uid) {
+    // 应用管理嵌入方式：通过 aid + phone 登录，无需 token
+    if (!phone) {
       status.value = 'error'
-      errorMsg.value = '缺少必要的嵌入参数（aid / uid）'
+      errorMsg.value = '缺少必要的嵌入参数（aid / phone）'
       return
     }
     try {
-      const result = await appEmbedLoginApi({ appId: aid, userId: uid, username })
+      const result = await appEmbedLoginApi({
+        appId: aid,
+        userId: phone,
+        username,
+        extraContext: Object.keys(extraContext).length > 0 ? extraContext : undefined,
+      })
       authStore.setFromLogin(result)
       if (result.defaultModel) integrationDefaultModel.value = result.defaultModel
       if (result.integrationName) integrationName.value = result.integrationName
@@ -141,15 +156,15 @@ onMounted(async () => {
       return
     }
   } else if (iid) {
-    // WEB_EMBED 集成方式：通过 iid + uid + token 登录
+    // WEB_EMBED 集成方式：通过 iid + phone + token 登录
     const token = String(params.token ?? '')
-    if (!uid || !token) {
+    if (!phone || !token) {
       status.value = 'error'
-      errorMsg.value = '缺少必要的嵌入参数（iid / uid / token）'
+      errorMsg.value = '缺少必要的嵌入参数（iid / phone / token）'
       return
     }
     try {
-      const result = await embedLoginApi({ integrationId: iid, userId: uid, token, username })
+      const result = await embedLoginApi({ integrationId: iid, userId: phone, token, username })
       authStore.setFromLogin(result)
       if (result.defaultModel) integrationDefaultModel.value = result.defaultModel
       if (result.integrationName) integrationName.value = result.integrationName

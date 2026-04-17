@@ -129,17 +129,9 @@ public class EmbedAuthService {
         loginSessionCacheService.save(issued.getJti(), snap);
 
         // 将登录数据（userId/username）与 extraContext 合并后存入用户上下文缓存
-        // userId 即手机号，预先铺开到常见手机字段别名，方便 parseExpression 回退时命中
         Map<String, Object> loginData = new HashMap<>();
         loginData.put("userId", userId);
         loginData.put("username", displayName);
-        loginData.put("phone", userId);
-        loginData.put("mobile", userId);
-        loginData.put("esusMobile", userId);
-        Map<String, Object> dataSection = new HashMap<>();
-        dataSection.put("esusMobile", userId);
-        dataSection.put("phone", userId);
-        loginData.put("data", dataSection);
         if (req.getExtraContext() != null) {
             loginData.putAll(req.getExtraContext());
         }
