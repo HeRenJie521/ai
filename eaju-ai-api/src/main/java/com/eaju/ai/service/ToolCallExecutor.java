@@ -16,6 +16,7 @@ import org.springframework.web.client.RestTemplate;
 import java.io.UnsupportedEncodingException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -114,13 +115,14 @@ public class ToolCallExecutor {
      *   {"key":"methodName","valueType":"static","value":"xxx"}
      *   {"key":"userId","valueType":"context","fieldKey":"esusMobile"}
      *   {"key":"data","valueType":"object","children":[...]}
+     * 支持无限层级嵌套，Object/Array 类型的参数可以继续配置子参数。
      */
     private String buildParamBody(AiToolEntity tool, Map<String, Object> argsMap,
                                    Map<String, Object> userCtx, String contentType) throws Exception {
         List<Map<String, Object>> paramDefs = objectMapper.readValue(
                 tool.getDataParamsJson(), new TypeReference<List<Map<String, Object>>>() {});
 
-        Map<String, Object> bodyMap = resolveParamList(paramDefs, argsMap, userCtx);
+        Map<String, Object> bodyMap = resolveParamTree(paramDefs, argsMap, userCtx);
 
         // LLM 入参合并（低优先级，不覆盖已配置的 key）
         for (Map.Entry<String, Object> entry : argsMap.entrySet()) {
@@ -134,7 +136,7 @@ public class ToolCallExecutor {
     }
 
     @SuppressWarnings("unchecked")
-    private Map<String, Object> resolveParamList(List<Map<String, Object>> paramDefs,
+    private Map<String, Object> resolveParamTree(List<Map<String, Object>> paramDefs,
                                                   Map<String, Object> argsMap,
                                                   Map<String, Object> userCtx) {
         Map<String, Object> result = new LinkedHashMap<>();
@@ -142,25 +144,64 @@ public class ToolCallExecutor {
         for (Map<String, Object> def : paramDefs) {
             String key = (String) def.get("key");
             if (!StringUtils.hasText(key)) continue;
-            String valueType = (String) def.get("valueType");
-            Object value;
-            if ("object".equals(valueType)) {
-                // 递归构建子参数 Map
-                List<Map<String, Object>> children =
-                        (List<Map<String, Object>>) def.get("children");
-                value = resolveParamList(children, argsMap, userCtx);
-            } else if ("context".equals(valueType)) {
-                String fieldKey = (String) def.get("fieldKey");
-                value = (userCtx != null && StringUtils.hasText(fieldKey))
-                        ? userCtx.get(fieldKey) : null;
+
+            String fieldType = (String) def.getOrDefault("fieldType", "String");
+            Object childrenObj = def.get("children");
+            List<Map<String, Object>> children = (childrenObj instanceof List)
+                    ? (List<Map<String, Object>>) childrenObj : null;
+
+            if ("Object".equals(fieldType) && children != null && !children.isEmpty()) {
+                Map<String, Object> childResult = resolveParamTree(children, argsMap, userCtx);
+                if (!childResult.isEmpty()) result.put(key, childResult);
+            } else if ("Array".equals(fieldType) && children != null) {
+                result.put(key, resolveArrayChildren(children, argsMap, userCtx));
             } else {
-                // static（支持 {{var}} 模板）
-                String raw = (String) def.get("value");
-                value = raw != null ? substitute(raw, argsMap) : null;
+                Object value = resolveLeafValue(def, argsMap, userCtx);
+                if (value != null) result.put(key, value);
             }
-            if (value != null) result.put(key, value);
         }
         return result;
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<Object> resolveArrayChildren(List<Map<String, Object>> children,
+                                               Map<String, Object> argsMap,
+                                               Map<String, Object> userCtx) {
+        List<Object> list = new ArrayList<>();
+        for (Map<String, Object> child : children) {
+            String fieldType = (String) child.getOrDefault("fieldType", "String");
+            Object childrenObj = child.get("children");
+            List<Map<String, Object>> grandchildren = (childrenObj instanceof List)
+                    ? (List<Map<String, Object>>) childrenObj : null;
+
+            if ("Object".equals(fieldType) && grandchildren != null && !grandchildren.isEmpty()) {
+                list.add(resolveParamTree(grandchildren, argsMap, userCtx));
+            } else if ("Array".equals(fieldType) && grandchildren != null) {
+                list.add(resolveArrayChildren(grandchildren, argsMap, userCtx));
+            } else {
+                Object value = resolveLeafValue(child, argsMap, userCtx);
+                if (value != null) list.add(value);
+            }
+        }
+        return list;
+    }
+
+    private Object resolveLeafValue(Map<String, Object> def,
+                                     Map<String, Object> argsMap,
+                                     Map<String, Object> userCtx) {
+        String valueSource = (String) def.getOrDefault("valueSource", def.get("valueType"));
+        if (valueSource == null) valueSource = "static";
+        if ("context".equals(valueSource)) {
+            String fieldKey = (String) def.get("fieldKey");
+            return (userCtx != null && StringUtils.hasText(fieldKey)) ? userCtx.get(fieldKey) : null;
+        } else if ("response".equals(valueSource)) {
+            // 出参传递：由应用编排层在运行时注入，工具配置阶段跳过
+            return null;
+        } else {
+            String raw = (String) def.get("sourceValue");
+            if (raw == null) raw = (String) def.get("value");
+            return raw != null ? substitute(raw, argsMap) : null;
+        }
     }
 
     private Map<String, Object> parseArgs(String toolArgs) {
@@ -230,6 +271,7 @@ public class ToolCallExecutor {
 
     /**
      * 从 responseParamsJson 生成字段说明文本，供 LLM 理解返回值含义。
+     * 支持无限层级嵌套。
      * 格式示例：
      *   - code (String): 响应码
      *   - data (Object): 数据体
@@ -254,7 +296,6 @@ public class ToolCallExecutor {
     @SuppressWarnings("unchecked")
     private void appendFieldDesc(List<Map<String, Object>> params, String prefix,
                                   StringBuilder sb, int depth) {
-        if (params == null || depth > 2) return; // 最多 3 级（0/1/2）
         StringBuilder indentSb = new StringBuilder();
         for (int d = 0; d < depth; d++) indentSb.append("  ");
         String indent = indentSb.toString();

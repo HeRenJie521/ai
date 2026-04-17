@@ -45,6 +45,8 @@ import {
   adminUpdateContextField,
   type ContextFieldRow,
 } from '@/api/adminContextFields'
+import ParamNodeEditor, { type ParamNode } from '@/components/ParamNodeEditor.vue'
+import ResponseParamEditor, { type ResponseParam } from '@/components/ResponseParamEditor.vue'
 
 const message = useMessage()
 const dialog = useDialog()
@@ -63,30 +65,11 @@ const contextForm = ref<ContextFieldRow>({
   id: 0, fieldKey: '', label: '', fieldType: 'String', parseExpression: '', description: '', enabled: true, createdAt: null,
 })
 
-// ==================== 参数结构 ====================
-interface ChildParam {
-  key: string
-  valueSource: 'static' | 'context' | 'response'
-  sourceValue: string
-  fieldKey: string
-  fieldType?: string  // 子参数的数据类型（可选）
-}
-interface ToolParam {
-  key: string
-  fieldType: string  // 参数数据类型: String/Number/Boolean/Object/Array
-  valueSource: 'static' | 'context' | 'response'  // 去掉 'object'
-  sourceValue: string
-  fieldKey: string
-  children: ChildParam[]
-}
+// ToolParam / ChildParam 统一用 ParamNode（来自 ParamNodeEditor.vue，支持无限嵌套）
+// ResponseParam 来自 ResponseParamEditor.vue
 
-// ==================== 出参数据 ====================
-interface ResponseSource {
-  toolName: string
-  paramName: string
-  paramLabel: string
-}
-
+// ==================== 出参来源（入参管理 → 出参传递选项） ====================
+interface ResponseSource { toolName: string; paramName: string; paramLabel: string }
 const responseSources = ref<ResponseSource[]>([])
 
 // ==================== 系统API配置 ====================
@@ -405,66 +388,54 @@ const showParamsModal = ref(false)
 const paramsToolId = ref<number | null>(null)
 const paramsToolName = ref('')
 const paramsToolContentType = ref('application/json')
-const params = ref<ToolParam[]>([])
+const params = ref<ParamNode[]>([])
 const paramsSaving = ref(false)
 
+/** 递归将旧格式参数节点迁移为新 ParamNode（兼容 valueType/value 旧字段） */
+function migrateParamNode(p: any): ParamNode {
+  const hasChildren = Array.isArray(p.children) && p.children.length > 0
+  const oldValueType = p.valueType as string | undefined
+  const isOldObject = oldValueType === 'object'
+  return {
+    key: p.key || '',
+    fieldType: p.fieldType || (isOldObject ? 'Object' : 'String'),
+    valueSource: p.valueSource || (isOldObject ? 'static' : oldValueType === 'context' ? 'context' : 'static'),
+    sourceValue: p.sourceValue ?? p.value ?? '',
+    fieldKey: p.fieldKey || '',
+    children: hasChildren ? p.children.map(migrateParamNode) : [],
+  }
+}
+
 function openParams(row: AiToolRow) {
-  paramsToolId.value = row.id; paramsToolName.value = row.label || row.name
+  paramsToolId.value = row.id
+  paramsToolName.value = row.label || row.name
   paramsToolContentType.value = row.contentType ?? 'application/json'
   try {
     const parsed = row.dataParamsJson ? JSON.parse(row.dataParamsJson) : []
-    // 兼容旧数据
-    params.value = parsed.map((p: any) => ({
-      key: p.key,
-      fieldType: p.fieldType || (p.paramType === 'array' ? 'Array' : 'String'),
-      valueSource: p.valueSource || (p.valueType === 'object' ? 'static' : p.valueType === 'context' ? 'context' : 'static'),
-      sourceValue: p.sourceValue || p.value || '',
-      fieldKey: p.fieldKey || '',
-      children: p.children?.map((c: any) => ({
-        key: c.key,
-        fieldType: c.fieldType || 'String',
-        valueSource: c.valueSource || (c.valueType === 'context' ? 'context' : 'static'),
-        sourceValue: c.sourceValue || c.value || '',
-        fieldKey: c.fieldKey || '',
-      })) || []
-    }))
+    params.value = (parsed as any[]).map(migrateParamNode)
   } catch { params.value = [] }
   collectResponseSources()
   showParamsModal.value = true
 }
-function addRootParam() { params.value.push({ key: '', fieldType: 'String', valueSource: 'static', sourceValue: '', fieldKey: '', children: [] }) }
-function removeRootParam(i: number) { params.value.splice(i, 1) }
-function addChildParam(i: number) { if (!params.value[i].children) params.value[i].children = []; params.value[i].children.push({ key: '', valueSource: 'static', sourceValue: '', fieldKey: '' }) }
-function removeChildParam(i: number, j: number) { params.value[i].children.splice(j, 1) }
-function onRootValueSourceChange(param: ToolParam) { param.children = [] }
-
-async function saveParams() {
-  for (const p of params.value) {
-    if (!p.key.trim()) { message.warning('参数名不能为空'); return }
-    if (p.fieldType === 'Array') {
-      // 数组参数需要至少有一个元素
-      if (!p.children || p.children.length === 0) { message.warning(`参数 "${p.key}" 是数组类型，至少需要配置一个元素`); return }
-      for (const child of p.children) {
-        if (!child.key.trim()) { message.warning(`"${p.key}" 的数组元素名不能为空`); return }
-        if (child.valueSource === 'static' && !child.sourceValue.trim()) { message.warning(`参数 "${p.key}" 的数组元素静态值不能为空`); return }
-        if (child.valueSource === 'context' && !child.fieldKey) { message.warning(`参数 "${p.key}" 的数组元素未选择用户数据字段`); return }
-        if (child.valueSource === 'response' && !child.sourceValue.trim()) { message.warning(`参数 "${p.key}" 的数组元素未选择出参字段`); return }
-      }
+/** 递归校验参数树，返回第一个错误信息或 null */
+function validateParamNodes(nodes: ParamNode[], path = ''): string | null {
+  for (const p of nodes) {
+    const fullKey = path ? `${path}.${p.key}` : p.key
+    if (!p.key.trim()) return `"${path || '根节点'}" 下有参数名未填`
+    if (p.fieldType !== 'Object' && p.fieldType !== 'Array') {
+      if (p.valueSource === 'static' && !p.sourceValue.trim()) return `参数 "${fullKey}" 的静态值不能为空`
+      if (p.valueSource === 'context' && !p.fieldKey) return `参数 "${fullKey}" 未选择接口上下文字段`
     } else {
-      // 单个值参数（String/Number/Boolean）
-      if (p.valueSource === 'static' && !p.sourceValue.trim()) { message.warning(`参数 "${p.key}" 的静态值不能为空`); return }
-      if (p.valueSource === 'context' && !p.fieldKey) { message.warning(`参数 "${p.key}" 未选择用户数据字段`); return }
-      if (p.valueSource === 'response' && !p.sourceValue.trim()) { message.warning(`参数 "${p.key}" 未选择出参字段`); return }
-      if (p.fieldType === 'Object') {
-        for (const child of p.children) {
-          if (!child.key.trim()) { message.warning(`"${p.key}" 的子参数名不能为空`); return }
-          if (child.valueSource === 'static' && !child.sourceValue.trim()) { message.warning(`"${p.key}.${child.key}" 静态值不能为空`); return }
-          if (child.valueSource === 'context' && !child.fieldKey) { message.warning(`"${p.key}.${child.key}" 未选择用户数据字段`); return }
-          if (child.valueSource === 'response' && !child.sourceValue.trim()) { message.warning(`"${p.key}.${child.key}" 未选择出参字段`); return }
-        }
-      }
+      const childErr = validateParamNodes(p.children, fullKey)
+      if (childErr) return childErr
     }
   }
+  return null
+}
+
+async function saveParams() {
+  const err = validateParamNodes(params.value)
+  if (err) { message.warning(err); return }
   if (!paramsToolId.value) return
   paramsSaving.value = true
   try {
@@ -477,26 +448,22 @@ async function saveParams() {
   } finally { paramsSaving.value = false }
 }
 
-// 收集所有工具的出参，用于入参的出参传递选项
+/** 递归展开出参树，收集所有叶路径，供入参"出参传递"选择 */
+function flattenRespParams(nodes: ResponseParam[], toolName: string, prefix: string, out: ResponseSource[]) {
+  for (const p of nodes) {
+    const fullPath = prefix ? `${prefix}.${p.key}` : p.key
+    out.push({ toolName, paramName: fullPath, paramLabel: p.label || p.key })
+    if (p.children?.length) flattenRespParams(p.children, toolName, fullPath, out)
+  }
+}
+
 function collectResponseSources() {
   const sources: ResponseSource[] = []
   rows.value.forEach(tool => {
     if (tool.responseParamsJson) {
       try {
-        const params = JSON.parse(tool.responseParamsJson) as ResponseParam[]
-        params.forEach(p => {
-          sources.push({ toolName: tool.label || tool.name, paramName: p.key, paramLabel: p.label || p.key })
-          if (p.children) {
-            p.children.forEach(c => {
-              sources.push({ toolName: tool.label || tool.name, paramName: `${p.key}.${c.key}`, paramLabel: c.label || c.key })
-              if (c.children) {
-                c.children.forEach(d => {
-                  sources.push({ toolName: tool.label || tool.name, paramName: `${p.key}.${c.key}.${d.key}`, paramLabel: d.label || d.key })
-                })
-              }
-            })
-          }
-        })
+        const rps = JSON.parse(tool.responseParamsJson) as ResponseParam[]
+        flattenRespParams(rps, tool.label || tool.name, '', sources)
       } catch {}
     }
   })
@@ -510,32 +477,12 @@ const respToolName = ref('')
 const respSaving = ref(false)
 const respParams = ref<ResponseParam[]>([])
 
-interface ResponseParam {
-  key: string
-  label: string
-  fieldType: string
-  description: string
-  children: ResponseParam[]
-}
-
-
-function newRespParam(): ResponseParam {
-  return { key: '', label: '', fieldType: 'String', description: '', children: [] }
-}
-
 function openResp(row: AiToolRow) {
   respToolId.value = row.id
   respToolName.value = row.label || row.name
   try { respParams.value = row.responseParamsJson ? JSON.parse(row.responseParamsJson) : [] } catch { respParams.value = [] }
   showRespModal.value = true
 }
-
-function addRespL1() { respParams.value.push(newRespParam()) }
-function removeRespL1(i: number) { respParams.value.splice(i, 1) }
-function addRespL2(i: number) { respParams.value[i].children.push(newRespParam()) }
-function removeRespL2(i: number, j: number) { respParams.value[i].children.splice(j, 1) }
-function addRespL3(i: number, j: number) { respParams.value[i].children[j].children.push(newRespParam()) }
-function removeRespL3(i: number, j: number, k: number) { respParams.value[i].children[j].children.splice(k, 1) }
 
 async function saveResp() {
   // 简单校验
@@ -554,6 +501,14 @@ async function saveResp() {
   } finally { respSaving.value = false }
 }
 
+function addRootParam() {
+  params.value.push({ key: '', fieldType: 'String', valueSource: 'static', sourceValue: '', fieldKey: '', children: [] })
+}
+
+function addRespL1() {
+  respParams.value.push({ key: '', fieldType: 'String', label: '', description: '', children: [] })
+}
+
 // ==================== 测试工具 ====================
 const showTestModal = ref(false)
 const testTool = ref<AiToolRow | null>(null)
@@ -565,34 +520,23 @@ const testElapsed = ref<number | null>(null)
 
 interface FlatContextParam { label: string; fieldKey: string }
 
-// 从 dataParamsJson 里收集所有 valueSource=context 的参数（含子参数和数组元素）
+/** 递归收集所有 valueSource=context 的参数，供测试运行填值 */
+function walkContextParams(nodes: ParamNode[], path: string, out: FlatContextParam[]) {
+  for (const p of nodes) {
+    const fullPath = path ? `${path}.${p.key}` : p.key
+    if (p.valueSource === 'context' && p.fieldKey) {
+      out.push({ label: fullPath, fieldKey: p.fieldKey })
+    }
+    if (p.children?.length) walkContextParams(p.children, fullPath, out)
+  }
+}
+
 function collectContextParams(row: AiToolRow): FlatContextParam[] {
   if (!row.dataParamsJson) return []
   try {
-    const items = JSON.parse(row.dataParamsJson) as ToolParam[]
+    const items = JSON.parse(row.dataParamsJson) as ParamNode[]
     const result: FlatContextParam[] = []
-    for (const p of items) {
-      // 检查主参数
-      if (p.valueSource === 'context') {
-        result.push({ label: p.key, fieldKey: p.fieldKey })
-      }
-      // 检查 Object 类型的子参数
-      if (p.fieldType === 'Object') {
-        for (const c of p.children) {
-          if (c.valueSource === 'context') {
-            result.push({ label: `${p.key}.${c.key}`, fieldKey: c.fieldKey })
-          }
-        }
-      }
-      // 检查 Array 类型的数组元素
-      if (p.fieldType === 'Array') {
-        for (const child of p.children) {
-          if (child.valueSource === 'context') {
-            result.push({ label: `${p.key}[]`, fieldKey: child.fieldKey })
-          }
-        }
-      }
-    }
+    walkContextParams(items, '', result)
     return result
   } catch { return [] }
 }
@@ -748,134 +692,12 @@ onMounted(() => { void loadAll() })
     <!-- ===== 参数管理 ===== -->
     <NModal v-model:show="showParamsModal" preset="card" :title="`入参管理 · ${paramsToolName}`" style="width:960px" :mask-closable="false">
 
-      <div v-for="(param, i) in params" :key="i" style="border:1px solid #e8e8e8; border-radius:6px; padding:10px 12px; margin-bottom:10px; background:#fafafa">
-        <div style="display:flex; align-items:center; gap:8px; justify-content:space-between; flex-wrap:nowrap">
-          <div style="display:flex; align-items:center; gap:8px; flex:1; min-width:0">
-            <span style="font-size:12px; color:#aaa; flex-shrink:0">参数名</span>
-            <NInput v-model:value="param.key" placeholder="如 methodName" style="width:140px; flex-shrink:0" size="small" />
-            <span style="font-size:12px; color:#aaa; flex-shrink:0">数据类型</span>
-            <NSelect
-              v-model:value="param.fieldType"
-              :options="[
-                { label: 'String', value: 'String' },
-                { label: 'Number', value: 'Number' },
-                { label: 'Boolean', value: 'Boolean' },
-                { label: 'Object', value: 'Object' },
-                { label: 'Array', value: 'Array' }
-              ]"
-              style="width:100px; flex-shrink:0"
-              size="small"
-            />
-            <!-- 只有非Object/Array类型才显示参数来源 -->
-            <template v-if="param.fieldType !== 'Object' && param.fieldType !== 'Array'">
-              <span style="font-size:12px; color:#aaa; flex-shrink:0">参数来源</span>
-              <NSelect
-                v-model:value="param.valueSource"
-                :options="[
-                  { label: '静态值', value: 'static' },
-                  { label: '用户数据', value: 'context' },
-                  { label: '出参传递', value: 'response' }
-                ]"
-                style="width:100px; flex-shrink:0"
-                size="small"
-                @update:value="onRootValueSourceChange(param)"
-              />
-              <!-- 静态值 -->
-              <NInput v-if="param.valueSource === 'static'" v-model:value="param.sourceValue" placeholder="固定值" style="flex:1; min-width:160px" size="small" />
-              <!-- 用户数据 -->
-              <NSelect v-else-if="param.valueSource === 'context'" v-model:value="param.fieldKey" :options="contextFieldOptions" placeholder="选择用户数据字段" style="flex:1; min-width:160px" size="small" />
-              <!-- 出参传递 -->
-              <NSelect v-else-if="param.valueSource === 'response'" v-model:value="param.sourceValue" :options="responseSources.map(r => ({ label: r.toolName + ' → ' + r.paramLabel, value: r.paramName }))" placeholder="选择出参字段" style="flex:1; min-width:160px" size="small" />
-            </template>
-            <span v-else style="flex:1; color:#aaa; font-size:12px">子参数配置见下方</span>
-          </div>
-          <NButton size="small" type="error" text @click="removeRootParam(i)">删除</NButton>
-        </div>
-        <template v-if="param.fieldType === 'Array'">
-          <NDivider style="margin:8px 0" />
-          <div style="padding-left:16px">
-            <!-- 数组元素列表 -->
-            <div v-if="param.children && param.children.length > 0" style="margin-bottom:8px">
-              <div style="font-size:12px; color:#aaa; margin-bottom:6px; font-weight:600">数组元素列表</div>
-              <div v-for="(child, j) in param.children" :key="j" style="display:flex; align-items:center; gap:8px; margin-bottom:8px; flex-wrap:nowrap; padding:8px; background:#fff; border:1px solid #e8e8e8; border-radius:4px">
-                <span style="font-size:12px; color:#aaa; flex-shrink:0">第 {{ j + 1 }} 个元素</span>
-                <span style="font-size:12px; color:#aaa; flex-shrink:0">数据类型</span>
-                <NSelect
-                  v-model:value="child.fieldType"
-                  :options="[
-                    { label: 'String', value: 'String' },
-                    { label: 'Number', value: 'Number' },
-                    { label: 'Boolean', value: 'Boolean' },
-                    { label: 'Object', value: 'Object' },
-                    { label: 'Array', value: 'Array' }
-                  ]"
-                  style="width:100px; flex-shrink:0"
-                  size="small"
-                />
-                <span style="font-size:12px; color:#aaa; flex-shrink:0">参数来源</span>
-                <NSelect
-                  v-model:value="child.valueSource"
-                  :options="[
-                    { label: '静态值', value: 'static' },
-                    { label: '用户数据', value: 'context' },
-                    { label: '出参传递', value: 'response' }
-                  ]"
-                  style="width:100px; flex-shrink:0"
-                  size="small"
-                />
-                <!-- 静态值 -->
-                <NInput v-if="child.valueSource === 'static'" v-model:value="child.sourceValue" placeholder="固定值" style="flex:1; min-width:140px" size="small" />
-                <!-- 用户数据 -->
-                <NSelect v-else-if="child.valueSource === 'context'" v-model:value="child.fieldKey" :options="contextFieldOptions" placeholder="选择用户数据字段" style="flex:1; min-width:140px" size="small" />
-                <!-- 出参传递 -->
-                <NSelect v-else v-model:value="child.sourceValue" :options="responseSources.map(r => ({ label: r.toolName + ' → ' + r.paramLabel, value: r.paramName }))" placeholder="选择出参字段" style="flex:1; min-width:140px" size="small" />
-                <NButton size="small" type="error" text @click="removeChildParam(i, j)">删除</NButton>
-              </div>
-            </div>
-            <NButton size="tiny" dashed @click="addChildParam(i)">+ 添加元素</NButton>
-          </div>
-        </template>
-        <template v-if="param.fieldType === 'Object'">
-          <NDivider style="margin:8px 0" />
-          <div style="padding-left:16px">
-            <div v-for="(child, j) in param.children" :key="j" style="display:flex; align-items:center; gap:8px; margin-bottom:6px; flex-wrap:nowrap">
-              <span style="font-size:12px; color:#aaa; flex-shrink:0">└ 子参数名</span>
-              <NInput v-model:value="child.key" placeholder="如 userId" style="width:120px; flex-shrink:0" size="small" />
-              <span style="font-size:12px; color:#aaa; flex-shrink:0">数据类型</span>
-              <NSelect
-                v-model:value="child.fieldType"
-                :options="[
-                  { label: 'String', value: 'String' },
-                  { label: 'Number', value: 'Number' },
-                  { label: 'Boolean', value: 'Boolean' },
-                  { label: 'Object', value: 'Object' },
-                  { label: 'Array', value: 'Array' }
-                ]"
-                style="width:100px; flex-shrink:0"
-                size="small"
-              />
-              <span style="font-size:12px; color:#aaa; flex-shrink:0">参数来源</span>
-              <NSelect
-                v-model:value="child.valueSource"
-                :options="[
-                  { label: '静态值', value: 'static' },
-                  { label: '用户数据', value: 'context' },
-                  { label: '出参传递', value: 'response' }
-                ]"
-                style="width:100px; flex-shrink:0"
-                size="small"
-              />
-              <!-- 静态值 -->
-              <NInput v-if="child.valueSource === 'static'" v-model:value="child.sourceValue" placeholder="固定值" style="flex:1; min-width:140px" size="small" />
-              <!-- 用户数据 -->
-              <NSelect v-else-if="child.valueSource === 'context'" v-model:value="child.fieldKey" :options="contextFieldOptions" placeholder="选择用户数据字段" style="flex:1; min-width:140px" size="small" />
-              <!-- 出参传递 -->
-              <NSelect v-else v-model:value="child.sourceValue" :options="responseSources.map(r => ({ label: r.toolName + ' → ' + r.paramLabel, value: r.paramName }))" placeholder="选择出参字段" style="flex:1; min-width:140px" size="small" />
-              <NButton size="small" type="error" text @click="removeChildParam(i, j)">删除</NButton>
-            </div>
-            <NButton size="tiny" dashed @click="addChildParam(i)">+ 添加子参数</NButton>
-          </div>
-        </template>
+      <div style="max-height:65vh; overflow-y:auto; padding-right:4px">
+        <ParamNodeEditor
+          :nodes="params"
+          :context-field-options="contextFieldOptions"
+          :response-sources="[]"
+        />
       </div>
 
       <template #footer>
@@ -889,51 +711,9 @@ onMounted(() => { void loadAll() })
     <!-- ===== 出参管理 ===== -->
     <NModal v-model:show="showRespModal" preset="card" :title="`出参管理 · ${respToolName}`" style="width:800px" :mask-closable="false">
 
-      <!-- 参数行公共样式 -->
-      <template v-for="(p1, i) in respParams" :key="i">
-        <!-- 一级 -->
-        <div style="border:1px solid #e0e0e0; border-radius:6px; padding:8px 10px; margin-bottom:8px; background:#fafafa">
-          <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap">
-            <NInput v-model:value="p1.key" placeholder="参数名" style="width:130px; flex-shrink:0" size="small" />
-            <NSelect v-model:value="p1.fieldType" :options="fieldTypeOptions" style="width:100px; flex-shrink:0" size="small" />
-            <NInput v-model:value="p1.label" placeholder="参数描述" style="width:160px; flex-shrink:0" size="small" />
-            <NInput v-model:value="p1.description" placeholder="补充说明（可选）" style="flex:1; min-width:120px" size="small" />
-            <NButton size="small" type="error" text @click="removeRespL1(i)">删除</NButton>
-          </div>
-
-          <!-- 二级（Object/Array 才显示） -->
-          <template v-if="p1.fieldType === 'Object' || p1.fieldType === 'Array'">
-            <div style="margin-top:8px; padding-left:16px; border-left:2px solid #e8e8e8">
-              <div v-for="(p2, j) in p1.children" :key="j" style="margin-bottom:6px">
-                <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap">
-                  <span style="font-size:11px; color:#bbb; flex-shrink:0">└</span>
-                  <NInput v-model:value="p2.key" placeholder="子参数名" style="width:120px; flex-shrink:0" size="small" />
-                  <NSelect v-model:value="p2.fieldType" :options="fieldTypeOptions" style="width:100px; flex-shrink:0" size="small" />
-                  <NInput v-model:value="p2.label" placeholder="参数描述" style="width:150px; flex-shrink:0" size="small" />
-                  <NInput v-model:value="p2.description" placeholder="补充说明" style="flex:1; min-width:100px" size="small" />
-                  <NButton size="small" type="error" text @click="removeRespL2(i, j)">删除</NButton>
-                </div>
-
-                <!-- 三级（Object/Array 才显示） -->
-                <template v-if="p2.fieldType === 'Object' || p2.fieldType === 'Array'">
-                  <div style="margin-top:6px; padding-left:20px; border-left:2px solid #f0f0f0">
-                    <div v-for="(p3, k) in p2.children" :key="k" style="display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin-bottom:4px">
-                      <span style="font-size:11px; color:#ccc; flex-shrink:0">└</span>
-                      <NInput v-model:value="p3.key" placeholder="三级参数名" style="width:110px; flex-shrink:0" size="small" />
-                      <NSelect v-model:value="p3.fieldType" :options="fieldTypeOptions" style="width:90px; flex-shrink:0" size="small" />
-                      <NInput v-model:value="p3.label" placeholder="参数描述" style="width:140px; flex-shrink:0" size="small" />
-                      <NInput v-model:value="p3.description" placeholder="补充说明" style="flex:1; min-width:90px" size="small" />
-                      <NButton size="small" type="error" text @click="removeRespL3(i, j, k)">删除</NButton>
-                    </div>
-                    <NButton size="tiny" dashed @click="addRespL3(i, j)">+ 添加三级参数</NButton>
-                  </div>
-                </template>
-              </div>
-              <NButton size="tiny" dashed @click="addRespL2(i)">+ 添加子参数</NButton>
-            </div>
-          </template>
-        </div>
-      </template>
+      <div style="max-height:65vh; overflow-y:auto; padding-right:4px">
+        <ResponseParamEditor :nodes="respParams" />
+      </div>
 
       <template #footer>
         <NSpace justify="space-between">
