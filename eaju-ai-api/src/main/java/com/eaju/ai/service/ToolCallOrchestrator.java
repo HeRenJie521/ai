@@ -19,6 +19,7 @@ import org.springframework.util.StringUtils;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Consumer;
 
 /**
  * AI 工具调用编排器：实现 function calling 循环（最多 MAX_ROUNDS 轮）。
@@ -53,11 +54,13 @@ public class ToolCallOrchestrator {
      * @param request  合并了历史记录的请求
      * @param cfg      LLM 配置快照
      * @param tools    本次对话可用的工具列表
-     * @param userCtx  当前用户上下文（来自 Redis ctx:{jti}）
+     * @param userCtx    当前用户上下文（来自 Redis ctx:{jti}）
+     * @param onProgress 进度回调，每次调用工具前后发送提示文本；流式场景传入，非流式传 null
      * @return 最终 LLM 文本响应
      */
     public ChatResponseDto chat(ChatRequestDto request, LlmProviderConfigSnapshot cfg,
-                                List<AiToolEntity> tools, Map<String, Object> userCtx) {
+                                List<AiToolEntity> tools, Map<String, Object> userCtx,
+                                Consumer<String> onProgress) {
         // 构建 tools 数组（OpenAI function calling 格式）
         ArrayNode toolsArray = buildToolsArray(tools);
 
@@ -92,6 +95,14 @@ public class ToolCallOrchestrator {
             // 执行每个工具并追加 tool 消息
             for (ToolCallItem tc : toolCalls) {
                 AiToolEntity matchedTool = findTool(tools, tc.functionName);
+
+                // 工具调用前：推送查询进度提示
+                if (onProgress != null) {
+                    String label = matchedTool != null && StringUtils.hasText(matchedTool.getLabel())
+                            ? matchedTool.getLabel() : "数据";
+                    onProgress.accept("正在查询" + label + "，请稍后...\n\n");
+                }
+
                 String result;
                 if (matchedTool != null) {
                     result = toolCallExecutor.execute(matchedTool, tc.arguments, userCtx);
@@ -104,6 +115,11 @@ public class ToolCallOrchestrator {
                 toolMsg.setContent(result);
                 toolMsg.setToolCallId(tc.id);
                 workMessages.add(toolMsg);
+            }
+
+            // 本轮所有工具执行完毕：推送 AI 分析进度提示
+            if (onProgress != null) {
+                onProgress.accept("正在分析数据...\n\n");
             }
         }
 

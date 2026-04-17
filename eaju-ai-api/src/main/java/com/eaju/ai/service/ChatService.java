@@ -9,7 +9,9 @@ import com.eaju.ai.llm.support.OpenAiStreamAccumulator;
 import com.eaju.ai.persistence.ChatRecordService;
 import com.eaju.ai.persistence.entity.AiAppEntity;
 import com.eaju.ai.persistence.entity.AiToolEntity;
+import com.eaju.ai.persistence.entity.UserContextFieldEntity;
 import com.eaju.ai.persistence.repository.AiAppRepository;
+import com.eaju.ai.persistence.repository.UserContextFieldRepository;
 import com.eaju.ai.session.ChatSessionService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
@@ -28,6 +30,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
 
 @Service
 public class ChatService {
@@ -43,6 +46,7 @@ public class ChatService {
     private final AiAppRepository aiAppRepository;
     private final AiToolService aiToolService;
     private final UserContextCacheService userContextCacheService;
+    private final UserContextFieldRepository userContextFieldRepository;
     private final ToolCallOrchestrator toolCallOrchestrator;
 
     public ChatService(LlmProviderConfigService llmProviderConfigService,
@@ -54,6 +58,7 @@ public class ChatService {
                        AiAppRepository aiAppRepository,
                        AiToolService aiToolService,
                        UserContextCacheService userContextCacheService,
+                       UserContextFieldRepository userContextFieldRepository,
                        ToolCallOrchestrator toolCallOrchestrator) {
         this.llmProviderConfigService = llmProviderConfigService;
         this.openAiLlmExecutor = openAiLlmExecutor;
@@ -64,6 +69,7 @@ public class ChatService {
         this.aiAppRepository = aiAppRepository;
         this.aiToolService = aiToolService;
         this.userContextCacheService = userContextCacheService;
+        this.userContextFieldRepository = userContextFieldRepository;
         this.toolCallOrchestrator = toolCallOrchestrator;
     }
 
@@ -77,7 +83,7 @@ public class ChatService {
         ChatResponseDto response;
         if (!tools.isEmpty()) {
             Map<String, Object> userCtx = userContextCacheService.get(request.getInternalJti());
-            response = toolCallOrchestrator.chat(forLlm, cfg, tools, userCtx);
+            response = toolCallOrchestrator.chat(forLlm, cfg, tools, userCtx, null);
         } else {
             response = openAiLlmExecutor.chat(forLlm, cfg);
         }
@@ -117,7 +123,8 @@ public class ChatService {
                 List<AiToolEntity> tools = resolveTools(request.getInternalAppId());
                 if (!tools.isEmpty()) {
                     Map<String, Object> userCtx = userContextCacheService.get(request.getInternalJti());
-                    ChatResponseDto response = toolCallOrchestrator.chat(forLlm, cfg, tools, userCtx);
+                    Consumer<String> onProgress = buildProgressEmitter(emitter);
+                    ChatResponseDto response = toolCallOrchestrator.chat(forLlm, cfg, tools, userCtx, onProgress);
                     chatSessionService.appendAssistantToSession(request, effective, response);
                     chatRecordService.saveBlockingTurn(request, effective, response, false);
                     if (!cfg.resolveThinkingContentWanted(forLlm)) {
@@ -188,7 +195,7 @@ public class ChatService {
         if (app == null) {
             return effective;
         }
-        String systemContent = buildSystemContent(app);
+        String systemContent = buildSystemContent(app, original.getInternalJti());
         if (!StringUtils.hasText(systemContent)) {
             return effective;
         }
@@ -206,7 +213,7 @@ public class ChatService {
         return forLlm;
     }
 
-    private static String buildSystemContent(AiAppEntity app) {
+    private String buildSystemContent(AiAppEntity app, String jti) {
         StringBuilder sb = new StringBuilder();
         String role = app.getSystemRole();
         String task = app.getSystemTask();
@@ -222,6 +229,55 @@ public class ChatService {
             if (sb.length() > 0) sb.append("\n\n");
             sb.append("【限制条件】\n").append(constraints.trim());
         }
+        // 注入用户信息（非 Object 类型字段），仅在 system prompt 中可见，前端无法获取
+        String userInfo = buildUserInfoSection(jti);
+        if (StringUtils.hasText(userInfo)) {
+            if (sb.length() > 0) sb.append("\n\n");
+            sb.append(userInfo);
+        }
         return sb.toString();
+    }
+
+    /**
+     * 从 Redis 用户上下文中提取非 Object 类型字段，拼接为系统提示中的【当前用户信息】段落。
+     */
+    private String buildUserInfoSection(String jti) {
+        if (!StringUtils.hasText(jti)) return "";
+        Map<String, Object> ctx = userContextCacheService.get(jti);
+        if (ctx == null || ctx.isEmpty()) return "";
+        List<UserContextFieldEntity> fields = userContextFieldRepository.findByEnabledIsTrueOrderByIdAsc();
+        if (fields.isEmpty()) return "";
+        StringBuilder sb = new StringBuilder("【当前用户信息】\n");
+        boolean hasAny = false;
+        for (UserContextFieldEntity field : fields) {
+            if ("Object".equalsIgnoreCase(field.getFieldType())) continue;
+            Object value = ctx.get(field.getFieldKey());
+            if (value == null) continue;
+            String strValue = String.valueOf(value).trim();
+            if (!StringUtils.hasText(strValue)) continue;
+            sb.append(field.getLabel()).append("：").append(strValue).append("\n");
+            hasAny = true;
+        }
+        return hasAny ? sb.toString().trim() : "";
+    }
+
+    /**
+     * 构建进度 SSE 推送回调：将进度文本作为流式 delta chunk 发送给客户端。
+     */
+    private Consumer<String> buildProgressEmitter(SseEmitter emitter) {
+        return text -> {
+            try {
+                ObjectNode chunk = objectMapper.createObjectNode();
+                chunk.put("id", "progress");
+                chunk.put("object", "chat.completion.chunk");
+                ArrayNode choices = chunk.putArray("choices");
+                ObjectNode choice = choices.addObject();
+                choice.put("index", 0);
+                choice.putObject("delta").put("content", text);
+                choice.putNull("finish_reason");
+                emitter.send(SseEmitter.event().name("chunk").data(objectMapper.writeValueAsString(chunk)));
+            } catch (Exception ignored) {
+            }
+        };
     }
 }
