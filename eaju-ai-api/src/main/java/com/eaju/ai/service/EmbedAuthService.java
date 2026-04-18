@@ -22,8 +22,12 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+
+import org.springframework.beans.factory.annotation.Value;
 import java.util.stream.Collectors;
 
 /**
@@ -46,6 +50,7 @@ public class EmbedAuthService {
     private final UserContextCacheService userContextCacheService;
     private final UserContextFieldService userContextFieldService;
     private final DmsExternalLoginClient dmsExternalLoginClient;
+    private final Set<String> adminPhones;
 
     public EmbedAuthService(ApiKeyRepository apiKeyRepository,
                             AiAppRepository aiAppRepository,
@@ -54,7 +59,8 @@ public class EmbedAuthService {
                             UserContextFieldRepository userContextFieldRepository,
                             UserContextCacheService userContextCacheService,
                             UserContextFieldService userContextFieldService,
-                            DmsExternalLoginClient dmsExternalLoginClient) {
+                            DmsExternalLoginClient dmsExternalLoginClient,
+                            @Value("${app.auth.admin-phones:}") String adminPhonesRaw) {
         this.apiKeyRepository = apiKeyRepository;
         this.aiAppRepository = aiAppRepository;
         this.jwtTokenProvider = jwtTokenProvider;
@@ -63,6 +69,31 @@ public class EmbedAuthService {
         this.userContextCacheService = userContextCacheService;
         this.userContextFieldService = userContextFieldService;
         this.dmsExternalLoginClient = dmsExternalLoginClient;
+        this.adminPhones = parseAdminPhones(adminPhonesRaw);
+        log.info("EmbedAuthService 初始化：adminPhones 配置原始值='{}'，解析后={}", adminPhonesRaw, this.adminPhones);
+    }
+
+    private static Set<String> parseAdminPhones(String raw) {
+        Set<String> set = new HashSet<>();
+        if (!StringUtils.hasText(raw)) {
+            return set;
+        }
+        for (String p : raw.split(",")) {
+            if (StringUtils.hasText(p)) {
+                String normalized = normalizePhone(p);
+                if (StringUtils.hasText(normalized)) {
+                    set.add(normalized);
+                }
+            }
+        }
+        return set;
+    }
+
+    private static String normalizePhone(String raw) {
+        if (!StringUtils.hasText(raw)) {
+            return "";
+        }
+        return raw.replaceAll("\\D", "");
     }
 
     public LoginResponseDto embedLogin(EmbedLoginRequestDto req) {
@@ -161,7 +192,9 @@ public class EmbedAuthService {
         LoginSessionSnapshot snap = new LoginSessionSnapshot();
         snap.setPhone(phoneFromDms);
         snap.setUsername(displayName);
-        snap.setAdmin(false);
+        // 判断是否为管理员
+        boolean admin = adminPhones.contains(normalizePhone(phoneFromDms));
+        snap.setAdmin(admin);
         snap.setIssuedAtEpochMs(System.currentTimeMillis());
         snap.setDmsResponseExcerpt(dmsResponse.toString());
         loginSessionCacheService.save(issued.getJti(), snap);
@@ -193,6 +226,9 @@ public class EmbedAuthService {
 
         log.info("AppEmbedLogin 成功：appId={}, userId={}, phone={}, username={}", app.getId(), userId, phoneFromDms, displayName);
 
+        // 判断是否为管理员
+        boolean admin = adminPhones.contains(normalizePhone(phoneFromDms));
+
         LoginResponseDto dto = new LoginResponseDto();
         dto.setToken(issued.getToken());
         dto.setJti(issued.getJti());
@@ -200,7 +236,7 @@ public class EmbedAuthService {
         dto.setUserId(phoneFromDms);
         dto.setPhone(phoneFromDms);
         dto.setUsername(displayName);
-        dto.setAdmin(false);
+        dto.setAdmin(admin);
         dto.setDefaultModel(app.getModelId());
         dto.setIntegrationName(app.getName());
         // 返回缓存的 key-value，仅用于前端测试展示

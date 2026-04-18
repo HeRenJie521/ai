@@ -8,7 +8,6 @@ const LS_USER = 'eaju_username'
 const LS_UID = 'eaju_userId'
 const LS_ADMIN = 'eaju_isAdmin'
 const LS_SNAPSHOT = 'eaju_login_snapshot'
-const ONLY_ADMIN_PHONE = '15296711325'
 
 export interface LoginCachePayload {
   token: string
@@ -34,8 +33,6 @@ function readSnapshot(): LoginCachePayload | null {
 }
 
 function persistSnapshotFromLogin(res: LoginResult) {
-  const normalizedUserId = normalizePhoneLike(res.userId || res.phone || '')
-  const admin = res.admin && normalizedUserId === ONLY_ADMIN_PHONE
   const payload: LoginCachePayload = {
     token: res.token,
     jti: res.jti,
@@ -43,7 +40,7 @@ function persistSnapshotFromLogin(res: LoginResult) {
     userId: res.userId,
     phone: res.phone,
     username: res.username,
-    admin,
+    admin: res.admin,
     cachedAt: Date.now(),
   }
   localStorage.setItem(LS_SNAPSHOT, JSON.stringify(payload))
@@ -54,7 +51,8 @@ function normalizePhoneLike(value: string): string {
 }
 
 function resolveAdminFlag(rawAdmin: boolean, userId: string): boolean {
-  return rawAdmin && normalizePhoneLike(userId) === ONLY_ADMIN_PHONE
+  // 直接使用后端返回的 admin 标志，不再硬编码手机号限制
+  return rawAdmin
 }
 
 export const useAuthStore = defineStore('auth', () => {
