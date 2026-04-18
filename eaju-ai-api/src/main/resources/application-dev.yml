@@ -36,7 +36,7 @@ spring:
     properties:
       hibernate:
         jdbc:
-          time_zone: UTC
+          time_zone: Asia/Shanghai
           batch_size: 50
         order_inserts: true
         order_updates: true
