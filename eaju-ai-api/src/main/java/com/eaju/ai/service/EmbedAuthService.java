@@ -226,9 +226,6 @@ public class EmbedAuthService {
 
         log.info("AppEmbedLogin 成功：appId={}, userId={}, phone={}, username={}", app.getId(), userId, phoneFromDms, displayName);
 
-        // 判断是否为管理员
-        boolean admin = adminPhones.contains(normalizePhone(phoneFromDms));
-
         LoginResponseDto dto = new LoginResponseDto();
         dto.setToken(issued.getToken());
         dto.setJti(issued.getJti());
