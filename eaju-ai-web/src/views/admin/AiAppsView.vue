@@ -544,11 +544,8 @@ const embedOrigin = computed(() => window.location.origin)
 
 const embedUrl = computed(() => {
   const aid = embedRow.value?.id ?? ''
-  const params = new URLSearchParams()
-  params.set('aid', String(aid))
-  params.set('uid', authStore.userId || '')
-  params.set('username', authStore.username || '')
-  return `${embedOrigin.value}/embed?${params.toString()}`
+  // 只保留 aid 和 phone 参数，phone 使用占位符提示用户替换
+  return `${embedOrigin.value}/embed?aid=${aid}&phone=请输入手机号`
 })
 
 function previewUrl(row: AiAppRow): string {

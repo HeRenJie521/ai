@@ -3,22 +3,21 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>AI Chat - EmbedView 测试页面</title>
+    <title>AI Chat</title>
     <style>
-        /* 清除默认边距，防止出现多余的白边和滚动条 */
         body, html {
             margin: 0;
             padding: 0;
             width: 100%;
             height: 100%;
-            overflow: hidden; /* 将滚动交由 iframe 内部处理，外部页面不滚动 */
+            overflow: hidden;
         }
     </style>
 </head>
 <body>
 
 <iframe
-        src="http://localhost:5173/embed?aid=1&phone=18322220030&username=%E4%BD%95%E4%BB%81%E6%9D%B0&bizCode=10&department=%E7%A0%94%E5%8F%91%E9%83%A8&employeeId=E001"
+        src="http://localhost:5173/embed?aid=1&phone=18322220030"
         width="100%"
         style="height: 100svh; border:none; display:block;"
         allow="clipboard-write">
