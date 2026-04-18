@@ -46,15 +46,6 @@ function persistSnapshotFromLogin(res: LoginResult) {
   localStorage.setItem(LS_SNAPSHOT, JSON.stringify(payload))
 }
 
-function normalizePhoneLike(value: string): string {
-  return String(value || '').replace(/\D/g, '')
-}
-
-function resolveAdminFlag(rawAdmin: boolean, userId: string): boolean {
-  // 直接使用后端返回的 admin 标志，不再硬编码手机号限制
-  return rawAdmin
-}
-
 export const useAuthStore = defineStore('auth', () => {
   const snap = readSnapshot()
   const token = ref(snap?.token || localStorage.getItem(LS_TOKEN) || '')
@@ -62,14 +53,14 @@ export const useAuthStore = defineStore('auth', () => {
   const userId = ref(snap?.userId || localStorage.getItem(LS_UID) || '')
   const isAdmin = ref(
     snap
-      ? resolveAdminFlag(!!snap.admin, snap.userId || snap.phone || '')
-      : resolveAdminFlag(localStorage.getItem(LS_ADMIN) === 'true', localStorage.getItem(LS_UID) || ''),
+      ? !!snap.admin
+      : localStorage.getItem(LS_ADMIN) === 'true',
   )
 
   const isLoggedIn = computed(() => !!token.value)
 
   function setFromLogin(res: LoginResult) {
-    const admin = resolveAdminFlag(res.admin, res.userId || res.phone || '')
+    const admin = !!res.admin
     token.value = res.token
     username.value = res.username
     userId.value = res.userId
