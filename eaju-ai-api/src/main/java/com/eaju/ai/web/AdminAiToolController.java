@@ -89,7 +89,8 @@ public class AdminAiToolController {
         String requestBody = toolCallExecutor.buildRequestBody(tool, toolArgs, testCtx);
 
         long start = System.currentTimeMillis();
-        String result = toolCallExecutor.execute(tool, toolArgs, testCtx);
+        // 测试接口使用 executeWithRawResult，返回过滤后的真实响应数据
+        String result = toolCallExecutor.executeWithRawResult(tool, toolArgs, testCtx);
         long elapsed = System.currentTimeMillis() - start;
 
         Map<String, Object> resp = new LinkedHashMap<>();

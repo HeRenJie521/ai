@@ -447,7 +447,7 @@ async function runTest() {
       try { testRequestBody.value = JSON.stringify(JSON.parse(requestBody), null, 2) }
       catch { testRequestBody.value = requestBody }
     }
-    // 尝试格式化响应 JSON
+    // 尝试格式化响应 JSON（后端已根据出参配置过滤）
     try { testResult.value = JSON.stringify(JSON.parse(result), null, 2) }
     catch { testResult.value = result }
     testElapsed.value = elapsedMs

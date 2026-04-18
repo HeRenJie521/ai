@@ -52,16 +52,13 @@ public class ToolCallExecutor {
         try {
             Map<String, Object> argsMap = parseArgs(toolArgs);
 
-            // ── 入参诊断日志 ──────────────────────────────────────────────
-            log.debug("[工具调用] 工具={} ({})", tool.getLabel(), tool.getName());
-            log.debug("[工具调用] LLM传入参数: {}", toolArgs);
+            log.info("[工具调用] 工具={} ({})", tool.getLabel(), tool.getName());
+            log.info("[工具调用] LLM 传入参数：{}", toolArgs);
             if (userCtx == null || userCtx.isEmpty()) {
-                log.debug("[工具调用] 用户上下文: (空)");
+                log.info("[工具调用] 用户上下文：(空)");
             } else {
-                log.debug("[工具调用] 用户上下文 keys: {}", userCtx.keySet());
-                log.debug("[工具调用] 用户上下文 values: {}", userCtx);
+                log.info("[工具调用] 用户上下文：{}", userCtx);
             }
-            // ─────────────────────────────────────────────────────────────
 
             Map<String, Object> vars = new LinkedHashMap<>();
             if (userCtx != null) vars.putAll(userCtx);
@@ -99,29 +96,117 @@ public class ToolCallExecutor {
                 }
             }
 
-            log.debug("[工具调用] 请求: {} {}", method, url);
-            log.debug("[工具调用] 请求体: {}", body);
+            log.info("[工具调用] 请求：{} {}", method, url);
+            log.info("[工具调用] 请求体：{}", body);
 
             HttpEntity<String> entity = new HttpEntity<>(body, headers);
+            
+            // 打印请求报文
+            log.info("========== 工具调用请求开始 ==========");
+            log.info("[请求信息] toolName={} method={} url={}", tool.getName(), method, url);
+            log.info("[请求头] headers={}", headers);
+            log.info("[请求体] body={}", body);
+            
             ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.valueOf(method), entity, String.class);
             String result = response.getBody();
-            log.debug("[工具调用] 响应状态: {}", response.getStatusCode());
-            log.debug("[工具调用] 响应体: {}", result);
+            
+            // 打印响应报文
+            log.info("[响应状态] status={}", response.getStatusCode());
+            log.info("[响应体] body={}", result);
+            log.info("========== 工具调用请求结束 ==========");
 
-            String rawResult = result != null ? result : "";
-
-            // 若配置了出参说明，追加字段注释帮助 LLM 理解
-            if (StringUtils.hasText(tool.getResponseParamsJson())) {
+            // 配置了出参管理 → 过滤实际数据 + 拼接字段说明一起发给 AI（AI 需要字段含义才能理解数据）
+            // 未配置出参管理 → 发全量响应给 AI
+            if (StringUtils.hasText(tool.getResponseParamsJson()) && StringUtils.hasText(result)) {
+                String filtered = filterResponseByParams(result, tool.getResponseParamsJson());
                 String fieldDesc = buildResponseFieldDesc(tool.getResponseParamsJson());
+                StringBuilder sb = new StringBuilder();
                 if (StringUtils.hasText(fieldDesc)) {
-                    rawResult = rawResult + "\n\n[返回字段说明]\n" + fieldDesc;
+                    sb.append("字段说明：\n").append(fieldDesc).append("\n");
                 }
+                sb.append("响应数据：\n").append(StringUtils.hasText(filtered) ? filtered : result);
+                String payload = sb.toString();
+                log.info("[出参发给AI] {}", payload);
+                return payload;
             }
-            return rawResult;
+            return result != null ? result : "";
 
         } catch (Exception e) {
-            log.warn("[工具调用] 失败: tool={} error={}", tool.getName(), e.getMessage());
-            return "{\"error\": \"工具调用失败: " + e.getMessage().replace("\"", "'") + "\"}";
+            log.warn("[工具调用] 失败：tool={} error={}", tool.getName(), e.getMessage());
+            return "{\"error\": \"工具调用失败：" + e.getMessage().replace("\"", "'") + "\"}";
+        }
+    }
+
+    /**
+     * 执行工具调用并返回原始响应结果（用于测试接口）。
+     * 如果配置了出参管理，返回过滤后的响应数据；否则返回全部响应数据。
+     */
+    public String executeWithRawResult(AiToolEntity tool, String toolArgs, Map<String, Object> userCtx) {
+        try {
+            Map<String, Object> argsMap = parseArgs(toolArgs);
+            Map<String, Object> vars = new LinkedHashMap<>();
+            if (userCtx != null) vars.putAll(userCtx);
+            vars.putAll(argsMap);
+
+            String url = substitute(tool.getUrl(), vars);
+
+            HttpHeaders headers = new HttpHeaders();
+            if (StringUtils.hasText(tool.getHeadersJson())) {
+                Map<String, Object> rawHeaders = objectMapper.readValue(
+                        substitute(tool.getHeadersJson(), vars),
+                        new TypeReference<Map<String, Object>>() {});
+                rawHeaders.forEach((k, v) -> { if (v != null) headers.set(k, v.toString()); });
+            }
+
+            String method = tool.getHttpMethod() != null ? tool.getHttpMethod().toUpperCase() : "POST";
+            String body = null;
+
+            if ("POST".equals(method) || "PUT".equals(method) || "PATCH".equals(method)) {
+                String contentType = StringUtils.hasText(tool.getContentType())
+                        ? tool.getContentType() : "application/json";
+                headers.set("Content-Type", contentType);
+
+                if (StringUtils.hasText(tool.getDataParamsJson())) {
+                    body = buildParamBody(tool, argsMap, userCtx, contentType);
+                } else if (StringUtils.hasText(tool.getBodyTemplate())) {
+                    body = substitute(tool.getBodyTemplate(), vars);
+                    if ("application/x-www-form-urlencoded".equals(contentType)) {
+                        body = convertJsonToFormUrlEncoded(body);
+                    }
+                } else {
+                    body = "application/x-www-form-urlencoded".equals(contentType)
+                            ? convertMapToFormUrlEncoded(argsMap)
+                            : objectMapper.writeValueAsString(argsMap);
+                }
+            }
+
+            HttpEntity<String> entity = new HttpEntity<>(body, headers);
+            
+            // 打印请求报文
+            log.info("========== 工具调用请求开始 ==========");
+            log.info("[请求信息] toolName={} method={} url={}", tool.getName(), method, url);
+            log.info("[请求头] headers={}", headers);
+            log.info("[请求体] body={}", body);
+            
+            ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.valueOf(method), entity, String.class);
+            String result = response.getBody();
+            
+            // 打印响应报文
+            log.info("[响应状态] status={}", response.getStatusCode());
+            log.info("[响应体] body={}", result);
+            log.info("========== 工具调用请求结束 ==========");
+
+            // 如果配置了出参管理，过滤响应数据；否则返回全部
+            if (StringUtils.hasText(tool.getResponseParamsJson()) && StringUtils.hasText(result)) {
+                String filtered = filterResponseByParams(result, tool.getResponseParamsJson());
+                log.info("[出参过滤] 过滤后结果={}", filtered);
+                return filtered;
+            }
+            return result != null ? result : "";
+
+        } catch (Exception e) {
+            log.warn("[工具调用] 失败：tool={} error={}", tool.getName(), e.getMessage());
+            return "{\"error\": \"工具调用失败：" + e.getMessage().replace("\"", "'") + "\"}";
         }
     }
 
@@ -154,7 +239,7 @@ public class ToolCallExecutor {
                         : objectMapper.writeValueAsString(argsMap);
             }
         } catch (Exception e) {
-            log.debug("构建测试请求体失败: {}", e.getMessage());
+            log.debug("构建测试请求体失败：{}", e.getMessage());
             return null;
         }
     }
@@ -245,7 +330,7 @@ public class ToolCallExecutor {
             log.info("[参数解析] key={} 来源=用户上下文 fieldKey={} 取到值={}", paramKey, fieldKey, resolved);
         } else if ("llm".equals(valueSource)) {
             resolved = StringUtils.hasText(paramKey) ? argsMap.get(paramKey) : null;
-            log.info("[参数解析] key={} 来源=LLM入参 取到值={}", paramKey, resolved);
+            log.info("[参数解析] key={} 来源=LLM 入参 取到值={}", paramKey, resolved);
         } else if ("response".equals(valueSource)) {
             resolved = null;
             log.info("[参数解析] key={} 来源=出参传递 跳过", paramKey);
@@ -265,7 +350,7 @@ public class ToolCallExecutor {
                     toolArgs.trim(), new TypeReference<Map<String, Object>>() {});
             return map != null ? map : new LinkedHashMap<>();
         } catch (Exception e) {
-            log.warn("解析工具入参失败: {}", e.getMessage());
+            log.warn("解析工具入参失败：{}", e.getMessage());
             return new LinkedHashMap<>();
         }
     }
@@ -331,7 +416,7 @@ public class ToolCallExecutor {
      *   - data (Object): 数据体
      *     - data.ebcdCode (String): 数据字典编码 | 可用于数据提交
      *     - data.items (Array): 明细列表
-     *       - data.items[*].itemId (String): 明细ID
+     *       - data.items[*].itemId (String): 明细 ID
      */
     @SuppressWarnings("unchecked")
     private String buildResponseFieldDesc(String responseParamsJson) {
@@ -342,7 +427,7 @@ public class ToolCallExecutor {
             appendFieldDesc(params, "", sb, 0);
             return sb.toString().trim();
         } catch (Exception e) {
-            log.debug("解析出参说明 JSON 失败: {}", e.getMessage());
+            log.debug("解析出参说明 JSON 失败：{}", e.getMessage());
             return "";
         }
     }
@@ -376,5 +461,141 @@ public class ToolCallExecutor {
                 appendFieldDesc(children, childPrefix, sb, depth + 1);
             }
         }
+    }
+
+    /**
+     * 根据配置的出参过滤响应结果，只保留配置的字段。
+     * 如果响应是 JSON 且能解析，则按配置的出参树进行过滤；
+     * 如果响应不是 JSON 或解析失败，则原样返回。
+     */
+    @SuppressWarnings("unchecked")
+    private String filterResponseByParams(String rawResult, String responseParamsJson) {
+        if (!StringUtils.hasText(rawResult)) {
+            return rawResult;
+        }
+        try {
+            // 尝试解析响应为 JSON
+            Object responseObj;
+            try {
+                responseObj = objectMapper.readValue(rawResult.trim(), Object.class);
+            } catch (Exception e) {
+                // 不是 JSON，原样返回
+                return rawResult;
+            }
+
+            // 解析出参配置
+            List<Map<String, Object>> params = objectMapper.readValue(
+                    responseParamsJson, new TypeReference<List<Map<String, Object>>>() {});
+
+            // 构建过滤后的结果
+            Map<String, Object> filtered = new LinkedHashMap<>();
+            for (Map<String, Object> param : params) {
+                String key = (String) param.get("key");
+                if (!StringUtils.hasText(key)) continue;
+
+                String fieldType = (String) param.getOrDefault("fieldType", "String");
+                List<Map<String, Object>> children = (List<Map<String, Object>>) param.get("children");
+
+                if ("Object".equals(fieldType) && children != null && !children.isEmpty()) {
+                    // 对象类型，递归提取子字段
+                    if (responseObj instanceof Map) {
+                        Object childValue = ((Map<?, ?>) responseObj).get(key);
+                        Object filteredChild = filterByConfig(childValue, children);
+                        if (filteredChild != null) {
+                            filtered.put(key, filteredChild);
+                        }
+                    }
+                } else if ("Array".equals(fieldType) && children != null) {
+                    // 数组类型，递归处理数组元素
+                    if (responseObj instanceof Map) {
+                        Object arrayValue = ((Map<?, ?>) responseObj).get(key);
+                        if (arrayValue instanceof List) {
+                            List<Object> filteredArray = new ArrayList<>();
+                            for (Object item : (List<?>) arrayValue) {
+                                Object filteredItem = filterByConfig(item, children);
+                                if (filteredItem != null) {
+                                    filteredArray.add(filteredItem);
+                                }
+                            }
+                            if (!filteredArray.isEmpty()) {
+                                filtered.put(key, filteredArray);
+                            }
+                        }
+                    }
+                } else {
+                    // 叶子节点，直接从响应中取值
+                    if (responseObj instanceof Map) {
+                        Object value = ((Map<?, ?>) responseObj).get(key);
+                        if (value != null) {
+                            filtered.put(key, value);
+                        }
+                    }
+                }
+            }
+
+            // 如果过滤后有数据，返回 JSON；否则返回空字符串
+            if (filtered.isEmpty()) {
+                return "";
+            }
+            return objectMapper.writeValueAsString(filtered);
+
+        } catch (Exception e) {
+            log.debug("过滤出参失败：{}", e.getMessage());
+            // 过滤失败时原样返回
+            return rawResult;
+        }
+    }
+
+    /**
+     * 递归过滤单个值（对象或数组元素），根据配置的子参数树提取字段。
+     */
+    @SuppressWarnings("unchecked")
+    private Object filterByConfig(Object value, List<Map<String, Object>> children) {
+        if (value == null || children == null || children.isEmpty()) {
+            return value;
+        }
+
+        if (value instanceof Map) {
+            Map<?, ?> map = (Map<?, ?>) value;
+            Map<String, Object> result = new LinkedHashMap<>();
+
+            for (Map<String, Object> child : children) {
+                String key = (String) child.get("key");
+                if (!StringUtils.hasText(key)) continue;
+
+                String fieldType = (String) child.getOrDefault("fieldType", "String");
+                List<Map<String, Object>> grandchildren = (List<Map<String, Object>>) child.get("children");
+
+                if ("Object".equals(fieldType) && grandchildren != null && !grandchildren.isEmpty()) {
+                    Object childValue = map.get(key);
+                    Object filteredChild = filterByConfig(childValue, grandchildren);
+                    if (filteredChild != null) {
+                        result.put(key, filteredChild);
+                    }
+                } else if ("Array".equals(fieldType) && grandchildren != null) {
+                    Object arrayValue = map.get(key);
+                    if (arrayValue instanceof List) {
+                        List<Object> filteredArray = new ArrayList<>();
+                        for (Object item : (List<?>) arrayValue) {
+                            Object filteredItem = filterByConfig(item, grandchildren);
+                            if (filteredItem != null) {
+                                filteredArray.add(filteredItem);
+                            }
+                        }
+                        if (!filteredArray.isEmpty()) {
+                            result.put(key, filteredArray);
+                        }
+                    }
+                } else {
+                    Object childValue = map.get(key);
+                    if (childValue != null) {
+                        result.put(key, childValue);
+                    }
+                }
+            }
+            return result.isEmpty() ? null : result;
+        }
+
+        return value;
     }
 }

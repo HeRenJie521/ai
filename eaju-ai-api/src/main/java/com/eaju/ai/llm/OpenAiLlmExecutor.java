@@ -11,6 +11,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
@@ -26,6 +28,8 @@ import java.util.function.Consumer;
  */
 @Component
 public class OpenAiLlmExecutor {
+
+    private static final Logger log = LoggerFactory.getLogger(OpenAiLlmExecutor.class);
 
     private final OpenAiChatCompletionClient httpClient;
     private final ChatCompletionResponseMapper responseMapper;
@@ -44,7 +48,10 @@ public class OpenAiLlmExecutor {
         cfg.validateOrThrow();
         String modelId = cfg.resolveUpstreamModelId(request.getModel(), request.getMode());
         ObjectNode body = buildChatCompletionBody(cfg, modelId, request, false);
+        log.info("[LLM请求] provider={} model={}", cfg.getCode(), modelId);
+        log.info("[LLM请求体] {}", body);
         JsonNode root = httpClient.post(cfg.getBaseUrl(), cfg.getApiKey(), body);
+        log.info("[LLM响应] {}", root);
         return responseMapper.map(cfg.getCode(), modelId, root);
     }
 
@@ -62,7 +69,10 @@ public class OpenAiLlmExecutor {
             body.set("tools", toolsArray);
             body.put("tool_choice", "auto");
         }
+        log.info("[LLM请求-工具] provider={} model={}", cfg.getCode(), modelId);
+        log.info("[LLM请求体-工具] {}", body);
         JsonNode root = httpClient.post(cfg.getBaseUrl(), cfg.getApiKey(), body);
+        log.info("[LLM响应-工具] {}", root);
         return responseMapper.map(cfg.getCode(), modelId, root);
     }
 

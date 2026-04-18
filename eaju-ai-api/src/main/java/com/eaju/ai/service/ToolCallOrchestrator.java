@@ -86,7 +86,7 @@ public class ToolCallOrchestrator {
                 break;
             }
 
-            log.debug("工具调用第 {} 轮，共 {} 个工具", round + 1, toolCalls.size());
+            log.info("[工具编排] 第 {} 轮，共 {} 个工具调用", round + 1, toolCalls.size());
 
             // 追加 assistant 消息（含 tool_calls）
             ChatMessageDto assistantMsg = buildAssistantToolCallMessage(raw);
@@ -96,13 +96,14 @@ public class ToolCallOrchestrator {
             for (ToolCallItem tc : toolCalls) {
                 AiToolEntity matchedTool = findTool(tools, tc.functionName);
 
-                // 工具调用前：推送查询进度提示
+                // 工具调用前：推送查询进度提示（使用 name 字段）
                 if (onProgress != null) {
-                    String label = matchedTool != null && StringUtils.hasText(matchedTool.getLabel())
-                            ? matchedTool.getLabel() : "数据";
-                    onProgress.accept("正在查询" + label + "，请稍后...\n\n");
+                    String name = matchedTool != null && StringUtils.hasText(matchedTool.getName())
+                            ? matchedTool.getName() : "数据";
+                    onProgress.accept("正在查询" + name + "，请稍后...\n\n");
                 }
 
+                log.info("[工具编排] 调用工具={} id={} 入参={}", tc.functionName, tc.id, tc.arguments);
                 String result;
                 if (matchedTool != null) {
                     result = toolCallExecutor.execute(matchedTool, tc.arguments, userCtx);
@@ -110,6 +111,7 @@ public class ToolCallOrchestrator {
                     log.warn("未找到工具定义: {}", tc.functionName);
                     result = "{\"error\": \"未找到工具: " + tc.functionName + "\"}";
                 }
+                log.info("[工具编排] 工具={} 返回结果={}", tc.functionName, result);
                 ChatMessageDto toolMsg = new ChatMessageDto();
                 toolMsg.setRole("tool");
                 toolMsg.setContent(result);
