@@ -76,7 +76,22 @@
       "Bash(mv *)",
       "Bash(tail *)",
       "Bash(tr *)",
-      "Bash(./mvnw *)"
+      "Bash(./mvnw *)",
+      "Bash(--- *)",
+      "Bash(+++ *)",
+      "Bash(@@ *)",
+      "Bash(:class=\"['msg-bubble', m.role === 'user' ? 'msg-bubble--user' : 'msg-bubble--ai']\")",
+      "Bash(m.role *)",
+      "Bash(+)",
+      "Bash(+ *)",
+      "Bash(v-if=\"m.role === 'assistant' && m.reasoningcontent\" *)",
+      "Bash(m.reasoningcontent *)",
+      "Bash(v-if=\"m.role === 'assistant'\" *)",
+      "Bash(-)",
+      "Bash('' *)",
+      "Bash(v-if=\"m.createdat\" *)",
+      "Bash(patch *)",
+      "Bash(od *)"
     ]
   },
   "$version": 3

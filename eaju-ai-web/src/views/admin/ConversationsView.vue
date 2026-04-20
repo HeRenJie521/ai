@@ -48,7 +48,7 @@ const aiApps = ref<AiAppRow[]>([])
 const showDetailModal = ref(false)
 const detailLoading = ref(false)
 const detailData = ref<ConversationDetail | null>(null)
-const messages = ref<{ role: string; content: string; reasoningContent?: string; createdAt?: string }[]>([])
+const messages = ref<{ role: string; content: string; reasoningContent?: string; fileUrls?: string[]; createdAt?: string }[]>([])
 
 function integrationTypeLabel(type: ApiKeyRow['type']): string {
   return type === 2 ? '嵌入网站' : 'API Key'
@@ -116,6 +116,7 @@ async function showDetail(row: ConversationAdminRow) {
       role: m.role,
       content: m.content || '',
       reasoningContent: m.reasoningContent || '',
+      fileUrls: m.fileUrls || [],
       createdAt: m.createdAt ?? undefined,
     }))
   } catch (e) {
@@ -333,12 +334,22 @@ const columns = [
               >
                 <div class="message-bubble">
                   <div class="message-role">{{ msg.role === 'user' ? '提问' : 'AI回复' }}</div>
+                  <!-- 用户消息的图片 -->
+                  <div v-if="msg.role === 'user' && msg.fileUrls && msg.fileUrls.length > 0" class="msg-images">
+                    <img
+                      v-for="(url, idx) in msg.fileUrls"
+                      :key="idx"
+                      :src="url"
+                      :alt="'图片 ' + (idx + 1)"
+                      class="msg-image"
+                    />
+                  </div>
                   <details v-if="msg.role === 'assistant' && msg.reasoningContent" class="thinking-details">
                     <summary class="thinking-summary">思考过程</summary>
                     <pre class="thinking-content">{{ msg.reasoningContent }}</pre>
                   </details>
                   <div v-if="msg.role === 'assistant'" class="msg-md" v-html="renderChatMarkdown(msg.content)" />
-                  <div v-else class="message-content">{{ msg.content }}</div>
+                  <div v-else-if="msg.content" class="message-content">{{ msg.content }}</div>
                   <div v-if="msg.createdAt" class="message-time">{{ msg.createdAt.replace('T', ' ').slice(0, 19) }}</div>
                 </div>
               </div>
@@ -494,6 +505,20 @@ const columns = [
   white-space: pre-wrap;
   line-height: 1.6;
   border-top: 1px solid #e5e7eb;
+}
+/* 消息中的图片 */
+.msg-images {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.msg-image {
+  max-width: 200px;
+  max-height: 200px;
+  border-radius: 8px;
+  cursor: pointer;
+  object-fit: contain;
 }
 </style>
 
