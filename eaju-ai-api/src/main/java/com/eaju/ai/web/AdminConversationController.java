@@ -219,6 +219,7 @@ public class AdminConversationController {
         dto.setLastMessageAt(e.getLastMessageAt() != null ? e.getLastMessageAt().toString() : null);
         dto.setCreatedAt(e.getCreatedAt() != null ? e.getCreatedAt().toString() : null);
         dto.setLastProviderCode(e.getLastProviderCode());
+        dto.setLastProviderDisplayName(e.getLastProviderDisplayName());
         dto.setLastModeKey(e.getLastModeKey());
         dto.setApiKeyId(e.getApiKeyId());
         if (e.getAppId() != null) {

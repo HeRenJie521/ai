@@ -5,6 +5,7 @@ import com.eaju.ai.dto.admin.LlmProviderCreateRequestDto;
 import com.eaju.ai.dto.admin.LlmProviderUpdateRequestDto;
 import com.eaju.ai.service.AdminLlmProviderService;
 import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -47,5 +48,10 @@ public class AdminLlmProviderController {
             @PathVariable("id") Long id,
             @RequestBody LlmProviderUpdateRequestDto dto) {
         return adminLlmProviderService.update(id, dto);
+    }
+
+    @DeleteMapping("/{id}")
+    public void delete(@PathVariable("id") Long id) {
+        adminLlmProviderService.delete(id);
     }
 }

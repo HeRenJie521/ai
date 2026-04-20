@@ -9,6 +9,10 @@ import com.eaju.ai.dto.admin.ApiKeyUsageDto;
 import com.eaju.ai.dto.admin.AppToolBindRequestDto;
 import com.eaju.ai.persistence.entity.AiAppEntity;
 import com.eaju.ai.persistence.entity.AiToolEntity;
+import com.eaju.ai.persistence.entity.LlmModelEntity;
+import com.eaju.ai.persistence.entity.LlmProviderConfigEntity;
+import com.eaju.ai.persistence.repository.LlmModelRepository;
+import com.eaju.ai.persistence.repository.LlmProviderConfigRepository;
 import com.eaju.ai.service.AiAppService;
 import com.eaju.ai.service.AiToolService;
 import com.eaju.ai.service.AiToolService.AppToolBinding;
@@ -39,15 +43,21 @@ public class AdminAiAppController {
     private final ApiKeyAuditService apiKeyAuditService;
     private final ChatConversationService chatConversationService;
     private final AiToolService aiToolService;
+    private final LlmModelRepository llmModelRepository;
+    private final LlmProviderConfigRepository llmProviderRepository;
 
     public AdminAiAppController(AiAppService aiAppService,
                                 ApiKeyAuditService apiKeyAuditService,
                                 ChatConversationService chatConversationService,
-                                AiToolService aiToolService) {
+                                AiToolService aiToolService,
+                                LlmModelRepository llmModelRepository,
+                                LlmProviderConfigRepository llmProviderRepository) {
         this.aiAppService = aiAppService;
         this.apiKeyAuditService = apiKeyAuditService;
         this.chatConversationService = chatConversationService;
         this.aiToolService = aiToolService;
+        this.llmModelRepository = llmModelRepository;
+        this.llmProviderRepository = llmProviderRepository;
     }
 
     @GetMapping
@@ -68,8 +78,7 @@ public class AdminAiAppController {
                 body.getSystemRole(),
                 body.getSystemTask(),
                 body.getSystemConstraints(),
-                body.getModelId(),
-                body.getModelProviderId());
+                body.getLlmModelId());
         return toDto(e);
     }
 
@@ -84,8 +93,7 @@ public class AdminAiAppController {
                 body.getSystemRole(),
                 body.getSystemTask(),
                 body.getSystemConstraints(),
-                body.getModelId(),
-                body.getModelProviderId());
+                body.getLlmModelId());
         return toDto(e);
     }
 
@@ -106,9 +114,6 @@ public class AdminAiAppController {
         return aiToolService.findAppToolBindings(id);
     }
 
-    /**
-     * 保存应用工具绑定及调用策略（旧接口兼容，仅绑定工具，不设置调用策略）
-     */
     @PutMapping("/{id}/tools")
     public void bindTools(@PathVariable("id") Long id,
                           @RequestBody AppToolBindRequestDto body) {
@@ -117,9 +122,6 @@ public class AdminAiAppController {
         aiToolService.bindToolsToApp(id, body.getToolIds());
     }
 
-    /**
-     * 保存应用工具绑定及调用策略（新接口，支持为每个工具配置调用策略）
-     */
     @PutMapping("/{id}/tool-bindings")
     public void saveToolBindings(@PathVariable("id") Long id,
                                  @RequestBody List<AppToolBindingInput> body) {
@@ -137,6 +139,30 @@ public class AdminAiAppController {
         return chatConversationService.loadMessagesForAdmin(sessionId);
     }
 
+    private AiAppResponseDto toDto(AiAppEntity e) {
+        AiAppResponseDto dto = new AiAppResponseDto();
+        dto.setId(e.getId());
+        dto.setName(e.getName());
+        dto.setWelcomeText(e.getWelcomeText());
+        dto.setSuggestions(e.getSuggestions());
+        dto.setSystemRole(e.getSystemRole());
+        dto.setSystemTask(e.getSystemTask());
+        dto.setSystemConstraints(e.getSystemConstraints());
+        dto.setLlmModelId(e.getLlmModelId());
+        dto.setModelDisplayName(resolveModelDisplayName(e.getLlmModelId()));
+        dto.setCreatedAt(e.getCreatedAt() != null ? e.getCreatedAt().toString() : null);
+        return dto;
+    }
+
+    private String resolveModelDisplayName(Long llmModelId) {
+        if (llmModelId == null) return null;
+        LlmModelEntity model = llmModelRepository.findById(llmModelId).orElse(null);
+        if (model == null) return null;
+        LlmProviderConfigEntity provider = llmProviderRepository.findById(model.getProviderId()).orElse(null);
+        String providerName = provider != null ? provider.getDisplayName() : "";
+        return providerName + "·" + model.getName();
+    }
+
     private static AiToolDto toToolDto(AiToolEntity e) {
         AiToolDto dto = new AiToolDto();
         dto.setId(e.getId());
@@ -149,21 +175,6 @@ public class AdminAiAppController {
         dto.setBodyTemplate(e.getBodyTemplate());
         dto.setParamsSchemaJson(e.getParamsSchemaJson());
         dto.setEnabled(e.isEnabled());
-        return dto;
-    }
-
-    private static AiAppResponseDto toDto(AiAppEntity e) {
-        AiAppResponseDto dto = new AiAppResponseDto();
-        dto.setId(e.getId());
-        dto.setName(e.getName());
-        dto.setWelcomeText(e.getWelcomeText());
-        dto.setSuggestions(e.getSuggestions());
-        dto.setSystemRole(e.getSystemRole());
-        dto.setSystemTask(e.getSystemTask());
-        dto.setSystemConstraints(e.getSystemConstraints());
-        dto.setModelId(e.getModelId());
-        dto.setModelProviderId(e.getModelProviderId());
-        dto.setCreatedAt(e.getCreatedAt() != null ? e.getCreatedAt().toString() : null);
         return dto;
     }
 }

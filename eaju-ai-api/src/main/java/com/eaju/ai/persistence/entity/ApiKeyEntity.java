@@ -49,6 +49,10 @@ public class ApiKeyEntity {
     @Column(name = "allowed_origins", length = 1000)
     private String allowedOrigins;
 
+    /** 默认模型 ID，关联 llm_model.id */
+    @Column(name = "default_model_id")
+    private Long defaultModelId;
+
     @PrePersist
     public void prePersist() {
         Instant n = Instant.now();
@@ -92,4 +96,7 @@ public class ApiKeyEntity {
 
     public String getAllowedOrigins() { return allowedOrigins; }
     public void setAllowedOrigins(String allowedOrigins) { this.allowedOrigins = allowedOrigins; }
+
+    public Long getDefaultModelId() { return defaultModelId; }
+    public void setDefaultModelId(Long defaultModelId) { this.defaultModelId = defaultModelId; }
 }

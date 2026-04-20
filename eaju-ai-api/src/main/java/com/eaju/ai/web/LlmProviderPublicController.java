@@ -9,7 +9,6 @@ import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.util.StringUtils;
 
 import java.util.List;
 
@@ -31,11 +30,10 @@ public class LlmProviderPublicController {
         Long appId = CallerPrincipal.appId(authentication);
         if (appId != null) {
             // 应用嵌入登录：只返回该应用配置的模型，不暴露全量模型列表
-            String modelId = aiAppService.findById(appId)
-                    .map(AiAppEntity::getModelId)
-                    .filter(StringUtils::hasText)
+            Long llmModelId = aiAppService.findById(appId)
+                    .map(AiAppEntity::getLlmModelId)
                     .orElse(null);
-            return llmProviderConfigService.listOptionsForModelId(modelId);
+            return llmProviderConfigService.listOptionsForLlmModelId(llmModelId);
         }
         return llmProviderConfigService.listEnabledOptions();
     }

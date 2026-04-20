@@ -9,6 +9,7 @@ export interface ConversationAdminRow {
   lastMessageAt: string | null
   createdAt: string | null
   lastProviderCode: string | null
+  lastProviderDisplayName: string | null
   lastModeKey: string | null
   apiKeyId: number | null
   apiKeyName: string | null

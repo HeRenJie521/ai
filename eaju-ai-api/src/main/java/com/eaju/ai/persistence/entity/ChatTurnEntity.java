@@ -80,6 +80,10 @@ public class ChatTurnEntity {
     @Column(name = "app_id")
     private Long appId;
 
+    /** 本轮使用的模型 ID，关联 llm_model.id */
+    @Column(name = "llm_model_id")
+    private Long llmModelId;
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
@@ -240,5 +244,13 @@ public class ChatTurnEntity {
 
     public void setAppId(Long appId) {
         this.appId = appId;
+    }
+
+    public Long getLlmModelId() {
+        return llmModelId;
+    }
+
+    public void setLlmModelId(Long llmModelId) {
+        this.llmModelId = llmModelId;
     }
 }

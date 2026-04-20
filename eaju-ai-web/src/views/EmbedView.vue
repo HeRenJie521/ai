@@ -110,6 +110,13 @@ function clearSessionId() {
 const currentProvider = computed(() =>
   providers.value.find(p => p.code === selectedProvider.value) ?? null,
 )
+
+const currentModeCapability = computed(() => {
+  const p = currentProvider.value
+  if (!p?.modeCapabilities || !selectedMode.value) return null
+  return p.modeCapabilities[selectedMode.value] || null
+})
+
 const showThinkingToggle = computed(() => {
   const p = currentProvider.value
   if (!p?.supportsThinking) return false
@@ -340,7 +347,7 @@ async function sendMessage(text?: string) {
     const payload: Record<string, unknown> = {
       provider: selectedProvider.value,
       messages: messages.value.slice(0, assistantIdx),
-      stream: true,
+      stream: currentModeCapability.value?.streamOutput !== false,  // 模型支持流式则使用流式
       sessionId: sessionId.value,
       thinkingMode: thinkingOn.value,
     }

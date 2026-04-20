@@ -12,8 +12,8 @@ public class AiAppCreateRequestDto {
     private String systemRole;
     private String systemTask;
     private String systemConstraints;
-    private String modelId;
-    private Long modelProviderId;
+    /** 绑定的模型 ID（llm_model.id） */
+    private Long llmModelId;
 
     public String getName() { return name; }
     public void setName(String name) { this.name = name; }
@@ -33,9 +33,6 @@ public class AiAppCreateRequestDto {
     public String getSystemConstraints() { return systemConstraints; }
     public void setSystemConstraints(String systemConstraints) { this.systemConstraints = systemConstraints; }
 
-    public String getModelId() { return modelId; }
-    public void setModelId(String modelId) { this.modelId = modelId; }
-
-    public Long getModelProviderId() { return modelProviderId; }
-    public void setModelProviderId(Long modelProviderId) { this.modelProviderId = modelProviderId; }
+    public Long getLlmModelId() { return llmModelId; }
+    public void setLlmModelId(Long llmModelId) { this.llmModelId = llmModelId; }
 }

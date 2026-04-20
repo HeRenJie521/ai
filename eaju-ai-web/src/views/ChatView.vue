@@ -619,7 +619,7 @@ async function send() {
     mode: modeKey.value,
     sessionId: sid,
     messages: messages.value,
-    stream: true,
+    stream: currentModeCapability.value?.streamOutput !== false,  // 模型支持流式则使用流式
     thinkingMode: thinkingModeOn.value,
   }
 
@@ -786,7 +786,10 @@ function goSettingsPage(page: 'llm' | 'api-keys' | 'api-docs') {
           :class="{ active: c.sessionId === sessionId }"
           @click="selectConv(c)"
         >
-          <n-ellipsis style="flex: 1">{{ c.title }}</n-ellipsis>
+          <div class="conv-item-main">
+            <n-ellipsis class="conv-title">{{ c.title }}</n-ellipsis>
+            <span v-if="c.lastModelDisplayName" class="conv-model">{{ c.lastModelDisplayName }}</span>
+          </div>
           <n-button quaternary size="tiny" @click="(e) => confirmDelete(c, e)">
             <template #icon>
               <n-icon :component="TrashOutline" />
@@ -1020,7 +1023,10 @@ function goSettingsPage(page: 'llm' | 'api-keys' | 'api-docs') {
           :class="{ active: c.sessionId === sessionId }"
           @click="selectConv(c)"
         >
-          <n-ellipsis style="flex: 1">{{ c.title }}</n-ellipsis>
+          <div class="conv-item-main">
+            <n-ellipsis class="conv-title">{{ c.title }}</n-ellipsis>
+            <span v-if="c.lastModelDisplayName" class="conv-model">{{ c.lastModelDisplayName }}</span>
+          </div>
           <n-button quaternary size="tiny" @click="(e) => confirmDelete(c, e)">
             <template #icon>
               <n-icon :component="TrashOutline" />
@@ -1108,6 +1114,23 @@ function goSettingsPage(page: 'llm' | 'api-keys' | 'api-docs') {
   flex: 1;
   overflow-y: auto;
   padding: 8px 0;
+}
+.conv-item-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.conv-title {
+  font-size: 14px;
+}
+.conv-model {
+  font-size: 11px;
+  color: #9ca3af;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .conv-item {
   display: flex;

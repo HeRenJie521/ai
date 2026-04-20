@@ -67,7 +67,6 @@
       "Bash(word-break: *)",
       "Bash(.suggestion-empty *)",
       "Bash(text-align: *)",
-      "Bash(psql *)",
       "Bash(echo *)",
       "Bash(xargs *)",
       "Bash(git checkout *)",
@@ -75,7 +74,9 @@
       "Bash(perl *)",
       "Bash(head *)",
       "Bash(mv *)",
-      "Bash(tail *)"
+      "Bash(tail *)",
+      "Bash(tr *)",
+      "Bash(./mvnw *)"
     ]
   },
   "$version": 3

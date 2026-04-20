@@ -82,11 +82,18 @@ public class ChatService {
         ChatRequestDto effective = chatSessionService.mergeHistory(request);
         ChatRequestDto forLlm = withSystemPrompt(request, effective);
         LlmProviderConfigSnapshot cfg = llmProviderConfigService.requireSnapshot(forLlm.getProvider());
+        request.setInternalLlmModelId(cfg.getModeModelId(forLlm.getMode()));
 
         // 若当前应用绑定了工具，走工具调用编排循环
         List<AiToolEntity> tools = resolveTools(request.getInternalAppId());
         ChatResponseDto response;
         if (!tools.isEmpty()) {
+            if (!cfg.modeSupportsToolCall(forLlm.getMode())) {
+                response = new ChatResponseDto();
+                response.setContent("当前模型不支持工具调用，请切换到支持工具调用的模型。");
+                response.setFinishReason("error");
+                return response;
+            }
             Map<String, Object> userCtx = userContextCacheService.get(request.getInternalJti());
             OrchestratorResult result = toolCallOrchestrator.chat(forLlm, cfg, tools, userCtx, null);
             response = result.getResponse();
@@ -124,9 +131,17 @@ public class ChatService {
         chatStreamExecutor.execute(() -> {
             try {
                 LlmProviderConfigSnapshot cfg = llmProviderConfigService.requireSnapshot(forLlm.getProvider());
+                request.setInternalLlmModelId(cfg.getModeModelId(forLlm.getMode()));
 
                 // 若应用绑定了工具，走非流式工具调用编排，再将最终回复模拟为 SSE 输出
                 List<AiToolEntity> tools = resolveTools(request.getInternalAppId());
+                if (!tools.isEmpty() && !cfg.modeSupportsToolCall(forLlm.getMode())) {
+                    ChatResponseDto errResp = new ChatResponseDto();
+                    errResp.setContent("当前模型不支持工具调用，请切换到支持工具调用的模型。");
+                    errResp.setFinishReason("error");
+                    emitResponseAsStream(emitter, errResp);
+                    return;
+                }
                 if (!tools.isEmpty()) {
                     Map<String, Object> userCtx = userContextCacheService.get(request.getInternalJti());
                     Consumer<String> onProgress = buildProgressEmitter(emitter);

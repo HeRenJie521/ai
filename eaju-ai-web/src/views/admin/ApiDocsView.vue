@@ -81,27 +81,34 @@ const curlStreaming = `curl -N -X POST http://your-host/api/chat \\
   }'`
 
 const reqParams = [
-  { field: 'provider', type: 'string', required: true, desc: '模型提供商代码，与后台 llm_provider_config.code 一致，大小写不敏感。可选值：DEEPSEEK、QWEN、KIMI、QIANFAN、GEMINI 等。' },
+  { field: 'provider', type: 'string', required: true, desc: '模型提供商代码，与后台 llm_provider_config.code 一致，大小写不敏感。可选值：DEEPSEEK、QWEN、KIMI、QIANFAN、GEMINI、MINIMAX 等。' },
   { field: 'messages', type: 'Message[]', required: true, desc: '对话消息列表，至少包含一条。多轮对话时可只传最新一轮，历史记录由 sessionId 从服务端自动拼接。' },
-  { field: 'mode', type: 'string', required: false, desc: '逻辑模型名，对应后台配置的 modes_json 中的 key。不传时使用该提供商的默认模型。与 model 二选一，model 优先。' },
+  { field: 'mode', type: 'string', required: false, desc: '逻辑模型名，对应后台 llm_model.name。不传时使用该提供商的默认模型。与 model 二选一，model 优先。' },
   { field: 'model', type: 'string', required: false, desc: '直接指定上游模型 ID，绕过 mode 映射，原样透传给上游接口。' },
   { field: 'sessionId', type: 'string', required: false, desc: '会话 ID。有值时从 Redis 读取该会话历史并拼接在本轮消息之前，阻塞模式成功后将本轮写回 Redis 并落库。不传时服务端自动生成 UUID（X-API-Key 调用时）。' },
-  { field: 'stream', type: 'boolean', required: false, desc: 'false 或不传：阻塞式，响应为 application/json；true：流式，响应为 text/event-stream（SSE）。' },
-  { field: 'temperature', type: 'number', required: false, desc: '采样温度，范围 0~2，值越高输出越随机。不传时使用后台推理默认值。' },
-  { field: 'maxTokens', type: 'integer', required: false, desc: '最大输出 token 数（对应 OpenAI 的 max_tokens）。不传时使用后台推理默认值。' },
-  { field: 'topP', type: 'number', required: false, desc: 'Top-P 核采样，范围 0~1。与 temperature 一般二选一使用。' },
-  { field: 'topK', type: 'integer', required: false, desc: 'Top-K 采样（部分厂商支持，如通义、Gemini）。' },
-  { field: 'sampleCount', type: 'integer', required: false, desc: '生成候选条数，对应 OpenAI 的 n。不传时默认 1。' },
-  { field: 'frequencyPenalty', type: 'number', required: false, desc: '频率惩罚，范围 -2~2，减少已出现词的重复频率。' },
-  { field: 'presencePenalty', type: 'number', required: false, desc: '存在惩罚，范围 -2~2，鼓励模型涉及新话题。' },
-  { field: 'responseFormat', type: 'string', required: false, desc: '回复格式。TEXT（默认）或 JSON_OBJECT（要求模型输出合法 JSON）。' },
-  { field: 'thinkingMode', type: 'boolean', required: false, desc: '思考模式，当前对 DeepSeek 生效。开启后响应中包含 reasoningContent 字段（思维链）。' },
+  { field: 'stream', type: 'boolean', required: false, desc: 'false 或不传：阻塞式，响应为 application/json；true：流式，响应为 text/event-stream（SSE）。注意：实际是否流式还受模型配置的 stream_output 字段控制。' },
+  { field: 'temperature', type: 'number', required: false, desc: '采样温度，范围 0~2，值越高输出越随机。优先级：前端传入 > 模型配置 (llm_model.temperature) > 提供商默认值。' },
+  { field: 'maxTokens', type: 'integer', required: false, desc: '最大输出 token 数（对应 OpenAI 的 max_tokens）。优先级：前端传入 > 模型配置 (llm_model.max_tokens) > 提供商默认值。' },
+  { field: 'topP', type: 'number', required: false, desc: 'Top-P 核采样，范围 0~1。与 temperature 一般二选一使用。优先级：前端传入 > 模型配置 (llm_model.top_p)。' },
+  { field: 'topK', type: 'integer', required: false, desc: 'Top-K 采样（部分厂商支持，如通义、Gemini）。优先级：前端传入 > 模型配置 (llm_model.top_k)。' },
+  { field: 'frequencyPenalty', type: 'number', required: false, desc: '频率惩罚，范围 -2~2，减少已出现词的重复频率。优先级：前端传入 > 模型配置 (llm_model.frequency_penalty)。' },
+  { field: 'presencePenalty', type: 'number', required: false, desc: '存在惩罚，范围 -2~2，鼓励模型涉及新话题。优先级：前端传入 > 模型配置 (llm_model.presence_penalty)。' },
+  { field: 'responseFormat', type: 'string', required: false, desc: '回复格式。TEXT（默认）或 JSON_OBJECT（要求模型输出合法 JSON）。开启 JSON_OBJECT 时，部分提供商（如通义千问）会自动在 system message 中注入 JSON 提示。' },
+  { field: 'thinkingMode', type: 'boolean', required: false, desc: '思考模式，对支持 deep_thinking 的模型生效（如 DeepSeek-R1）。开启后响应中包含 reasoningContent 字段（思维链）。优先级：前端传入 > 模型配置 (llm_model.thinking_mode)。' },
 ]
 
 const messageParams = [
   { field: 'role', type: 'string', required: true, desc: '消息角色：user（用户）/ assistant（模型）/ system（系统提示）。' },
   { field: 'content', type: 'string', required: false, desc: '消息内容文本。可与 fileUrls 同时存在；纯附件时可传空串。' },
-  { field: 'fileUrls', type: 'string[]', required: false, desc: '文件/图片公网 URL 列表，通过 /api/file/upload 上传后获得。图片按 OpenAI vision 格式发给上游，其它文件类型以链接形式触达模型。' },
+  { field: 'fileUrls', type: 'string[]', required: false, desc: '文件/图片公网 URL 列表，通过 /api/file/upload 上传后获得。图片按 OpenAI vision 格式发给上游，其它文件类型以链接形式触达模型。注意：实际是否支持图片上传受模型配置的 vision 字段控制。' },
+]
+
+const modelCapabilities = [
+  { field: 'deep_thinking', type: 'boolean', desc: '是否支持深度思考（推理）能力。开启后配合 thinkingMode 参数可获得思维链回复。' },
+  { field: 'vision', type: 'boolean', desc: '是否支持视觉理解（多模态）。为 false 时前端应禁止上传图片，或上传后自动移除并提示。' },
+  { field: 'stream_output', type: 'boolean', desc: '是否支持流式输出。为 false 时即使请求 stream=true 也会使用阻塞式响应。' },
+  { field: 'tool_call', type: 'boolean', desc: '是否支持工具调用（Function Calling）。为 false 时，绑定了工具的应用会收到错误提示："当前模型不支持工具调用，请切换到支持工具调用的模型。"' },
+  { field: 'force_thinking_enabled', type: 'boolean', desc: '是否强制开启思考（MiniMax 系列专用）。为 true 时每次请求都强制带 thinking 参数。' },
 ]
 
 const respFields = [
@@ -259,6 +266,7 @@ const navItems = [
     children: [
       { id: 'anchor-chat-params', label: '请求体参数' },
       { id: 'anchor-chat-message', label: 'Message 结构' },
+      { id: 'anchor-chat-capabilities', label: '模型能力配置' },
       { id: 'anchor-chat-resp-block', label: '响应 · 阻塞' },
       { id: 'anchor-chat-resp-stream', label: '响应 · 流式' },
       { id: 'anchor-chat-examples', label: '调用示例' },
@@ -396,6 +404,25 @@ onUnmounted(() => {
                     <td><span class="type-badge">{{ p.type }}</span></td>
                     <td><n-tag size="small" :bordered="false" :type="p.required ? 'error' : 'default'">{{ p.required ? '必填' : '可选' }}</n-tag></td>
                     <td class="desc-cell">{{ p.desc }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </n-collapse-item>
+
+          <n-collapse-item name="model-capabilities">
+            <template #header>
+              <div id="anchor-chat-capabilities" class="anchor-target collapse-title">模型能力配置（后台配置，自动生效）</div>
+            </template>
+            <p class="section-tip">以下字段在后台「模型管理」中配置，调用时自动生效，无需前端传入。</p>
+            <div class="table-wrap">
+              <table class="doc-table">
+                <thead><tr><th>字段</th><th>类型</th><th>说明</th></tr></thead>
+                <tbody>
+                  <tr v-for="c in modelCapabilities" :key="c.field">
+                    <td><code>{{ c.field }}</code></td>
+                    <td><span class="type-badge">{{ c.type }}</span></td>
+                    <td class="desc-cell">{{ c.desc }}</td>
                   </tr>
                 </tbody>
               </table>

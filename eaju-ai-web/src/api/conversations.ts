@@ -7,6 +7,8 @@ export interface ConversationItem {
   /** 该会话上次发消息时使用的提供方，用于恢复下拉选择 */
   lastProviderCode?: string | null
   lastModeKey?: string | null
+  /** 提供商·模型展示名，如"通义千问·qwen-plus" */
+  lastModelDisplayName?: string | null
 }
 
 export interface ChatMessage {

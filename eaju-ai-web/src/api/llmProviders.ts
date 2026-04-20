@@ -1,10 +1,12 @@
 import http from './http'
 
-/** 与 modes 中每个逻辑名对应的能力（来自 modes_json 对象值） */
+/** 与 modes 中每个逻辑名对应的能力 */
 export interface ModeCapability {
   textGeneration?: boolean
   deepThinking?: boolean
   vision?: boolean
+  streamOutput?: boolean
+  toolCall?: boolean
   /** 模型最大上下文 token 数，null 表示未配置 */
   contextWindow?: number | null
 }

@@ -159,9 +159,17 @@ const columns = [
   {
     title: '模型',
     key: 'lastModeKey',
-    width: 150,
+    width: 180,
     align: 'center' as const,
     ellipsis: { tooltip: true },
+    render: (row: ConversationAdminRow) => {
+      if (!row.lastModeKey) return '—'
+      // 如果有提供商显示名称，显示为「厂家·模型」格式
+      if (row.lastProviderDisplayName) {
+        return `${row.lastProviderDisplayName} · ${row.lastModeKey}`
+      }
+      return row.lastModeKey
+    },
   },
   {
     title: '轮次',

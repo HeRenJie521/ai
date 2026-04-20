@@ -40,7 +40,7 @@ import {
   type AiToolRow,
   type AppToolBindingInput,
 } from '@/api/adminTools'
-import { listLlmProviders, type LlmProviderOption } from '@/api/llmProviders'
+import { adminListLlmModels, type LlmModelAdminRow } from '@/api/adminLlmModel'
 import type { ChatMessage } from '@/api/conversations'
 import { useAuthStore } from '@/stores/auth'
 import { renderChatMarkdown } from '@/utils/chatMarkdown'
@@ -242,20 +242,13 @@ async function loadContextFields() {
 }
 
 // ---- 模型选项 ----
-const llmProviders = ref<LlmProviderOption[]>([])
-const modelOptions = computed(() => {
-  const opts: { label: string; value: string }[] = []
-  for (const p of llmProviders.value) {
-    if (p.modes && Object.keys(p.modes).length > 0) {
-      for (const modeKey of Object.keys(p.modes)) {
-        opts.push({ label: `${p.displayName} · ${modeKey}`, value: `${p.id}::${modeKey}` })
-      }
-    } else {
-      opts.push({ label: p.displayName, value: `${p.id}::${p.code}` })
-    }
-  }
-  return opts
-})
+const llmModels = ref<LlmModelAdminRow[]>([])
+const modelOptions = computed(() =>
+  llmModels.value.map((m) => ({
+    label: `${m.providerDisplayName} · ${m.name}`,
+    value: m.id,
+  })),
+)
 
 // ---- 新建应用 ----
 const showCreate = ref(false)
@@ -402,21 +395,12 @@ const suggestionItemsEdit = ref<string[]>([])
 function defaultForm() {
   return {
     name: '',
-    modelKey: null as string | null,
+    llmModelId: null as number | null,
     welcomeText: '',
     systemRole: '',
     systemTask: '',
     systemConstraints: '',
   }
-}
-
-function splitModelKey(modelKey: string | null): { modelId: string | undefined; modelProviderId: number | undefined } {
-  if (!modelKey) return { modelId: undefined, modelProviderId: undefined }
-  const idx = modelKey.indexOf('::')
-  if (idx === -1) return { modelId: modelKey, modelProviderId: undefined }
-  const providerIdStr = modelKey.slice(0, idx)
-  const providerId = Number(providerIdStr)
-  return { modelId: modelKey.slice(idx + 2), modelProviderId: isNaN(providerId) ? undefined : providerId }
 }
 
 async function load() {
@@ -431,15 +415,15 @@ async function load() {
   }
 }
 
-async function loadLlmProviders() {
+async function loadLlmModels() {
   try {
-    llmProviders.value = await listLlmProviders()
+    llmModels.value = await adminListLlmModels()
   } catch { /* 忽略 */ }
 }
 
 onMounted(() => {
   void load()
-  void loadLlmProviders()
+  void loadLlmModels()
   void loadAllTools()
   void loadContextFields()
 })
@@ -462,12 +446,10 @@ async function submitCreate() {
     suggestionItemsCreate.value.length > 0
       ? JSON.stringify(suggestionItemsCreate.value)
       : undefined
-  const { modelId, modelProviderId } = splitModelKey(createForm.value.modelKey)
   try {
     const created = await adminCreateAiApp({
       name,
-      modelId,
-      modelProviderId,
+      llmModelId: createForm.value.llmModelId != null ? createForm.value.llmModelId : undefined,
       welcomeText: createForm.value.welcomeText || undefined,
       suggestions: suggestionsJson,
       systemRole: undefined,
@@ -490,7 +472,7 @@ function openEdit(r: AiAppRow) {
   editId.value = r.id
   editForm.value = {
     name: r.name,
-    modelKey: r.modelProviderId != null && r.modelId ? `${r.modelProviderId}::${r.modelId}` : r.modelId,
+    llmModelId: r.llmModelId,
     welcomeText: r.welcomeText || '',
     systemRole: r.systemRole || '',
     systemTask: r.systemTask || '',
@@ -512,12 +494,10 @@ async function submitEdit() {
     suggestionItemsEdit.value.length > 0
       ? JSON.stringify(suggestionItemsEdit.value)
       : ''
-  const { modelId, modelProviderId } = splitModelKey(editForm.value.modelKey)
   try {
     await adminUpdateAiApp(id, {
       name,
-      modelId,
-      modelProviderId,
+      llmModelId: editForm.value.llmModelId != null ? editForm.value.llmModelId : undefined,
       welcomeText: editForm.value.welcomeText,
       suggestions: suggestionsJson,
       systemRole: editForm.value.systemRole,
@@ -619,7 +599,7 @@ async function submitPrompt() {
   try {
     await adminUpdateAiApp(id, {
       name: row.name,
-      modelId: row.modelId || undefined,
+      llmModelId: row.llmModelId ?? undefined,
       welcomeText: row.welcomeText || undefined,
       suggestions: row.suggestions || '',
       systemRole: promptForm.value.systemRole || undefined,
@@ -764,10 +744,10 @@ const columns: DataTableColumns<AiAppRow> = [
   },
   {
     title: '默认模型',
-    key: 'modelId',
+    key: 'modelDisplayName',
     width: 180,
     ellipsis: { tooltip: true },
-    render: (r) => r.modelId ?? h('span', { style: 'color:#bbb' }, '—'),
+    render: (r) => r.modelDisplayName ?? h('span', { style: 'color:#bbb' }, '—'),
   },
   {
     title: '开场白',
@@ -873,7 +853,7 @@ const columns: DataTableColumns<AiAppRow> = [
 
       <n-form-item label="默认对话模型">
         <n-select
-          v-model:value="createForm.modelKey"
+          v-model:value="createForm.llmModelId"
           :options="modelOptions"
           placeholder="请选择默认模型（可选）"
           filterable
@@ -946,7 +926,7 @@ const columns: DataTableColumns<AiAppRow> = [
 
       <n-form-item label="默认对话模型">
         <n-select
-          v-model:value="editForm.modelKey"
+          v-model:value="editForm.llmModelId"
           :options="modelOptions"
           placeholder="请选择默认模型（可选）"
           filterable
@@ -1355,4 +1335,144 @@ const columns: DataTableColumns<AiAppRow> = [
   font-size: 13px;
   padding: 20px 0;
 }
+/* 会话消息样式 */
+.msg-preview {
+  max-height: 500px;
+  overflow-y: auto;
+  padding: 16px;
+  background: #f9fafb;
+  border-radius: 8px;
+}
+.msg-row {
+  display: flex;
+  margin-bottom: 16px;
+}
+.msg-row--right {
+  justify-content: flex-end;
+}
+.msg-row--left {
+  justify-content: flex-start;
+}
+.msg-bubble {
+  max-width: 80%;
+  padding: 10px 14px;
+  border-radius: 12px;
+}
+.msg-bubble--user {
+  background: #e8f4fd;
+  border-radius: 12px 12px 4px 12px;
+}
+.msg-bubble--ai {
+  background: #f0f0f0;
+  border-radius: 12px 12px 12px 4px;
+}
+.msg-role-label {
+  font-weight: 500;
+  color: #666;
+  margin-bottom: 4px;
+  font-size: 12px;
+}
+.msg-body {
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 14px;
+  line-height: 1.6;
+  color: #111827;
+}
+.msg-thinking {
+  margin-bottom: 8px;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  background: #f9fafb;
+}
+.msg-thinking-summary {
+  padding: 6px 10px;
+  cursor: pointer;
+  font-size: 12px;
+  color: #6b7280;
+  font-weight: 500;
+}
+.msg-thinking-body {
+  padding: 8px 12px 12px;
+  font-size: 13px;
+  color: #4b5563;
+  white-space: pre-wrap;
+  line-height: 1.6;
+  border-top: 1px solid #e5e7eb;
+}
+.msg-time {
+  font-size: 11px;
+  color: #999;
+  margin-top: 4px;
+  text-align: right;
+}
+.msg-md {
+  font-size: 14px;
+  line-height: 1.6;
+  color: #111827;
+  word-break: break-word;
+}
+.msg-md :deep(p) { margin: 0.35em 0; }
+.msg-md :deep(p:first-child) { margin-top: 0; }
+.msg-md :deep(p:last-child) { margin-bottom: 0; }
+.msg-md :deep(ul), .msg-md :deep(ol) { margin: 0.4em 0; padding-left: 1.3em; }
+.msg-md :deep(h1), .msg-md :deep(h2), .msg-md :deep(h3), .msg-md :deep(h4) {
+  margin: 0.55em 0 0.3em;
+  font-weight: 600;
+  line-height: 1.3;
+}
+.msg-md :deep(blockquote) {
+  margin: 0.4em 0;
+  padding: 0.3em 0 0.3em 0.8em;
+  border-left: 3px solid #d1d5db;
+  color: #4b5563;
+}
+.msg-md :deep(a) { color: #2563eb; text-decoration: underline; }
+.msg-md :deep(p > code), .msg-md :deep(li > code), .msg-md :deep(td > code) {
+  background: #f3f4f6;
+  padding: 0.1em 0.35em;
+  border-radius: 4px;
+  font-family: ui-monospace, monospace;
+  font-size: 0.88em;
+}
+.msg-md :deep(.md-code-block) {
+  margin: 0.6em 0;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #fff;
+}
+.msg-md :deep(.md-code-head) {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 10px;
+  background: #f3f4f6;
+  border-bottom: 1px solid #e5e7eb;
+  font-size: 11px;
+}
+.msg-md :deep(.md-code-lang) { color: #6b7280; font-family: ui-monospace, monospace; }
+.msg-md :deep(.md-copy-btn) {
+  padding: 2px 7px;
+  font-size: 11px;
+  color: #374151;
+  background: #fff;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.msg-md :deep(.md-copy-btn:hover) { background: #f9fafb; }
+.msg-md :deep(.md-code-pre) {
+  margin: 0;
+  padding: 8px 12px;
+  overflow-x: auto;
+  font-size: 12px;
+  line-height: 1.5;
+  background: #fafafa;
+}
+.msg-md :deep(.md-code-pre code) { font-family: ui-monospace, monospace; }
+.msg-md :deep(table) { border-collapse: collapse; margin: 0.5em 0; font-size: 12px; width: 100%; }
+.msg-md :deep(th), .msg-md :deep(td) { border: 1px solid #e5e7eb; padding: 0.3em 0.5em; }
+.msg-md :deep(th) { background: #f9fafb; }
 </style>

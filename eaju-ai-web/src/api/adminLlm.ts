@@ -7,22 +7,21 @@ export interface LlmAdminRow {
   apiKeyMasked: string
   apiKey?: string
   baseUrl: string
-  defaultMode: string
-  modesJson: string
-  inferenceDefaultsJson: string | null
+  forceTemperature: number | null
+  thinkingParamStyle: string | null
+  jsonModeSystemHint: boolean
+  stripToolCallIndex: boolean
   enabled: boolean
   sortOrder: number
   createdAt: string | null
   updatedAt: string | null
 }
 
-/** 新增大模型：仅名称与连接信息；服务端根据名称生成 code，并写入占位 mode，需在「高级配置」中完善。 */
 export interface LlmCreatePayload {
   displayName: string
   apiKey?: string
   baseUrl: string
   enabled?: boolean
-  /** 不传则由服务端自动排在末尾 */
   sortOrder?: number
 }
 
@@ -30,9 +29,10 @@ export type LlmUpdatePayload = Partial<{
   displayName: string
   apiKey: string
   baseUrl: string
-  defaultMode: string
-  modesJson: string
-  inferenceDefaultsJson: string | null
+  forceTemperature: number | null
+  thinkingParamStyle: string | null
+  jsonModeSystemHint: boolean
+  stripToolCallIndex: boolean
   enabled: boolean
   sortOrder: number
 }>
@@ -55,4 +55,8 @@ export async function adminCreateLlm(payload: LlmCreatePayload): Promise<LlmAdmi
 export async function adminUpdateLlm(id: number, payload: LlmUpdatePayload): Promise<LlmAdminRow> {
   const { data } = await http.put<LlmAdminRow>(`/api/admin/llm-providers/${id}`, payload)
   return data
+}
+
+export async function adminDeleteLlm(id: number): Promise<void> {
+  await http.delete(`/api/admin/llm-providers/${id}`)
 }

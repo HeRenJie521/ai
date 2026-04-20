@@ -19,13 +19,9 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.Closeable;
 import java.util.List;
-import java.util.Locale;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 
-/**
- * 基于库表配置的 OpenAI Chat Completions 调用（取代按品牌的 {@code *ChatModel} Bean）。
- */
 @Component
 public class OpenAiLlmExecutor {
 
@@ -35,10 +31,9 @@ public class OpenAiLlmExecutor {
     private final ChatCompletionResponseMapper responseMapper;
     private final ObjectMapper objectMapper;
 
-    public OpenAiLlmExecutor(
-            OpenAiChatCompletionClient httpClient,
-            ChatCompletionResponseMapper responseMapper,
-            ObjectMapper objectMapper) {
+    public OpenAiLlmExecutor(OpenAiChatCompletionClient httpClient,
+                              ChatCompletionResponseMapper responseMapper,
+                              ObjectMapper objectMapper) {
         this.httpClient = httpClient;
         this.responseMapper = responseMapper;
         this.objectMapper = objectMapper;
@@ -55,11 +50,6 @@ public class OpenAiLlmExecutor {
         return responseMapper.map(cfg.getCode(), modelId, root);
     }
 
-    /**
-     * 携带工具定义的阻塞请求，供 {@link com.eaju.ai.service.ToolCallOrchestrator} 使用。
-     *
-     * @param toolsArray OpenAI tools 数组节点
-     */
     public ChatResponseDto chatWithTools(ChatRequestDto request, LlmProviderConfigSnapshot cfg,
                                          ArrayNode toolsArray) {
         cfg.validateOrThrow();
@@ -76,19 +66,11 @@ public class OpenAiLlmExecutor {
         return responseMapper.map(cfg.getCode(), modelId, root);
     }
 
-    /**
-     * 流式请求：将上游 chunk 转发到 {@code emitter}；不在此调用 {@link SseEmitter#complete()}，由调用方在落库后结束。
-     *
-     * @param onEachChunkJson 每条上游 chunk 的 JSON 字符串，可为 null
-     */
     public void chatStream(ChatRequestDto request, LlmProviderConfigSnapshot cfg, SseEmitter emitter,
                            Consumer<String> onEachChunkJson) throws Exception {
         chatStream(request, cfg, emitter, onEachChunkJson, null);
     }
 
-    /**
-     * @param upstreamHolder 非空时由 HTTP 客户端写入上游响应，便于在 SSE 完成/断开时关闭以停止拉流
-     */
     public void chatStream(ChatRequestDto request, LlmProviderConfigSnapshot cfg, SseEmitter emitter,
                            Consumer<String> onEachChunkJson, AtomicReference<Closeable> upstreamHolder)
             throws Exception {
@@ -104,7 +86,6 @@ public class OpenAiLlmExecutor {
         body.put("model", modelId);
         if (streaming) {
             body.put("stream", true);
-            // 告知上游在最后一个 chunk 中附带 usage，否则流式模式 token 统计全为 null
             ObjectNode streamOptions = objectMapper.createObjectNode();
             streamOptions.put("include_usage", true);
             body.set("stream_options", streamOptions);
@@ -116,57 +97,42 @@ public class OpenAiLlmExecutor {
     }
 
     private void applyInferenceParameters(LlmProviderConfigSnapshot cfg, ObjectNode body, ChatRequestDto request) {
-        InferenceDefaults d = cfg.defaultsOrEmpty();
+        String modeKey = resolveEffectiveModeKey(cfg, request);
+        InferenceDefaults d = cfg.getModeDefaults(modeKey);
 
         Double temperature = coalesce(request.getTemperature(), d.getTemperature());
-        // 月之暗面：部分模型仅接受 temperature=1，否则会 400 invalid temperature
-        if (isKimiProvider(cfg)) {
-            body.put("temperature", 1.0);
+        // 使用提供商配置的强制 temperature（如 Kimi 只接受 1.0）
+        if (cfg.getForceTemperature() != null) {
+            body.put("temperature", cfg.getForceTemperature());
         } else if (temperature != null) {
             body.put("temperature", temperature);
         }
 
         Integer maxTokens = coalesce(request.getMaxTokens(), d.getMaxTokens());
-        if (maxTokens != null) {
-            body.put("max_tokens", maxTokens);
-        }
+        if (maxTokens != null) body.put("max_tokens", maxTokens);
 
         Double topP = coalesce(request.getTopP(), d.getTopP());
-        if (topP != null) {
-            body.put("top_p", topP);
-        }
+        if (topP != null) body.put("top_p", topP);
 
         Integer topK = coalesce(request.getTopK(), d.getTopK());
-        if (topK != null && topK > 0) {
-            body.put("top_k", topK);
-        }
+        if (topK != null && topK > 0) body.put("top_k", topK);
 
         Double frequencyPenalty = coalesce(request.getFrequencyPenalty(), d.getFrequencyPenalty());
-        if (frequencyPenalty != null) {
-            body.put("frequency_penalty", frequencyPenalty);
-        }
+        if (frequencyPenalty != null) body.put("frequency_penalty", frequencyPenalty);
 
         Double presencePenalty = coalesce(request.getPresencePenalty(), d.getPresencePenalty());
-        if (presencePenalty != null) {
-            body.put("presence_penalty", presencePenalty);
-        }
+        if (presencePenalty != null) body.put("presence_penalty", presencePenalty);
 
         Integer sampleCount = coalesce(request.getSampleCount(), d.getSampleCount());
-        if (sampleCount != null && sampleCount > 0) {
-            body.put("n", sampleCount);
-        }
+        if (sampleCount != null && sampleCount > 0) body.put("n", sampleCount);
 
         List<String> stopDef = d.getStop();
         if (stopDef != null && !stopDef.isEmpty()) {
             ArrayNode stopArr = objectMapper.createArrayNode();
             for (String s : stopDef) {
-                if (StringUtils.hasText(s)) {
-                    stopArr.add(s.trim());
-                }
+                if (StringUtils.hasText(s)) stopArr.add(s.trim());
             }
-            if (stopArr.size() > 0) {
-                body.set("stop", stopArr);
-            }
+            if (stopArr.size() > 0) body.set("stop", stopArr);
         }
 
         ResponseFormatKind rf = coalesce(request.getResponseFormat(), d.getResponseFormat());
@@ -174,71 +140,48 @@ public class OpenAiLlmExecutor {
             ObjectNode rfNode = objectMapper.createObjectNode();
             rfNode.put("type", "json_object");
             body.set("response_format", rfNode);
-            
-            // Qwen/通义千问要求：使用 json_object 格式时，消息中必须包含 "json" 这个词
-            // 在 system message 中添加提示，确保满足 API 要求
-            ensureJsonMentionInSystemMessage(body);
+            // 某些提供商（如 Qwen）要求 JSON 模式时 system message 中必须包含 "json" 关键词
+            if (cfg.isJsonModeSystemHint()) {
+                ensureJsonMentionInSystemMessage(body);
+            }
         }
     }
 
-    /**
-     * 确保 system message 中包含 "json" 这个词，满足 Qwen API 的要求
-     */
     private void ensureJsonMentionInSystemMessage(ObjectNode body) {
         JsonNode messagesNode = body.get("messages");
-        if (messagesNode == null || !messagesNode.isArray()) {
-            return;
-        }
-        
-        // 检查是否已有 system message 包含 json 关键词
-        boolean hasJsonMention = false;
+        if (messagesNode == null || !messagesNode.isArray()) return;
         for (JsonNode msg : messagesNode) {
             if ("system".equals(msg.path("role").asText())) {
-                String content = msg.path("content").asText("");
-                if (content.toLowerCase().contains("json")) {
-                    hasJsonMention = true;
-                    break;
-                }
+                if (msg.path("content").asText("").toLowerCase().contains("json")) return;
             }
         }
-        
-        // 如果没有，添加一个 system message
-        if (!hasJsonMention) {
-            ObjectNode systemMsg = objectMapper.createObjectNode();
-            systemMsg.put("role", "system");
-            systemMsg.put("content", "请始终以 JSON 格式返回响应。");
-            ((ArrayNode) messagesNode).insert(0, systemMsg);
-        }
+        ObjectNode systemMsg = objectMapper.createObjectNode();
+        systemMsg.put("role", "system");
+        systemMsg.put("content", "请始终以 JSON 格式返回响应。");
+        ((ArrayNode) messagesNode).insert(0, systemMsg);
     }
 
     private void applyThinkingMode(LlmProviderConfigSnapshot cfg, ObjectNode body, ChatRequestDto request) {
-        if (!cfg.supportsThinkingFlag()) {
-            return;  // 该 provider 不支持 thinking API，不下发任何 thinking 参数
+        String modeKey = resolveEffectiveModeKey(cfg, request);
+
+        if (!cfg.modeSupportsThinkingApi(modeKey)) {
+            return;
         }
 
-        InferenceDefaults d = cfg.defaultsOrEmpty();
-        // 优先取请求里明确传入的值，其次取提供方配置默认值
+        InferenceDefaults d = cfg.getModeDefaults(modeKey);
         Boolean explicit = request.getThinkingMode();
         Boolean effective = explicit != null ? explicit : d.getThinkingMode();
 
         boolean dashScope = cfg.usesDashScopeThinkingParam();
-        
-        // 特殊处理：百炼的 MiniMax 系列模型强制要求 enable_thinking=true
-        String modeKey = StringUtils.hasText(request.getMode())
-                ? request.getMode().trim()
-                : cfg.getDefaultMode();
-        boolean isMiniMax = modeKey.toLowerCase().contains("minimax");
+        boolean forceThinking = cfg.modeForceThinkingEnabled(modeKey);
 
-        // 用户/调用方明确关闭思考：对于 MiniMax 模型不允许关闭
         if (Boolean.FALSE.equals(explicit)) {
-            if (isMiniMax) {
-                // MiniMax 强制开启思考
+            if (forceThinking) {
+                // 强制开启思考的模型不允许关闭
                 body.put("enable_thinking", true);
             } else if (dashScope) {
-                // DashScope/Qwen 格式：enable_thinking=false
                 body.put("enable_thinking", false);
             } else {
-                // DeepSeek/Anthropic 格式：thinking.type=disabled
                 ObjectNode t = objectMapper.createObjectNode();
                 t.put("type", "disabled");
                 body.set("thinking", t);
@@ -246,17 +189,10 @@ public class OpenAiLlmExecutor {
             return;
         }
 
-        // 开启思考：要求 mode 配置声明支持 deepThinking，防止对不支持的模式误传
-        // 但 MiniMax 模型强制开启，不受此限制
-        if (!Boolean.TRUE.equals(effective) && !isMiniMax) {
-            return;
-        }
-        if (!cfg.modeSupportsDeepThinking(modeKey) && !isMiniMax) {
-            return;
-        }
-        
-        // MiniMax 强制开启思考，或用户要求开启思考
-        if (isMiniMax || Boolean.TRUE.equals(effective)) {
+        if (!Boolean.TRUE.equals(effective) && !forceThinking) return;
+        if (!cfg.modeSupportsDeepThinking(modeKey) && !forceThinking) return;
+
+        if (forceThinking || Boolean.TRUE.equals(effective)) {
             if (dashScope) {
                 body.put("enable_thinking", true);
             } else {
@@ -267,8 +203,11 @@ public class OpenAiLlmExecutor {
         }
     }
 
-    private static boolean isKimiProvider(LlmProviderConfigSnapshot cfg) {
-        return cfg.getCode() != null && "KIMI".equals(cfg.getCode().toUpperCase(Locale.ROOT));
+    private static String resolveEffectiveModeKey(LlmProviderConfigSnapshot cfg, ChatRequestDto request) {
+        if (request != null && StringUtils.hasText(request.getMode())) {
+            return request.getMode().trim();
+        }
+        return cfg.getDefaultMode() != null ? cfg.getDefaultMode() : "";
     }
 
     private static <T> T coalesce(T requestVal, T defaultVal) {
@@ -278,24 +217,20 @@ public class OpenAiLlmExecutor {
     private ArrayNode toMessagesArray(Iterable<ChatMessageDto> messages) {
         ArrayNode array = objectMapper.createArrayNode();
         for (ChatMessageDto m : messages) {
-            if (m == null) {
-                continue;
-            }
+            if (m == null) continue;
             String role = m.getRole() != null ? m.getRole() : "";
             ObjectNode node = objectMapper.createObjectNode();
             node.put("role", role);
             if ("tool".equals(role)) {
-                // tool 结果消息：content 为字符串，需携带 tool_call_id
                 node.put("content", m.getContent() != null ? m.getContent() : "");
                 if (StringUtils.hasText(m.getToolCallId())) {
                     node.put("tool_call_id", m.getToolCallId());
                 }
             } else if ("assistant".equals(role) && StringUtils.hasText(m.getToolCallsJson())) {
-                // assistant 消息中包含 tool_calls（编排器循环中追加的历史）
                 node.put("content", m.getContent() != null ? m.getContent() : "");
                 try {
                     JsonNode toolCallsNode = objectMapper.readTree(m.getToolCallsJson());
-                    // 剥掉 "index" 字段：该字段仅用于流式分块重组，发回给模型时部分模型（如 Kimi）会报错或不响应
+                    // 剥掉 "index" 字段：该字段仅用于流式分块重组，发回给模型时会导致部分模型报错
                     ArrayNode cleanedToolCalls = objectMapper.createArrayNode();
                     if (toolCallsNode.isArray()) {
                         for (JsonNode tc : toolCallsNode) {
@@ -316,9 +251,6 @@ public class OpenAiLlmExecutor {
         return array;
     }
 
-    /**
-     * 无附件时 {@code content} 为字符串；有 {@code fileUrls} 时按 OpenAI 多段 content（text / image_url）组装。
-     */
     private void putMessageContentForUpstream(ObjectNode node, ChatMessageDto m) {
         List<String> urls = m.getFileUrls();
         boolean hasUrls = urls != null && !urls.isEmpty();
@@ -338,9 +270,7 @@ public class OpenAiLlmExecutor {
             parts.add(textPart);
         }
         for (String u : urls) {
-            if (!StringUtils.hasText(u)) {
-                continue;
-            }
+            if (!StringUtils.hasText(u)) continue;
             String url = u.trim();
             if (looksLikeImageUrl(url)) {
                 ObjectNode imgPart = objectMapper.createObjectNode();
@@ -366,12 +296,8 @@ public class OpenAiLlmExecutor {
     private static boolean looksLikeImageUrl(String url) {
         int q = url.indexOf('?');
         String path = q > 0 ? url.substring(0, q) : url;
-        String low = path.toLowerCase(Locale.ROOT);
-        return low.endsWith(".png")
-                || low.endsWith(".jpg")
-                || low.endsWith(".jpeg")
-                || low.endsWith(".gif")
-                || low.endsWith(".webp")
-                || low.endsWith(".bmp");
+        String low = path.toLowerCase(java.util.Locale.ROOT);
+        return low.endsWith(".png") || low.endsWith(".jpg") || low.endsWith(".jpeg")
+                || low.endsWith(".gif") || low.endsWith(".webp") || low.endsWith(".bmp");
     }
 }

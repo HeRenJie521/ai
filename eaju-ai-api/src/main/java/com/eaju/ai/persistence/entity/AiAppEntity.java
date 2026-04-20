@@ -21,33 +21,24 @@ public class AiAppEntity {
     @Column(nullable = false, length = 128)
     private String name;
 
-    /** 开场白文本 */
     @Column(name = "welcome_text", columnDefinition = "TEXT")
     private String welcomeText;
 
-    /** 推荐问题 JSON 字符串 */
     @Column(name = "suggestions", columnDefinition = "TEXT")
     private String suggestions;
 
-    /** Agent 角色设定 */
     @Column(name = "system_role", columnDefinition = "TEXT")
     private String systemRole;
 
-    /** Agent 任务指令 */
     @Column(name = "system_task", columnDefinition = "TEXT")
     private String systemTask;
 
-    /** Agent 限制条件 */
     @Column(name = "system_constraints", columnDefinition = "TEXT")
     private String systemConstraints;
 
-    /** 默认对话模型 ID（mode key，如 MiniMax-2.5） */
-    @Column(name = "model_id", length = 256)
-    private String modelId;
-
-    /** 默认对话模型所属 llm_provider_config.id，与 model_id 联合唯一确定模型 */
-    @Column(name = "model_provider_id")
-    private Long modelProviderId;
+    /** 应用绑定的模型 ID，关联 llm_model.id */
+    @Column(name = "llm_model_id")
+    private Long llmModelId;
 
     @Column(nullable = false)
     private boolean deleted = false;
@@ -61,9 +52,7 @@ public class AiAppEntity {
     @PrePersist
     public void prePersist() {
         Instant n = Instant.now();
-        if (createdAt == null) {
-            createdAt = n;
-        }
+        if (createdAt == null) createdAt = n;
         updatedAt = n;
     }
 
@@ -93,11 +82,8 @@ public class AiAppEntity {
     public String getSystemConstraints() { return systemConstraints; }
     public void setSystemConstraints(String systemConstraints) { this.systemConstraints = systemConstraints; }
 
-    public String getModelId() { return modelId; }
-    public void setModelId(String modelId) { this.modelId = modelId; }
-
-    public Long getModelProviderId() { return modelProviderId; }
-    public void setModelProviderId(Long modelProviderId) { this.modelProviderId = modelProviderId; }
+    public Long getLlmModelId() { return llmModelId; }
+    public void setLlmModelId(Long llmModelId) { this.llmModelId = llmModelId; }
 
     public boolean isDeleted() { return deleted; }
     public void setDeleted(boolean deleted) { this.deleted = deleted; }

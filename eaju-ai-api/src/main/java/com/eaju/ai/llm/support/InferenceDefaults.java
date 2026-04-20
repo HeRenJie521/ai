@@ -26,7 +26,6 @@ public class InferenceDefaults {
      * 非空时覆盖基于 code/URL 的推断：该提供方是否按 OpenAI 兼容形态下发 {@code thinking}（百炼/DeepSeek 等）。
      * 为空则由服务端按提供方 code、Base URL 自动识别。
      */
-    private Boolean supportsThinkingApi;
     /** OpenAI {@code stop}：字符串序列，遇其停止生成 */
     private List<String> stop;
 
@@ -100,14 +99,6 @@ public class InferenceDefaults {
 
     public void setThinkingMode(Boolean thinkingMode) {
         this.thinkingMode = thinkingMode;
-    }
-
-    public Boolean getSupportsThinkingApi() {
-        return supportsThinkingApi;
-    }
-
-    public void setSupportsThinkingApi(Boolean supportsThinkingApi) {
-        this.supportsThinkingApi = supportsThinkingApi;
     }
 
     public List<String> getStop() {

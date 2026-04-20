@@ -4,8 +4,12 @@ import com.eaju.ai.dto.ChatMessageDto;
 import com.eaju.ai.dto.conversation.ConversationResponseDto;
 import com.eaju.ai.persistence.entity.ChatConversationEntity;
 import com.eaju.ai.persistence.entity.ChatTurnEntity;
+import com.eaju.ai.persistence.entity.LlmModelEntity;
+import com.eaju.ai.persistence.entity.LlmProviderConfigEntity;
 import com.eaju.ai.persistence.repository.ChatConversationRepository;
 import com.eaju.ai.persistence.repository.ChatTurnRepository;
+import com.eaju.ai.persistence.repository.LlmModelRepository;
+import com.eaju.ai.persistence.repository.LlmProviderConfigRepository;
 import com.eaju.ai.session.ChatSessionService;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -32,16 +36,22 @@ public class ChatConversationService {
     private final ChatTurnRepository chatTurnRepository;
     private final ChatSessionService chatSessionService;
     private final ObjectMapper objectMapper;
+    private final LlmModelRepository llmModelRepository;
+    private final LlmProviderConfigRepository llmProviderRepository;
 
     public ChatConversationService(
             ChatConversationRepository conversationRepository,
             ChatTurnRepository chatTurnRepository,
             ChatSessionService chatSessionService,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper,
+            LlmModelRepository llmModelRepository,
+            LlmProviderConfigRepository llmProviderRepository) {
         this.conversationRepository = conversationRepository;
         this.chatTurnRepository = chatTurnRepository;
         this.chatSessionService = chatSessionService;
         this.objectMapper = objectMapper;
+        this.llmModelRepository = llmModelRepository;
+        this.llmProviderRepository = llmProviderRepository;
     }
 
     @Transactional(readOnly = true)
@@ -53,7 +63,6 @@ public class ChatConversationService {
         if (!conversationRepository.findByUserIdAndSessionIdAndDeletedAtIsNull(userId.trim(), sid).isPresent()) {
             throw new IllegalArgumentException("会话不存在或无权访问");
         }
-        // 始终从 DB 重建以保证 createdAt 时间戳完整；Redis 仅供 LLM 上下文合并使用
         return rebuildMessagesFromTurns(userId.trim(), sid);
     }
 
@@ -69,22 +78,13 @@ public class ChatConversationService {
         return loadMessagesForUser(c.get().getUserId(), sessionId.trim());
     }
 
-    /**
-     * Redis 无缓存时，逐轮还原完整消息列表并附带时间戳。
-     * 每轮取 requestMessages 的最后一条（本轮新增用户消息）+ 助手回复，均带 createdAt。
-     */
-    /**
-     * 管理员查看消息历史：不校验归属和删除状态，直接按 sessionId 读取所有 turn。
-     */
     @Transactional(readOnly = true)
     public List<ChatMessageDto> loadMessagesForAdmin(String sessionId) {
         if (!StringUtils.hasText(sessionId)) {
             throw new IllegalArgumentException("参数无效");
         }
         List<ChatTurnEntity> turns = chatTurnRepository.findBySessionIdOrderByCreatedAtAsc(sessionId.trim());
-        if (turns.isEmpty()) {
-            return Collections.emptyList();
-        }
+        if (turns.isEmpty()) return Collections.emptyList();
         List<ChatMessageDto> result = new ArrayList<>();
         for (ChatTurnEntity turn : turns) {
             String ts = turn.getCreatedAt() != null ? turn.getCreatedAt().toString() : null;
@@ -110,10 +110,8 @@ public class ChatConversationService {
 
     private List<ChatMessageDto> rebuildMessagesFromTurns(String userId, String sessionId) {
         List<ChatTurnEntity> turns = chatTurnRepository.findBySessionIdAndUserIdOrderByCreatedAtAsc(sessionId, userId);
-        if (turns.isEmpty()) {
-            return Collections.emptyList();
-        }
-        List<ChatMessageDto> result = new ArrayList<ChatMessageDto>();
+        if (turns.isEmpty()) return Collections.emptyList();
+        List<ChatMessageDto> result = new ArrayList<>();
         for (ChatTurnEntity turn : turns) {
             String ts = turn.getCreatedAt() != null ? turn.getCreatedAt().toString() : null;
             List<ChatMessageDto> reqMsgs = parseRequestMessages(turn.getRequestMessagesJson());
@@ -137,33 +135,24 @@ public class ChatConversationService {
     }
 
     private List<ChatMessageDto> parseRequestMessages(String json) {
-        if (!StringUtils.hasText(json)) {
-            return new ArrayList<ChatMessageDto>();
-        }
+        if (!StringUtils.hasText(json)) return new ArrayList<>();
         try {
-            List<ChatMessageDto> parsed = objectMapper.readValue(json.trim(), new TypeReference<List<ChatMessageDto>>() {
-            });
-            if (parsed == null) {
-                return new ArrayList<ChatMessageDto>();
-            }
+            List<ChatMessageDto> parsed = objectMapper.readValue(json.trim(), new TypeReference<List<ChatMessageDto>>() {});
+            if (parsed == null) return new ArrayList<>();
             for (ChatMessageDto m : parsed) {
-                if (m != null && m.getContent() == null) {
-                    m.setContent("");
-                }
+                if (m != null && m.getContent() == null) m.setContent("");
             }
             return parsed;
         } catch (Exception ex) {
             log.warn("解析 request_messages_json 失败: {}", ex.getMessage());
-            return new ArrayList<ChatMessageDto>();
+            return new ArrayList<>();
         }
     }
 
     @Transactional(readOnly = true)
     public List<ConversationResponseDto> listForUser(String userId) {
-        List<ConversationResponseDto> out = new ArrayList<ConversationResponseDto>();
-        if (!StringUtils.hasText(userId)) {
-            return out;
-        }
+        List<ConversationResponseDto> out = new ArrayList<>();
+        if (!StringUtils.hasText(userId)) return out;
         for (ChatConversationEntity e : conversationRepository
                 .findByUserIdAndApiKeyIdIsNullAndIntegrationIdIsNullAndAppIdIsNullAndDeletedAtIsNullOrderByLastMessageAtDesc(userId.trim())) {
             out.add(toDto(e));
@@ -173,10 +162,8 @@ public class ChatConversationService {
 
     @Transactional(readOnly = true)
     public List<ConversationResponseDto> listForApiKey(Long apiKeyId) {
-        List<ConversationResponseDto> out = new ArrayList<ConversationResponseDto>();
-        if (apiKeyId == null) {
-            return out;
-        }
+        List<ConversationResponseDto> out = new ArrayList<>();
+        if (apiKeyId == null) return out;
         for (ChatConversationEntity e : conversationRepository.findByApiKeyIdAndDeletedAtIsNullOrderByLastMessageAtDesc(apiKeyId)) {
             out.add(toDto(e));
         }
@@ -185,18 +172,14 @@ public class ChatConversationService {
 
     @Transactional
     public ConversationResponseDto createNew(String userId, Long apiKeyId) {
-        if (!StringUtils.hasText(userId)) {
-            throw new IllegalArgumentException("用户无效");
-        }
+        if (!StringUtils.hasText(userId)) throw new IllegalArgumentException("用户无效");
         String sessionId = UUID.randomUUID().toString();
         ChatConversationEntity n = new ChatConversationEntity();
         n.setUserId(userId.trim());
         n.setSessionId(sessionId);
         n.setTitle("新对话");
         n.setLastMessageAt(Instant.now());
-        if (apiKeyId != null) {
-            n.setApiKeyId(apiKeyId);
-        }
+        if (apiKeyId != null) n.setApiKeyId(apiKeyId);
         conversationRepository.save(n);
         return toDto(n);
     }
@@ -216,29 +199,36 @@ public class ChatConversationService {
     @Transactional
     public void touchOnChatStart(String userId, Long apiKeyId, Long integrationId, Long appId, String sessionId,
                                  List<ChatMessageDto> messages, String providerCode, String modeKey) {
-        if (!StringUtils.hasText(userId) || !StringUtils.hasText(sessionId)) {
-            return;
-        }
+        if (!StringUtils.hasText(userId) || !StringUtils.hasText(sessionId)) return;
         String uid = userId.trim();
         String sid = sessionId.trim();
         String titleHint = deriveTitleFromMessages(messages);
+
+        // 解析 llmModelId 和 providerDisplayName
+        Long llmModelId = null;
+        String providerDisplayName = null;
+        if (StringUtils.hasText(providerCode) && StringUtils.hasText(modeKey)) {
+            llmModelId = llmModelRepository.findByProviderCodeAndName(providerCode.trim(), modeKey.trim())
+                    .map(LlmModelEntity::getId)
+                    .orElse(null);
+        }
+        if (StringUtils.hasText(providerCode)) {
+            providerDisplayName = llmProviderRepository.findByCodeIgnoreCase(providerCode.trim())
+                    .map(LlmProviderConfigEntity::getDisplayName)
+                    .orElse(null);
+        }
+
         Optional<ChatConversationEntity> opt = conversationRepository.findByUserIdAndSessionId(uid, sid);
         if (opt.isPresent()) {
             ChatConversationEntity e = opt.get();
             e.setLastMessageAt(Instant.now());
-            if (apiKeyId != null) {
-                e.setApiKeyId(apiKeyId);
-            }
-            if (integrationId != null) {
-                e.setIntegrationId(integrationId);
-            }
-            if (appId != null) {
-                e.setAppId(appId);
-            }
+            if (apiKeyId != null) e.setApiKeyId(apiKeyId);
+            if (integrationId != null) e.setIntegrationId(integrationId);
+            if (appId != null) e.setAppId(appId);
             if (("新对话".equals(e.getTitle()) || !StringUtils.hasText(e.getTitle())) && StringUtils.hasText(titleHint)) {
                 e.setTitle(titleHint);
             }
-            applyLastModelChoice(e, providerCode, modeKey);
+            applyLastModelChoice(e, providerCode, modeKey, llmModelId, providerDisplayName);
             conversationRepository.save(e);
         } else {
             ChatConversationEntity n = new ChatConversationEntity();
@@ -246,31 +236,23 @@ public class ChatConversationService {
             n.setSessionId(sid);
             n.setTitle(StringUtils.hasText(titleHint) ? titleHint : "新对话");
             n.setLastMessageAt(Instant.now());
-            if (apiKeyId != null) {
-                n.setApiKeyId(apiKeyId);
-            }
-            if (integrationId != null) {
-                n.setIntegrationId(integrationId);
-            }
-            if (appId != null) {
-                n.setAppId(appId);
-            }
-            applyLastModelChoice(n, providerCode, modeKey);
+            if (apiKeyId != null) n.setApiKeyId(apiKeyId);
+            if (integrationId != null) n.setIntegrationId(integrationId);
+            if (appId != null) n.setAppId(appId);
+            applyLastModelChoice(n, providerCode, modeKey, llmModelId, providerDisplayName);
             conversationRepository.save(n);
         }
     }
 
-    private static void applyLastModelChoice(ChatConversationEntity e, String providerCode, String modeKey) {
-        if (StringUtils.hasText(providerCode)) {
-            e.setLastProviderCode(providerCode.trim());
-        }
+    private static void applyLastModelChoice(ChatConversationEntity e, String providerCode, String modeKey, Long llmModelId, String providerDisplayName) {
+        if (StringUtils.hasText(providerCode)) e.setLastProviderCode(providerCode.trim());
         if (StringUtils.hasText(modeKey)) {
             String mk = modeKey.trim();
-            if (mk.length() > 512) {
-                mk = mk.substring(0, 512);
-            }
+            if (mk.length() > 512) mk = mk.substring(0, 512);
             e.setLastModeKey(mk);
         }
+        if (llmModelId != null) e.setLlmModelId(llmModelId);
+        if (StringUtils.hasText(providerDisplayName)) e.setLastProviderDisplayName(providerDisplayName.trim());
     }
 
     @Transactional
@@ -294,9 +276,7 @@ public class ChatConversationService {
         }
         Optional<ChatConversationEntity> opt =
                 conversationRepository.findByApiKeyIdAndSessionIdAndDeletedAtIsNull(apiKeyId, sessionId.trim());
-        if (!opt.isPresent()) {
-            throw new IllegalArgumentException("会话不存在或无权删除");
-        }
+        if (!opt.isPresent()) throw new IllegalArgumentException("会话不存在或无权删除");
         ChatConversationEntity e = opt.get();
         String sid = e.getSessionId().trim();
         chatSessionService.deleteSession(sid);
@@ -305,10 +285,8 @@ public class ChatConversationService {
 
     @Transactional(readOnly = true)
     public List<ConversationResponseDto> listForIntegration(Long integrationId, String userId) {
-        List<ConversationResponseDto> out = new ArrayList<ConversationResponseDto>();
-        if (integrationId == null || !StringUtils.hasText(userId)) {
-            return out;
-        }
+        List<ConversationResponseDto> out = new ArrayList<>();
+        if (integrationId == null || !StringUtils.hasText(userId)) return out;
         for (ChatConversationEntity e :
                 conversationRepository.findByIntegrationIdAndUserIdAndDeletedAtIsNullOrderByLastMessageAtDesc(integrationId, userId.trim())) {
             out.add(toDto(e));
@@ -318,10 +296,8 @@ public class ChatConversationService {
 
     @Transactional(readOnly = true)
     public List<ConversationResponseDto> listForApp(Long appId, String userId) {
-        List<ConversationResponseDto> out = new ArrayList<ConversationResponseDto>();
-        if (appId == null || !StringUtils.hasText(userId)) {
-            return out;
-        }
+        List<ConversationResponseDto> out = new ArrayList<>();
+        if (appId == null || !StringUtils.hasText(userId)) return out;
         for (ChatConversationEntity e :
                 conversationRepository.findConversationsForAppUser(userId.trim(), appId)) {
             out.add(toDto(e));
@@ -343,44 +319,51 @@ public class ChatConversationService {
     }
 
     private static String deriveTitleFromMessages(List<ChatMessageDto> messages) {
-        if (messages == null || messages.isEmpty()) {
-            return null;
-        }
+        if (messages == null || messages.isEmpty()) return null;
         for (int i = messages.size() - 1; i >= 0; i--) {
             ChatMessageDto m = messages.get(i);
-            if (m == null || !StringUtils.hasText(m.getRole()) || !"user".equalsIgnoreCase(m.getRole().trim())) {
-                continue;
-            }
+            if (m == null || !StringUtils.hasText(m.getRole()) || !"user".equalsIgnoreCase(m.getRole().trim())) continue;
             String c = m.getContent();
             if (!StringUtils.hasText(c)) {
                 if (m.getFileUrls() != null && !m.getFileUrls().isEmpty()) {
                     String u = m.getFileUrls().get(0);
                     if (StringUtils.hasText(u)) {
                         String t = ("[附件] " + u.trim()).replaceAll("\\s+", " ");
-                        if (t.length() > TITLE_MAX) {
-                            return t.substring(0, TITLE_MAX) + "…";
-                        }
-                        return t;
+                        return t.length() > TITLE_MAX ? t.substring(0, TITLE_MAX) + "…" : t;
                     }
                 }
                 continue;
             }
             String t = c.trim().replaceAll("\\s+", " ");
-            if (t.length() > TITLE_MAX) {
-                return t.substring(0, TITLE_MAX) + "…";
-            }
-            return t;
+            return t.length() > TITLE_MAX ? t.substring(0, TITLE_MAX) + "…" : t;
         }
         return null;
     }
 
-    private static ConversationResponseDto toDto(ChatConversationEntity e) {
+    private ConversationResponseDto toDto(ChatConversationEntity e) {
         ConversationResponseDto dto = new ConversationResponseDto();
         dto.setSessionId(e.getSessionId());
         dto.setTitle(e.getTitle());
         dto.setLastMessageAt(e.getLastMessageAt() != null ? e.getLastMessageAt().toString() : null);
         dto.setLastProviderCode(e.getLastProviderCode());
         dto.setLastModeKey(e.getLastModeKey());
+        dto.setLastModelDisplayName(resolveModelDisplayName(e.getLlmModelId(), e.getLastProviderCode(), e.getLastModeKey()));
         return dto;
+    }
+
+    private String resolveModelDisplayName(Long llmModelId, String providerCode, String modeKey) {
+        if (llmModelId != null) {
+            LlmModelEntity model = llmModelRepository.findById(llmModelId).orElse(null);
+            if (model != null) {
+                LlmProviderConfigEntity provider = llmProviderRepository.findById(model.getProviderId()).orElse(null);
+                String pName = provider != null ? provider.getDisplayName() : "";
+                return pName + "·" + model.getName();
+            }
+        }
+        // 回退：用 providerCode + modeKey 字符串拼接
+        if (StringUtils.hasText(providerCode) && StringUtils.hasText(modeKey)) {
+            return providerCode + "·" + modeKey;
+        }
+        return null;
     }
 }

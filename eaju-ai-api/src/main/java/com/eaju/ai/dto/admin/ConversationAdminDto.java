@@ -10,6 +10,7 @@ public class ConversationAdminDto {
     private String createdAt;
     private String lastProviderCode;
     private String lastModeKey;
+    private String lastProviderDisplayName;
     private Long apiKeyId;
     private String apiKeyName;
     private String deletedAt;
@@ -80,6 +81,14 @@ public class ConversationAdminDto {
 
     public void setLastModeKey(String lastModeKey) {
         this.lastModeKey = lastModeKey;
+    }
+
+    public String getLastProviderDisplayName() {
+        return lastProviderDisplayName;
+    }
+
+    public void setLastProviderDisplayName(String lastProviderDisplayName) {
+        this.lastProviderDisplayName = lastProviderDisplayName;
     }
 
     public Long getApiKeyId() {

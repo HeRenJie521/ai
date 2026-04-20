@@ -51,7 +51,6 @@ public class WelcomeConfigController {
         WelcomeConfigDto dto = new WelcomeConfigDto();
         dto.setWelcomeText(app.getWelcomeText());
         dto.setSuggestions(parseSuggestions(app.getSuggestions()));
-        dto.setModelId(app.getModelId());
         return dto;
     }
 

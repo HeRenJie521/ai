@@ -83,6 +83,10 @@ public class ChatRequestDto {
     @JsonIgnore
     private String internalJti;
 
+    /** 服务端写入：本次对话使用的 llm_model.id，写入 chat_turn 便于统计 */
+    @JsonIgnore
+    private Long internalLlmModelId;
+
     public String getProvider() {
         return provider;
     }
@@ -241,5 +245,13 @@ public class ChatRequestDto {
 
     public void setInternalJti(String internalJti) {
         this.internalJti = internalJti;
+    }
+
+    public Long getInternalLlmModelId() {
+        return internalLlmModelId;
+    }
+
+    public void setInternalLlmModelId(Long internalLlmModelId) {
+        this.internalLlmModelId = internalLlmModelId;
     }
 }

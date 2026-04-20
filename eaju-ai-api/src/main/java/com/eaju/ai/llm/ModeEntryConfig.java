@@ -1,57 +1,54 @@
 package com.eaju.ai.llm;
 
-import org.springframework.util.StringUtils;
+import com.eaju.ai.llm.support.InferenceDefaults;
 
 /**
- * 单个逻辑 mode 在 {@code modes_json} 中的配置：上游 model id 与能力开关。
+ * 单个模型的运行时配置，由 {@link LlmModelEntity} 构建。
  */
 public final class ModeEntryConfig {
 
+    private final Long modelId;
     private final String upstreamModelId;
     private final boolean textGeneration;
     private final boolean deepThinking;
     private final boolean vision;
-    /** 模型支持的最大上下文 token 数；null 表示未配置 */
+    private final boolean streamOutput;
+    private final boolean toolCall;
+    private final boolean forceThinkingEnabled;
     private final Integer contextWindow;
+    private final InferenceDefaults inferenceDefaults;
 
     public ModeEntryConfig(
+            Long modelId,
             String upstreamModelId,
             boolean textGeneration,
             boolean deepThinking,
             boolean vision,
-            Integer contextWindow) {
+            boolean streamOutput,
+            boolean toolCall,
+            boolean forceThinkingEnabled,
+            Integer contextWindow,
+            InferenceDefaults inferenceDefaults) {
+        this.modelId = modelId;
         this.upstreamModelId = upstreamModelId != null ? upstreamModelId : "";
         this.textGeneration = textGeneration;
         this.deepThinking = deepThinking;
         this.vision = vision;
+        this.streamOutput = streamOutput;
+        this.toolCall = toolCall;
+        this.forceThinkingEnabled = forceThinkingEnabled;
         this.contextWindow = contextWindow;
+        this.inferenceDefaults = inferenceDefaults != null ? inferenceDefaults : new InferenceDefaults();
     }
 
-    public String getUpstreamModelId() {
-        return upstreamModelId;
-    }
-
-    public boolean isTextGeneration() {
-        return textGeneration;
-    }
-
-    public boolean isDeepThinking() {
-        return deepThinking;
-    }
-
-    public boolean isVision() {
-        return vision;
-    }
-
-    public Integer getContextWindow() {
-        return contextWindow;
-    }
-
-    /**
-     * @param legacyDeepThinkingDefault 值为 JSON 字符串的旧数据：是否默认开启「深度思考」能力标记
-     */
-    public static ModeEntryConfig fromLegacyStringValue(String logicalKey, String valueOrKey, boolean legacyDeepThinkingDefault) {
-        String raw = StringUtils.hasText(valueOrKey) ? valueOrKey.trim() : logicalKey;
-        return new ModeEntryConfig(raw, true, legacyDeepThinkingDefault, false, null);
-    }
+    public Long getModelId() { return modelId; }
+    public String getUpstreamModelId() { return upstreamModelId; }
+    public boolean isTextGeneration() { return textGeneration; }
+    public boolean isDeepThinking() { return deepThinking; }
+    public boolean isVision() { return vision; }
+    public boolean isStreamOutput() { return streamOutput; }
+    public boolean isToolCall() { return toolCall; }
+    public boolean isForceThinkingEnabled() { return forceThinkingEnabled; }
+    public Integer getContextWindow() { return contextWindow; }
+    public InferenceDefaults getInferenceDefaults() { return inferenceDefaults; }
 }

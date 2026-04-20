@@ -56,6 +56,14 @@ public class ChatConversationEntity {
     @Column(name = "app_id")
     private Long appId;
 
+    /** 会话最后使用的模型 ID，关联 llm_model.id */
+    @Column(name = "llm_model_id")
+    private Long llmModelId;
+
+    /** 最后使用的模型提供商显示名称（如百炼、DeepSeek） */
+    @Column(name = "last_provider_display_name", length = 128)
+    private String lastProviderDisplayName;
+
     /** 逻辑删除时间，非空表示已删除 */
     @Column(name = "deleted_at")
     private Instant deletedAt;
@@ -165,5 +173,21 @@ public class ChatConversationEntity {
 
     public void setAppId(Long appId) {
         this.appId = appId;
+    }
+
+    public Long getLlmModelId() {
+        return llmModelId;
+    }
+
+    public void setLlmModelId(Long llmModelId) {
+        this.llmModelId = llmModelId;
+    }
+
+    public String getLastProviderDisplayName() {
+        return lastProviderDisplayName;
+    }
+
+    public void setLastProviderDisplayName(String lastProviderDisplayName) {
+        this.lastProviderDisplayName = lastProviderDisplayName;
     }
 }

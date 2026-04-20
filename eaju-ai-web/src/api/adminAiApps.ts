@@ -9,8 +9,8 @@ export interface AiAppRow {
   systemRole: string | null
   systemTask: string | null
   systemConstraints: string | null
-  modelId: string | null
-  modelProviderId: number | null
+  llmModelId: number | null
+  modelDisplayName: string | null
   createdAt: string | null
 }
 
@@ -21,8 +21,7 @@ export interface AiAppCreatePayload {
   systemRole?: string
   systemTask?: string
   systemConstraints?: string
-  modelId?: string
-  modelProviderId?: number
+  llmModelId?: number
 }
 
 export interface AiAppUpdatePayload {
@@ -32,8 +31,7 @@ export interface AiAppUpdatePayload {
   systemRole?: string
   systemTask?: string
   systemConstraints?: string
-  modelId?: string
-  modelProviderId?: number
+  llmModelId?: number
 }
 
 export async function adminListAiApps(): Promise<AiAppRow[]> {

@@ -31,7 +31,7 @@ public class AiAppService {
     @Transactional
     public AiAppEntity create(String name, String welcomeText, String suggestions,
                               String systemRole, String systemTask, String systemConstraints,
-                              String modelId, Long modelProviderId) {
+                              Long llmModelId) {
         if (!StringUtils.hasText(name)) {
             throw new IllegalArgumentException("应用名称不能为空");
         }
@@ -42,45 +42,27 @@ public class AiAppService {
         e.setSystemRole(systemRole);
         e.setSystemTask(systemTask);
         e.setSystemConstraints(systemConstraints);
-        if (StringUtils.hasText(modelId)) {
-            e.setModelId(modelId.trim());
-        }
-        if (modelProviderId != null) {
-            e.setModelProviderId(modelProviderId);
-        }
+        e.setLlmModelId(llmModelId);
         return aiAppRepository.save(e);
     }
 
     @Transactional
     public AiAppEntity update(Long id, String name, String welcomeText, String suggestions,
                               String systemRole, String systemTask, String systemConstraints,
-                              String modelId, Long modelProviderId) {
+                              Long llmModelId) {
         AiAppEntity e = aiAppRepository.findByIdAndDeletedIsFalse(id)
                 .orElseThrow(() -> new IllegalArgumentException("AI 应用不存在"));
         if (StringUtils.hasText(name)) {
             e.setName(name.trim());
         }
-        // 允许清空（传 ""）或保留（传 null 不更新）
-        if (welcomeText != null) {
-            e.setWelcomeText(welcomeText);
-        }
-        if (suggestions != null) {
-            e.setSuggestions(suggestions);
-        }
-        if (systemRole != null) {
-            e.setSystemRole(systemRole);
-        }
-        if (systemTask != null) {
-            e.setSystemTask(systemTask);
-        }
-        if (systemConstraints != null) {
-            e.setSystemConstraints(systemConstraints);
-        }
-        if (modelId != null) {
-            e.setModelId(StringUtils.hasText(modelId) ? modelId.trim() : null);
-        }
-        if (modelProviderId != null) {
-            e.setModelProviderId(modelProviderId);
+        if (welcomeText != null) e.setWelcomeText(welcomeText);
+        if (suggestions != null) e.setSuggestions(suggestions);
+        if (systemRole != null) e.setSystemRole(systemRole);
+        if (systemTask != null) e.setSystemTask(systemTask);
+        if (systemConstraints != null) e.setSystemConstraints(systemConstraints);
+        // llmModelId: null 表示不修改，0 或负数表示清空
+        if (llmModelId != null) {
+            e.setLlmModelId(llmModelId > 0 ? llmModelId : null);
         }
         return aiAppRepository.save(e);
     }

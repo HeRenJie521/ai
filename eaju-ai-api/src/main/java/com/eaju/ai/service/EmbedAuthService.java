@@ -234,7 +234,7 @@ public class EmbedAuthService {
         dto.setPhone(phoneFromDms);
         dto.setUsername(displayName);
         dto.setAdmin(admin);
-        dto.setDefaultModel(app.getModelId());
+        dto.setDefaultModel(app.getLlmModelId() != null ? String.valueOf(app.getLlmModelId()) : null);
         dto.setIntegrationName(app.getName());
         // 返回缓存的 key-value，仅用于前端测试展示
         dto.setUserContext(userContext);

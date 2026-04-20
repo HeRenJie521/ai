@@ -9,8 +9,10 @@ public class AiAppResponseDto {
     private String systemRole;
     private String systemTask;
     private String systemConstraints;
-    private String modelId;
-    private Long modelProviderId;
+    /** 绑定的模型 ID（llm_model.id） */
+    private Long llmModelId;
+    /** 前端展示用：提供商名称·模型名称，如"通义千问·qwen3.5-plus" */
+    private String modelDisplayName;
     private String createdAt;
 
     public Long getId() { return id; }
@@ -34,11 +36,11 @@ public class AiAppResponseDto {
     public String getSystemConstraints() { return systemConstraints; }
     public void setSystemConstraints(String systemConstraints) { this.systemConstraints = systemConstraints; }
 
-    public String getModelId() { return modelId; }
-    public void setModelId(String modelId) { this.modelId = modelId; }
+    public Long getLlmModelId() { return llmModelId; }
+    public void setLlmModelId(Long llmModelId) { this.llmModelId = llmModelId; }
 
-    public Long getModelProviderId() { return modelProviderId; }
-    public void setModelProviderId(Long modelProviderId) { this.modelProviderId = modelProviderId; }
+    public String getModelDisplayName() { return modelDisplayName; }
+    public void setModelDisplayName(String modelDisplayName) { this.modelDisplayName = modelDisplayName; }
 
     public String getCreatedAt() { return createdAt; }
     public void setCreatedAt(String createdAt) { this.createdAt = createdAt; }

@@ -59,6 +59,9 @@ public class ChatRecordService {
             if (clientRequest.getInternalAppId() != null) {
                 row.setAppId(clientRequest.getInternalAppId());
             }
+            if (clientRequest.getInternalLlmModelId() != null) {
+                row.setLlmModelId(clientRequest.getInternalLlmModelId());
+            }
             chatTurnRepository.save(row);
         } catch (Exception ex) {
             log.warn("写入 chat_turn 失败: {}", ex.getMessage(), ex);

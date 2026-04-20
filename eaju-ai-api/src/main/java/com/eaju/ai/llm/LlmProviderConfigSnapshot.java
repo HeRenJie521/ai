@@ -1,20 +1,21 @@
 package com.eaju.ai.llm;
 
 import com.eaju.ai.dto.ChatRequestDto;
+import com.eaju.ai.dto.ResponseFormatKind;
 import com.eaju.ai.dto.llm.ModeCapabilityDto;
 import com.eaju.ai.llm.support.InferenceDefaults;
+import com.eaju.ai.persistence.entity.LlmModelEntity;
 import com.eaju.ai.persistence.entity.LlmProviderConfigEntity;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.util.StringUtils;
 
+import java.math.BigDecimal;
 import java.util.Collections;
 import java.util.LinkedHashMap;
-import java.util.Locale;
+import java.util.List;
 import java.util.Map;
 
 /**
- * 从 {@link LlmProviderConfigEntity} 解析出的运行时只读配置。
+ * 从 {@link LlmProviderConfigEntity} 和对应的 {@link LlmModelEntity} 列表构建的运行时只读配置。
  */
 public final class LlmProviderConfigSnapshot {
 
@@ -25,49 +26,91 @@ public final class LlmProviderConfigSnapshot {
     private final String defaultMode;
     private final Map<String, ModeEntryConfig> modeEntries;
     private final Map<String, String> modesFlat;
-    private final InferenceDefaults inferenceDefaults;
+
+    /** 非空时强制覆盖请求中的 temperature（如 Kimi 只接受 1.0） */
+    private final Double forceTemperature;
+    /** thinking 参数风格：openai 或 dashscope */
+    private final String thinkingParamStyle;
+    /** 使用 JSON 模式时是否自动注入 json 关键词 */
+    private final boolean jsonModeSystemHint;
 
     private LlmProviderConfigSnapshot(
-            String code,
-            String displayName,
-            String apiKey,
-            String baseUrl,
-            String defaultMode,
+            String code, String displayName, String apiKey, String baseUrl, String defaultMode,
             Map<String, ModeEntryConfig> modeEntries,
-            InferenceDefaults inferenceDefaults) {
+            Double forceTemperature, String thinkingParamStyle, boolean jsonModeSystemHint) {
         this.code = code;
         this.displayName = displayName;
         this.apiKey = apiKey;
         this.baseUrl = baseUrl;
         this.defaultMode = defaultMode;
         this.modeEntries = modeEntries != null ? modeEntries : Collections.emptyMap();
-        this.modesFlat = flattenModes(this.modeEntries);
-        this.inferenceDefaults = inferenceDefaults;
+        this.modesFlat = buildFlat(this.modeEntries);
+        this.forceTemperature = forceTemperature;
+        this.thinkingParamStyle = thinkingParamStyle;
+        this.jsonModeSystemHint = jsonModeSystemHint;
     }
 
-    public static LlmProviderConfigSnapshot fromEntity(LlmProviderConfigEntity e, ObjectMapper objectMapper)
-            throws JsonProcessingException {
-        InferenceDefaults inf = new InferenceDefaults();
-        if (StringUtils.hasText(e.getInferenceDefaultsJson())) {
-            inf = objectMapper.readValue(e.getInferenceDefaultsJson().trim(), InferenceDefaults.class);
+    public static LlmProviderConfigSnapshot fromEntityAndModels(
+            LlmProviderConfigEntity provider, List<LlmModelEntity> models) {
+
+        LinkedHashMap<String, ModeEntryConfig> entries = new LinkedHashMap<>();
+        String firstModeName = null;
+
+        for (LlmModelEntity model : models) {
+            if (!model.isEnabled()) continue;
+            String name = model.getName();
+            if (name == null || name.trim().isEmpty()) continue;
+            if (firstModeName == null) firstModeName = name;
+
+            InferenceDefaults inf = buildInferenceDefaults(model);
+            ModeEntryConfig entry = new ModeEntryConfig(
+                    model.getId(),
+                    model.getUpstreamModelId(),
+                    model.isTextGeneration(),
+                    model.isDeepThinking(),
+                    model.isVision(),
+                    model.isStreamOutput(),
+                    model.isToolCall(),
+                    model.isForceThinkingEnabled(),
+                    model.getContextWindow(),
+                    inf);
+            entries.put(name, entry);
         }
-        String canonicalCode = e.getCode() != null ? e.getCode().trim() : "";
-        String baseUrlTrim = e.getBaseUrl() != null ? e.getBaseUrl().trim() : "";
-        boolean legacyDeepDef = inferGatewayThinkingSupport(canonicalCode, baseUrlTrim);
-        Map<String, ModeEntryConfig> entries = ModesJsonParser.parse(e.getModesJson().trim(), legacyDeepDef);
+
+        Double forceTmp = provider.getForceTemperature() != null
+                ? provider.getForceTemperature().doubleValue() : null;
+        String style = StringUtils.hasText(provider.getThinkingParamStyle())
+                ? provider.getThinkingParamStyle().trim() : "openai";
+
         return new LlmProviderConfigSnapshot(
-                canonicalCode,
-                e.getDisplayName() != null ? e.getDisplayName().trim() : canonicalCode,
-                e.getApiKey() != null ? e.getApiKey() : "",
-                baseUrlTrim,
-                e.getDefaultMode() != null ? e.getDefaultMode().trim() : "",
+                provider.getCode() != null ? provider.getCode().trim() : "",
+                provider.getDisplayName() != null ? provider.getDisplayName().trim() : "",
+                provider.getApiKey() != null ? provider.getApiKey() : "",
+                provider.getBaseUrl() != null ? provider.getBaseUrl().trim() : "",
+                firstModeName != null ? firstModeName : "",
                 entries,
-                inf != null ? inf : new InferenceDefaults()
-        );
+                forceTmp, style, provider.isJsonModeSystemHint());
     }
 
-    private static Map<String, String> flattenModes(Map<String, ModeEntryConfig> entries) {
-        LinkedHashMap<String, String> flat = new LinkedHashMap<String, String>();
+    private static InferenceDefaults buildInferenceDefaults(LlmModelEntity model) {
+        InferenceDefaults inf = new InferenceDefaults();
+        if (model.getTemperature() != null) inf.setTemperature(model.getTemperature().doubleValue());
+        inf.setMaxTokens(model.getMaxTokens());
+        if (model.getTopP() != null) inf.setTopP(model.getTopP().doubleValue());
+        inf.setTopK(model.getTopK());
+        if (model.getFrequencyPenalty() != null) inf.setFrequencyPenalty(model.getFrequencyPenalty().doubleValue());
+        if (model.getPresencePenalty() != null) inf.setPresencePenalty(model.getPresencePenalty().doubleValue());
+        if (StringUtils.hasText(model.getResponseFormat())) {
+            try {
+                inf.setResponseFormat(ResponseFormatKind.valueOf(model.getResponseFormat().toUpperCase()));
+            } catch (IllegalArgumentException ignored) {}
+        }
+        inf.setThinkingMode(model.getThinkingMode());
+        return inf;
+    }
+
+    private static Map<String, String> buildFlat(Map<String, ModeEntryConfig> entries) {
+        LinkedHashMap<String, String> flat = new LinkedHashMap<>();
         for (Map.Entry<String, ModeEntryConfig> en : entries.entrySet()) {
             flat.put(en.getKey(), en.getValue().getUpstreamModelId());
         }
@@ -83,13 +126,7 @@ public final class LlmProviderConfigSnapshot {
             throw new IllegalStateException(label + " 未配置 base-url");
         }
         if (modeEntries.isEmpty()) {
-            throw new IllegalStateException(label + " 未配置 modes（至少一组 逻辑名: 上游model）");
-        }
-        if (!StringUtils.hasText(defaultMode)) {
-            throw new IllegalStateException(label + " 未配置 default-mode");
-        }
-        if (resolveModeKeyToModelId(defaultMode.trim()) == null) {
-            throw new IllegalStateException(label + " 的 default-mode 在 modes 中不存在: " + defaultMode);
+            throw new IllegalStateException(label + " 未配置任何模型，请在「模型管理」中为该提供商新增模型");
         }
     }
 
@@ -97,42 +134,27 @@ public final class LlmProviderConfigSnapshot {
         if (StringUtils.hasText(explicitModel)) {
             return normalizeUpstreamModelId(explicitModel.trim());
         }
-        String modeKey = StringUtils.hasText(modeKeyOrNull)
-                ? modeKeyOrNull.trim()
-                : defaultMode.trim();
-        String mapped = resolveModeKeyToModelId(modeKey);
-        if (!StringUtils.hasText(mapped)) {
+        String modeKey = StringUtils.hasText(modeKeyOrNull) ? modeKeyOrNull.trim() : defaultMode.trim();
+        ModeEntryConfig entry = findEntry(modeKey);
+        if (entry == null || !StringUtils.hasText(entry.getUpstreamModelId())) {
             throw new IllegalArgumentException(
                     (StringUtils.hasText(displayName) ? displayName : code)
-                            + " 未知 mode: "
-                            + modeKey
-                            + "，可用: "
-                            + modeEntries.keySet());
+                            + " 未知 mode: " + modeKey
+                            + "，可用: " + modeEntries.keySet());
         }
-        return normalizeUpstreamModelId(mapped.trim());
+        return normalizeUpstreamModelId(entry.getUpstreamModelId());
     }
 
     private static String normalizeUpstreamModelId(String raw) {
-        if (!StringUtils.hasText(raw)) {
-            return raw;
-        }
+        if (!StringUtils.hasText(raw)) return raw;
         String s = raw.trim();
         String stripped = s.replaceFirst("\\s*\\([^)]*\\)\\s*$", "").trim();
         return stripped.isEmpty() ? s : stripped;
     }
 
-    private String resolveModeKeyToModelId(String modeKey) {
-        ModeEntryConfig e = findEntry(modeKey);
-        return e != null ? e.getUpstreamModelId() : null;
-    }
-
-    private ModeEntryConfig findEntry(String modeKey) {
-        if (!StringUtils.hasText(modeKey)) {
-            return null;
-        }
-        if (modeEntries.containsKey(modeKey)) {
-            return modeEntries.get(modeKey);
-        }
+    public ModeEntryConfig findEntry(String modeKey) {
+        if (!StringUtils.hasText(modeKey)) return null;
+        if (modeEntries.containsKey(modeKey)) return modeEntries.get(modeKey);
         for (Map.Entry<String, ModeEntryConfig> en : modeEntries.entrySet()) {
             if (en.getKey() != null && en.getKey().equalsIgnoreCase(modeKey.trim())) {
                 return en.getValue();
@@ -141,82 +163,50 @@ public final class LlmProviderConfigSnapshot {
         return null;
     }
 
-    public InferenceDefaults defaultsOrEmpty() {
-        return inferenceDefaults != null ? inferenceDefaults : new InferenceDefaults();
+    public InferenceDefaults getModeDefaults(String modeKey) {
+        ModeEntryConfig entry = findEntry(modeKey);
+        if (entry != null) return entry.getInferenceDefaults();
+        if (!modeEntries.isEmpty()) {
+            return modeEntries.values().iterator().next().getInferenceDefaults();
+        }
+        return new InferenceDefaults();
     }
 
-    /**
-     * 是否按 OpenAI 兼容形态向下游写 {@code thinking}，并参与对话里「深度思考」开关展示。
-     * 优先读推理默认 {@code supportsThinkingApi}；为空时按 code/baseUrl 推断（DeepSeek、DashScope/百炼等）。
-     */
-    public boolean supportsThinkingFlag() {
-        Boolean override = defaultsOrEmpty().getSupportsThinkingApi();
-        if (override != null) {
-            return Boolean.TRUE.equals(override);
-        }
-        return inferGatewayThinkingSupport(code, baseUrl);
-    }
-
-    /**
-     * 该 provider 是否使用 DashScope/Qwen 风格的 {@code enable_thinking} 参数
-     * （而非 DeepSeek/Anthropic 风格的 {@code thinking: {type: ...}}）。
-     */
-    public boolean usesDashScopeThinkingParam() {
-        if (StringUtils.hasText(code)) {
-            String c = code.toUpperCase(Locale.ROOT);
-            if (c.contains("BAILIAN") || c.contains("DASHSCOPE") || c.contains("CODINGPLAN") || c.contains("CODING_PLAN")) {
-                return true;
-            }
-        }
-        if (StringUtils.hasText(baseUrl)) {
-            String u = baseUrl.toLowerCase(Locale.ROOT);
-            if (u.contains("dashscope") || u.contains("bailian")) {
-                return true;
-            }
-            if (u.contains("aliyuncs.com") && u.contains("compatible-mode")) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    /**
-     * 与 {@link #supportsThinkingFlag()} 在未配置覆盖时的规则一致（供 modes 旧数据解析等复用）。
-     */
-    public static boolean inferGatewayThinkingSupport(String providerCode, String baseUrl) {
-        if (StringUtils.hasText(providerCode)) {
-            String c = providerCode.toUpperCase(Locale.ROOT);
-            if ("DEEPSEEK".equals(c) || c.contains("DEEPSEEK")) {
-                return true;
-            }
-            if (c.contains("BAILIAN") || c.contains("DASHSCOPE")) {
-                return true;
-            }
-            if (c.contains("CODINGPLAN") || c.contains("CODING_PLAN")) {
-                return true;
-            }
-        }
-        if (StringUtils.hasText(baseUrl)) {
-            String u = baseUrl.toLowerCase(Locale.ROOT);
-            if (u.contains("deepseek")) {
-                return true;
-            }
-            if (u.contains("dashscope") || u.contains("bailian")) {
-                return true;
-            }
-            if (u.contains("aliyuncs.com") && u.contains("compatible-mode")) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    /**
-     * 当前逻辑 mode 是否在配置中开启「深度思考」能力（与网关是否支持 thinking API 无关）。
-     */
     public boolean modeSupportsDeepThinking(String modeKey) {
         ModeEntryConfig e = findEntry(modeKey);
         return e != null && e.isDeepThinking();
+    }
+
+    public boolean modeSupportsToolCall(String modeKey) {
+        ModeEntryConfig e = findEntry(modeKey);
+        return e == null || e.isToolCall();
+    }
+
+    public boolean modeSupportsThinkingApi(String modeKey) {
+        ModeEntryConfig e = findEntry(modeKey);
+        return e != null && e.isDeepThinking();
+    }
+
+    public boolean modeForceThinkingEnabled(String modeKey) {
+        ModeEntryConfig e = findEntry(modeKey);
+        return e != null && e.isForceThinkingEnabled();
+    }
+
+    public Long getModeModelId(String modeKey) {
+        ModeEntryConfig e = findEntry(modeKey);
+        return e != null ? e.getModelId() : null;
+    }
+
+    public boolean resolveThinkingContentWanted(ChatRequestDto request) {
+        if (request == null) return false;
+        String modeKey = resolveEffectiveModeKey(request);
+        Boolean fromReq = request.getThinkingMode();
+        InferenceDefaults d = getModeDefaults(modeKey);
+        boolean toggleOn = fromReq != null
+                ? Boolean.TRUE.equals(fromReq)
+                : Boolean.TRUE.equals(d.getThinkingMode());
+        if (!toggleOn) return false;
+        return modeSupportsThinkingApi(modeKey) && modeSupportsDeepThinking(modeKey);
     }
 
     private String resolveEffectiveModeKey(ChatRequestDto request) {
@@ -226,59 +216,31 @@ public final class LlmProviderConfigSnapshot {
         return defaultMode != null ? defaultMode.trim() : "";
     }
 
-    /**
-     * 是否应展示并持久化 {@code reasoning_content}，且向下游写 thinking：
-     * 用户/默认打开思考、网关支持 thinking API、且当前 mode 配置允许深度思考。
-     */
-    public boolean resolveThinkingContentWanted(ChatRequestDto request) {
-        if (request == null) {
-            return false;
-        }
-        Boolean fromReq = request.getThinkingMode();
-        boolean toggleOn = fromReq != null
-                ? Boolean.TRUE.equals(fromReq)
-                : Boolean.TRUE.equals(defaultsOrEmpty().getThinkingMode());
-        if (!toggleOn) {
-            return false;
-        }
-        return supportsThinkingFlag() && modeSupportsDeepThinking(resolveEffectiveModeKey(request));
-    }
-
     public Map<String, ModeCapabilityDto> buildModeCapabilitiesDto() {
-        LinkedHashMap<String, ModeCapabilityDto> out = new LinkedHashMap<String, ModeCapabilityDto>();
+        LinkedHashMap<String, ModeCapabilityDto> out = new LinkedHashMap<>();
         for (Map.Entry<String, ModeEntryConfig> en : modeEntries.entrySet()) {
             ModeCapabilityDto d = new ModeCapabilityDto();
             d.setTextGeneration(en.getValue().isTextGeneration());
             d.setDeepThinking(en.getValue().isDeepThinking());
             d.setVision(en.getValue().isVision());
+            d.setStreamOutput(en.getValue().isStreamOutput());
+            d.setToolCall(en.getValue().isToolCall());
             d.setContextWindow(en.getValue().getContextWindow());
             out.put(en.getKey(), d);
         }
         return out;
     }
 
-    public String getCode() {
-        return code;
-    }
-
-    public String getDisplayName() {
-        return displayName;
-    }
-
-    public String getApiKey() {
-        return apiKey;
-    }
-
-    public String getBaseUrl() {
-        return baseUrl;
-    }
-
-    public String getDefaultMode() {
-        return defaultMode;
-    }
+    public String getCode() { return code; }
+    public String getDisplayName() { return displayName; }
+    public String getApiKey() { return apiKey; }
+    public String getBaseUrl() { return baseUrl; }
+    public String getDefaultMode() { return defaultMode; }
+    public Double getForceTemperature() { return forceTemperature; }
+    public String getThinkingParamStyle() { return thinkingParamStyle; }
+    public boolean isJsonModeSystemHint() { return jsonModeSystemHint; }
+    public boolean usesDashScopeThinkingParam() { return "dashscope".equalsIgnoreCase(thinkingParamStyle); }
 
     /** 逻辑名 → 上游 model id（兼容旧接口） */
-    public Map<String, String> getModes() {
-        return modesFlat;
-    }
+    public Map<String, String> getModes() { return modesFlat; }
 }
