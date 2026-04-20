@@ -222,11 +222,19 @@ public class OpenAiLlmExecutor {
         Boolean effective = explicit != null ? explicit : d.getThinkingMode();
 
         boolean dashScope = cfg.usesDashScopeThinkingParam();
+        
+        // 特殊处理：百炼的 MiniMax 系列模型强制要求 enable_thinking=true
+        String modeKey = StringUtils.hasText(request.getMode())
+                ? request.getMode().trim()
+                : cfg.getDefaultMode();
+        boolean isMiniMax = modeKey.toLowerCase().contains("minimax");
 
-        // 用户/调用方明确关闭思考：无论 mode 配置如何，都必须显式告知上游禁用，
-        // 否则像 Qwen3 这类默认开启思考的模型会仍然思考，导致等待延迟。
+        // 用户/调用方明确关闭思考：对于 MiniMax 模型不允许关闭
         if (Boolean.FALSE.equals(explicit)) {
-            if (dashScope) {
+            if (isMiniMax) {
+                // MiniMax 强制开启思考
+                body.put("enable_thinking", true);
+            } else if (dashScope) {
                 // DashScope/Qwen 格式：enable_thinking=false
                 body.put("enable_thinking", false);
             } else {
@@ -239,21 +247,23 @@ public class OpenAiLlmExecutor {
         }
 
         // 开启思考：要求 mode 配置声明支持 deepThinking，防止对不支持的模式误传
-        if (!Boolean.TRUE.equals(effective)) {
+        // 但 MiniMax 模型强制开启，不受此限制
+        if (!Boolean.TRUE.equals(effective) && !isMiniMax) {
             return;
         }
-        String modeKey = StringUtils.hasText(request.getMode())
-                ? request.getMode().trim()
-                : cfg.getDefaultMode();
-        if (!cfg.modeSupportsDeepThinking(modeKey)) {
+        if (!cfg.modeSupportsDeepThinking(modeKey) && !isMiniMax) {
             return;
         }
-        if (dashScope) {
-            body.put("enable_thinking", true);
-        } else {
-            ObjectNode t = objectMapper.createObjectNode();
-            t.put("type", "enabled");
-            body.set("thinking", t);
+        
+        // MiniMax 强制开启思考，或用户要求开启思考
+        if (isMiniMax || Boolean.TRUE.equals(effective)) {
+            if (dashScope) {
+                body.put("enable_thinking", true);
+            } else {
+                ObjectNode t = objectMapper.createObjectNode();
+                t.put("type", "enabled");
+                body.set("thinking", t);
+            }
         }
     }
 
