@@ -156,14 +156,15 @@ public class OpenAiChatCompletionClient {
         }
     }
 
+    private static final org.slf4j.Logger log =
+            org.slf4j.LoggerFactory.getLogger(OpenAiChatCompletionClient.class);
+
     private static UpstreamAiException upstreamException(HttpStatusCodeException ex) {
         String detail = ex.getResponseBodyAsString();
-        return new UpstreamAiException(
-                "上游返回错误: HTTP " + ex.getRawStatusCode()
-                        + (StringUtils.hasText(detail) ? " — " + detail : ""),
-                ex,
-                ex.getRawStatusCode()
-        );
+        String msg = "上游返回错误: HTTP " + ex.getRawStatusCode()
+                + (StringUtils.hasText(detail) ? " — " + detail : "");
+        log.error("[LLM错误] {}", msg);
+        return new UpstreamAiException(msg, ex, ex.getRawStatusCode());
     }
 
     private static String trimTrailingSlash(String baseUrl) {

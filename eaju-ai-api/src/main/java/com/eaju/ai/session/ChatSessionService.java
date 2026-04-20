@@ -86,8 +86,9 @@ public class ChatSessionService {
     }
 
     /**
-     * 工具调用结束后：将完整消息链（含 tool_calls / tool 结果）写入 Redis，使下轮对话能复用工具结果。
-     * 系统消息（role=system）不写入，避免下轮 withSystemPrompt 重复注入时产生重复。
+     * 工具调用结束后：只将 user 消息 + 最终 assistant 回复写入 Redis。
+     * 不保存中间的 assistant+tool_calls / tool 消息，避免不同模型对历史结构的兼容性问题。
+     * 系统消息（role=system）同样不写入，下轮由 withSystemPrompt 重新注入。
      */
     public void appendToolCallToSession(ChatRequestDto original,
                                         List<ChatMessageDto> workMessages,
@@ -96,13 +97,15 @@ public class ChatSessionService {
         try {
             List<ChatMessageDto> next = new ArrayList<>();
             for (ChatMessageDto msg : workMessages) {
-                if (!"system".equals(msg.getRole())) {
+                String role = msg.getRole();
+                // 只保留 user 消息；assistant+tool_calls 和 tool 结果是中间状态，不存历史
+                if ("user".equals(role)) {
                     next.add(msg);
                 }
             }
             ChatMessageDto assistant = new ChatMessageDto();
             assistant.setRole("assistant");
-            assistant.setContent(response.getContent() != null ? response.getContent() : "");
+            assistant.setContent(response != null && response.getContent() != null ? response.getContent() : "");
             next.add(assistant);
             saveHistory(original.getSessionId().trim(), next);
         } catch (Exception ex) {

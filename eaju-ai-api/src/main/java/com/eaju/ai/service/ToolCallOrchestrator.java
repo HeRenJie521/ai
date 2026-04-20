@@ -72,21 +72,17 @@ public class ToolCallOrchestrator {
             ChatRequestDto roundRequest = copyWithMessages(request, workMessages);
             lastResponse = openAiLlmExecutor.chatWithTools(roundRequest, cfg, toolsArray);
 
-            // 检查 finish_reason
-            String finishReason = lastResponse.getFinishReason();
-            if (!"tool_calls".equals(finishReason)) {
-                // 普通回复，结束循环
-                break;
-            }
-
-            // 解析 tool_calls
+            // 兼容各模型：优先从响应消息体中判断是否有 tool_calls，
+            // 不依赖 finish_reason（部分模型用 "stop" 而非 "tool_calls"）
             JsonNode raw = lastResponse.getRaw();
             List<ToolCallItem> toolCalls = extractToolCalls(raw);
             if (toolCalls.isEmpty()) {
+                // 响应里没有 tool_calls，是普通文本回复，结束循环
                 break;
             }
 
-            log.info("[工具编排] 第 {} 轮，共 {} 个工具调用", round + 1, toolCalls.size());
+            String finishReason = lastResponse.getFinishReason();
+            log.info("[工具编排] 第 {} 轮，共 {} 个工具调用，finish_reason={}", round + 1, toolCalls.size(), finishReason);
 
             // 追加 assistant 消息（含 tool_calls）
             ChatMessageDto assistantMsg = buildAssistantToolCallMessage(raw);
@@ -103,7 +99,15 @@ public class ToolCallOrchestrator {
                     onProgress.accept("正在" + label + "，请稍后...\n\n");
                 }
 
-                String result = toolCallExecutor.execute(matchedTool, tc.arguments, userCtx);
+                String result;
+                if (matchedTool == null) {
+                    log.warn("[工具编排] 未找到工具定义: {}", tc.functionName);
+                    result = "{\"error\": \"未找到工具: " + tc.functionName + "\"}";
+                } else {
+                    log.info("[工具编排] 调用工具={} id={} 入参={}", tc.functionName, tc.id, tc.arguments);
+                    result = toolCallExecutor.execute(matchedTool, tc.arguments, userCtx);
+                    log.info("[工具编排] 工具={} 返回结果={}", tc.functionName, result);
+                }
 
                 // 追加 tool 消息
                 ChatMessageDto toolMsg = new ChatMessageDto();
@@ -111,6 +115,19 @@ public class ToolCallOrchestrator {
                 toolMsg.setToolCallId(tc.id);
                 toolMsg.setContent(result);
                 workMessages.add(toolMsg);
+            }
+        }
+
+        // 兜底：部分模型（如 Kimi）在收到工具结果后仍可能返回空内容，
+        // 去掉 tools 参数再调一次，强制模型输出总结性文本
+        boolean hasToolResult = workMessages.stream().anyMatch(m -> "tool".equals(m.getRole()));
+        if (hasToolResult && lastResponse != null && !StringUtils.hasText(lastResponse.getContent())) {
+            log.warn("[工具编排] 最终回复为空，不带工具重试一次以强制生成文本");
+            try {
+                ChatRequestDto retryRequest = copyWithMessages(request, workMessages);
+                lastResponse = openAiLlmExecutor.chatWithTools(retryRequest, cfg, null);
+            } catch (Exception e) {
+                log.warn("[工具编排] 重试失败：{}", e.getMessage());
             }
         }
 

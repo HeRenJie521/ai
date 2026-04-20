@@ -285,7 +285,16 @@ public class OpenAiLlmExecutor {
                 node.put("content", m.getContent() != null ? m.getContent() : "");
                 try {
                     JsonNode toolCallsNode = objectMapper.readTree(m.getToolCallsJson());
-                    node.set("tool_calls", toolCallsNode);
+                    // 剥掉 "index" 字段：该字段仅用于流式分块重组，发回给模型时部分模型（如 Kimi）会报错或不响应
+                    ArrayNode cleanedToolCalls = objectMapper.createArrayNode();
+                    if (toolCallsNode.isArray()) {
+                        for (JsonNode tc : toolCallsNode) {
+                            ObjectNode cleanTc = tc.deepCopy();
+                            cleanTc.remove("index");
+                            cleanedToolCalls.add(cleanTc);
+                        }
+                    }
+                    node.set("tool_calls", cleanedToolCalls);
                 } catch (Exception ex) {
                     // 解析失败，忽略 tool_calls
                 }

@@ -39,6 +39,7 @@ import java.util.function.Consumer;
 @Service
 public class ChatService {
 
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(ChatService.class);
     private static final long STREAM_TIMEOUT_MS = 30L * 60L * 1000L;
 
     private final LlmProviderConfigService llmProviderConfigService;
@@ -149,10 +150,19 @@ public class ChatService {
                     chatRecordService.saveBlockingTurn(request, effective, response, true);
                 }
             } catch (Exception ex) {
+                log.warn("[对话异常] {}", ex.getMessage());
+                String errorText = "调用失败：" + (ex.getMessage() != null ? ex.getMessage() : "未知错误");
+                // 将错误信息作为 assistant 回复保存到会话历史和聊天记录
+                ChatResponseDto errorResponse = new ChatResponseDto();
+                errorResponse.setContent(errorText);
+                errorResponse.setFinishReason("error");
                 try {
-                    emitter.completeWithError(ex);
-                } catch (Exception ignored) {
-                }
+                    chatSessionService.appendAssistantToSession(request, effective, errorResponse);
+                } catch (Exception ignored) {}
+                try {
+                    chatRecordService.saveBlockingTurn(request, effective, errorResponse, false);
+                } catch (Exception ignored) {}
+                emitErrorAsStream(emitter, errorText);
                 return;
             }
             try {
@@ -277,6 +287,26 @@ public class ChatService {
             hasAny = true;
         }
         return hasAny ? sb.toString().trim() : "";
+    }
+
+    /**
+     * 将异常信息以普通文本 chunk 形式发送给客户端，错误直接显示在会话中。
+     */
+    private void emitErrorAsStream(SseEmitter emitter, String text) {
+        try {
+            ObjectNode chunk = objectMapper.createObjectNode();
+            chunk.put("id", "error");
+            chunk.put("object", "chat.completion.chunk");
+            ArrayNode choices = chunk.putArray("choices");
+            ObjectNode choice = choices.addObject();
+            choice.put("index", 0);
+            choice.putObject("delta").put("content", text);
+            choice.putNull("finish_reason");
+            emitter.send(SseEmitter.event().name("chunk").data(objectMapper.writeValueAsString(chunk)));
+            emitter.send(SseEmitter.event().name("done").data("[DONE]"));
+            emitter.complete();
+        } catch (Exception ignored) {
+        }
     }
 
     /**
