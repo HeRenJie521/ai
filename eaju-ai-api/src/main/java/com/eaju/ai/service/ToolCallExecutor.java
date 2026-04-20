@@ -124,7 +124,8 @@ public class ToolCallExecutor {
                 if (StringUtils.hasText(fieldDesc)) {
                     sb.append("字段说明：\n").append(fieldDesc).append("\n");
                 }
-                sb.append("响应数据：\n").append(StringUtils.hasText(filtered) ? filtered : result);
+                // 严格只发过滤后的数据，绝不 fallback 到完整响应（避免泄露未配置字段）
+                sb.append("响应数据：\n").append(filtered != null ? filtered : "{}");
                 String payload = sb.toString();
                 log.info("[出参发给AI] {}", payload);
                 return payload;
@@ -497,7 +498,7 @@ public class ToolCallExecutor {
                 List<Map<String, Object>> children = (List<Map<String, Object>>) param.get("children");
 
                 if ("Object".equals(fieldType) && children != null && !children.isEmpty()) {
-                    // 对象类型，递归提取子字段
+                    // 对象类型：递归提取已配置的子字段
                     if (responseObj instanceof Map) {
                         Object childValue = ((Map<?, ?>) responseObj).get(key);
                         Object filteredChild = filterByConfig(childValue, children);
@@ -505,8 +506,11 @@ public class ToolCallExecutor {
                             filtered.put(key, filteredChild);
                         }
                     }
-                } else if ("Array".equals(fieldType) && children != null) {
-                    // 数组类型，递归处理数组元素
+                } else if ("Object".equals(fieldType)) {
+                    // Object 类型但没有配置子字段 → 跳过，不整体透传
+                    log.warn("[出参过滤] 字段 {} 类型为 Object 但未配置子字段，已跳过", key);
+                } else if ("Array".equals(fieldType) && children != null && !children.isEmpty()) {
+                    // 数组类型：递归过滤每个元素的子字段
                     if (responseObj instanceof Map) {
                         Object arrayValue = ((Map<?, ?>) responseObj).get(key);
                         if (arrayValue instanceof List) {
@@ -517,13 +521,14 @@ public class ToolCallExecutor {
                                     filteredArray.add(filteredItem);
                                 }
                             }
-                            if (!filteredArray.isEmpty()) {
-                                filtered.put(key, filteredArray);
-                            }
+                            filtered.put(key, filteredArray);
                         }
                     }
+                } else if ("Array".equals(fieldType)) {
+                    // Array 类型但没有配置子字段 → 跳过
+                    log.warn("[出参过滤] 字段 {} 类型为 Array 但未配置子字段，已跳过", key);
                 } else {
-                    // 叶子节点，直接从响应中取值
+                    // 叶子节点：直接取值
                     if (responseObj instanceof Map) {
                         Object value = ((Map<?, ?>) responseObj).get(key);
                         if (value != null) {
@@ -572,7 +577,9 @@ public class ToolCallExecutor {
                     if (filteredChild != null) {
                         result.put(key, filteredChild);
                     }
-                } else if ("Array".equals(fieldType) && grandchildren != null) {
+                } else if ("Object".equals(fieldType)) {
+                    // Object 类型但无子字段配置 → 跳过，不整体透传
+                } else if ("Array".equals(fieldType) && grandchildren != null && !grandchildren.isEmpty()) {
                     Object arrayValue = map.get(key);
                     if (arrayValue instanceof List) {
                         List<Object> filteredArray = new ArrayList<>();
@@ -582,11 +589,12 @@ public class ToolCallExecutor {
                                 filteredArray.add(filteredItem);
                             }
                         }
-                        if (!filteredArray.isEmpty()) {
-                            result.put(key, filteredArray);
-                        }
+                        result.put(key, filteredArray);
                     }
+                } else if ("Array".equals(fieldType)) {
+                    // Array 类型但无子字段配置 → 跳过
                 } else {
+                    // 叶子节点
                     Object childValue = map.get(key);
                     if (childValue != null) {
                         result.put(key, childValue);
