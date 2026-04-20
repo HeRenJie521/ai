@@ -1290,3 +1290,56 @@ const columns: DataTableColumns<AiAppRow> = [
     </template>
   </n-modal>
 </template>
+
+<style scoped>
+.inner {
+  max-width: 100%;
+  margin: 0 auto;
+}
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.page-title { font-size: 18px; }
+.card {
+  background: #ffffff !important;
+  border: 1px solid #e5e7eb !important;
+  border-radius: 12px;
+}
+.suggestion-list {
+  max-height: 240px;
+  overflow-y: auto;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 8px;
+  background: #f9fafb;
+}
+.suggestion-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  margin-bottom: 4px;
+  background: #fff;
+  border-radius: 6px;
+  border: 1px solid #e5e7eb;
+}
+.suggestion-item:last-child { margin-bottom: 0; }
+.suggestion-text {
+  flex: 1;
+  font-size: 13px;
+  color: #1f2937;
+  margin-right: 8px;
+  word-break: break-word;
+}
+.suggestion-empty {
+  text-align: center;
+  color: #9ca3af;
+  font-size: 13px;
+  padding: 20px 0;
+}
+</style>

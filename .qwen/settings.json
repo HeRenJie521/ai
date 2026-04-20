@@ -74,7 +74,8 @@
       "Bash(git restore *)",
       "Bash(perl *)",
       "Bash(head *)",
-      "Bash(mv *)"
+      "Bash(mv *)",
+      "Bash(tail *)"
     ]
   },
   "$version": 3
