@@ -89,6 +89,7 @@ public class LlmProviderConfigService {
                                                      LlmProviderConfigSnapshot snap,
                                                      String modeKey) {
         LlmProviderOptionDto dto = new LlmProviderOptionDto();
+        dto.setId(entity.getId());
         dto.setCode(entity.getCode());
         dto.setDisplayName(entity.getDisplayName());
         dto.setDefaultMode(modeKey);
@@ -114,6 +115,7 @@ public class LlmProviderConfigService {
         List<LlmProviderOptionDto> out = new ArrayList<LlmProviderOptionDto>();
         for (LlmProviderConfigEntity e : repository.findAllByEnabledTrueOrderBySortOrderAscCodeAsc()) {
             LlmProviderOptionDto dto = new LlmProviderOptionDto();
+            dto.setId(e.getId());
             dto.setCode(e.getCode());
             dto.setDisplayName(e.getDisplayName());
             dto.setDefaultMode(e.getDefaultMode());

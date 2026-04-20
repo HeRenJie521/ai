@@ -248,10 +248,10 @@ const modelOptions = computed(() => {
   for (const p of llmProviders.value) {
     if (p.modes && Object.keys(p.modes).length > 0) {
       for (const modeKey of Object.keys(p.modes)) {
-        opts.push({ label: `${p.displayName} · ${modeKey}`, value: modeKey })
+        opts.push({ label: `${p.displayName} · ${modeKey}`, value: `${p.id}::${modeKey}` })
       }
     } else {
-      opts.push({ label: p.displayName, value: p.code })
+      opts.push({ label: p.displayName, value: `${p.id}::${p.code}` })
     }
   }
   return opts
@@ -402,12 +402,21 @@ const suggestionItemsEdit = ref<string[]>([])
 function defaultForm() {
   return {
     name: '',
-    modelId: null as string | null,
+    modelKey: null as string | null,
     welcomeText: '',
     systemRole: '',
     systemTask: '',
     systemConstraints: '',
   }
+}
+
+function splitModelKey(modelKey: string | null): { modelId: string | undefined; modelProviderId: number | undefined } {
+  if (!modelKey) return { modelId: undefined, modelProviderId: undefined }
+  const idx = modelKey.indexOf('::')
+  if (idx === -1) return { modelId: modelKey, modelProviderId: undefined }
+  const providerIdStr = modelKey.slice(0, idx)
+  const providerId = Number(providerIdStr)
+  return { modelId: modelKey.slice(idx + 2), modelProviderId: isNaN(providerId) ? undefined : providerId }
 }
 
 async function load() {
@@ -453,10 +462,12 @@ async function submitCreate() {
     suggestionItemsCreate.value.length > 0
       ? JSON.stringify(suggestionItemsCreate.value)
       : undefined
+  const { modelId, modelProviderId } = splitModelKey(createForm.value.modelKey)
   try {
     const created = await adminCreateAiApp({
       name,
-      modelId: createForm.value.modelId || undefined,
+      modelId,
+      modelProviderId,
       welcomeText: createForm.value.welcomeText || undefined,
       suggestions: suggestionsJson,
       systemRole: undefined,
@@ -479,7 +490,7 @@ function openEdit(r: AiAppRow) {
   editId.value = r.id
   editForm.value = {
     name: r.name,
-    modelId: r.modelId,
+    modelKey: r.modelProviderId != null && r.modelId ? `${r.modelProviderId}::${r.modelId}` : r.modelId,
     welcomeText: r.welcomeText || '',
     systemRole: r.systemRole || '',
     systemTask: r.systemTask || '',
@@ -501,10 +512,12 @@ async function submitEdit() {
     suggestionItemsEdit.value.length > 0
       ? JSON.stringify(suggestionItemsEdit.value)
       : ''
+  const { modelId, modelProviderId } = splitModelKey(editForm.value.modelKey)
   try {
     await adminUpdateAiApp(id, {
       name,
-      modelId: editForm.value.modelId || undefined,
+      modelId,
+      modelProviderId,
       welcomeText: editForm.value.welcomeText,
       suggestions: suggestionsJson,
       systemRole: editForm.value.systemRole,
@@ -860,7 +873,7 @@ const columns: DataTableColumns<AiAppRow> = [
 
       <n-form-item label="默认对话模型">
         <n-select
-          v-model:value="createForm.modelId"
+          v-model:value="createForm.modelKey"
           :options="modelOptions"
           placeholder="请选择默认模型（可选）"
           filterable
@@ -933,7 +946,7 @@ const columns: DataTableColumns<AiAppRow> = [
 
       <n-form-item label="默认对话模型">
         <n-select
-          v-model:value="editForm.modelId"
+          v-model:value="editForm.modelKey"
           :options="modelOptions"
           placeholder="请选择默认模型（可选）"
           filterable

@@ -10,6 +10,7 @@ public class AiAppResponseDto {
     private String systemTask;
     private String systemConstraints;
     private String modelId;
+    private Long modelProviderId;
     private String createdAt;
 
     public Long getId() { return id; }
@@ -35,6 +36,9 @@ public class AiAppResponseDto {
 
     public String getModelId() { return modelId; }
     public void setModelId(String modelId) { this.modelId = modelId; }
+
+    public Long getModelProviderId() { return modelProviderId; }
+    public void setModelProviderId(Long modelProviderId) { this.modelProviderId = modelProviderId; }
 
     public String getCreatedAt() { return createdAt; }
     public void setCreatedAt(String createdAt) { this.createdAt = createdAt; }

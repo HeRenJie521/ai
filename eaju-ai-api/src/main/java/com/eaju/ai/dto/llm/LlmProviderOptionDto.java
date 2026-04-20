@@ -6,6 +6,7 @@ import java.util.Map;
 /** 登录用户选择模型提供方（不含密钥） */
 public class LlmProviderOptionDto {
 
+    private Long id;
     private String code;
     private String displayName;
     private String defaultMode;
@@ -18,6 +19,14 @@ public class LlmProviderOptionDto {
     private boolean supportsThinking;
     /** 推理默认里是否开启思考模式（供聊天页开关初值） */
     private boolean defaultThinkingMode;
+
+    public Long getId() {
+        return id;
+    }
+
+    public void setId(Long id) {
+        this.id = id;
+    }
 
     public String getCode() {
         return code;

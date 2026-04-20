@@ -9,6 +9,7 @@ public class AiAppUpdateRequestDto {
     private String systemTask;
     private String systemConstraints;
     private String modelId;
+    private Long modelProviderId;
 
     public String getName() { return name; }
     public void setName(String name) { this.name = name; }
@@ -30,4 +31,7 @@ public class AiAppUpdateRequestDto {
 
     public String getModelId() { return modelId; }
     public void setModelId(String modelId) { this.modelId = modelId; }
+
+    public Long getModelProviderId() { return modelProviderId; }
+    public void setModelProviderId(Long modelProviderId) { this.modelProviderId = modelProviderId; }
 }

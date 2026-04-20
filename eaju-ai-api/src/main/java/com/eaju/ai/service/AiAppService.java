@@ -31,7 +31,7 @@ public class AiAppService {
     @Transactional
     public AiAppEntity create(String name, String welcomeText, String suggestions,
                               String systemRole, String systemTask, String systemConstraints,
-                              String modelId) {
+                              String modelId, Long modelProviderId) {
         if (!StringUtils.hasText(name)) {
             throw new IllegalArgumentException("应用名称不能为空");
         }
@@ -45,13 +45,16 @@ public class AiAppService {
         if (StringUtils.hasText(modelId)) {
             e.setModelId(modelId.trim());
         }
+        if (modelProviderId != null) {
+            e.setModelProviderId(modelProviderId);
+        }
         return aiAppRepository.save(e);
     }
 
     @Transactional
     public AiAppEntity update(Long id, String name, String welcomeText, String suggestions,
                               String systemRole, String systemTask, String systemConstraints,
-                              String modelId) {
+                              String modelId, Long modelProviderId) {
         AiAppEntity e = aiAppRepository.findByIdAndDeletedIsFalse(id)
                 .orElseThrow(() -> new IllegalArgumentException("AI 应用不存在"));
         if (StringUtils.hasText(name)) {
@@ -75,6 +78,9 @@ public class AiAppService {
         }
         if (modelId != null) {
             e.setModelId(StringUtils.hasText(modelId) ? modelId.trim() : null);
+        }
+        if (modelProviderId != null) {
+            e.setModelProviderId(modelProviderId);
         }
         return aiAppRepository.save(e);
     }

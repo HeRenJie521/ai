@@ -41,9 +41,13 @@ public class AiAppEntity {
     @Column(name = "system_constraints", columnDefinition = "TEXT")
     private String systemConstraints;
 
-    /** 默认对话模型 ID */
+    /** 默认对话模型 ID（mode key，如 MiniMax-2.5） */
     @Column(name = "model_id", length = 256)
     private String modelId;
+
+    /** 默认对话模型所属 llm_provider_config.id，与 model_id 联合唯一确定模型 */
+    @Column(name = "model_provider_id")
+    private Long modelProviderId;
 
     @Column(nullable = false)
     private boolean deleted = false;
@@ -91,6 +95,9 @@ public class AiAppEntity {
 
     public String getModelId() { return modelId; }
     public void setModelId(String modelId) { this.modelId = modelId; }
+
+    public Long getModelProviderId() { return modelProviderId; }
+    public void setModelProviderId(Long modelProviderId) { this.modelProviderId = modelProviderId; }
 
     public boolean isDeleted() { return deleted; }
     public void setDeleted(boolean deleted) { this.deleted = deleted; }

@@ -10,6 +10,7 @@ export interface ModeCapability {
 }
 
 export interface LlmProviderOption {
+  id: number
   code: string
   displayName: string
   defaultMode: string

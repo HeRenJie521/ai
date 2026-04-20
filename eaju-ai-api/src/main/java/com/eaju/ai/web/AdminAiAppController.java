@@ -68,7 +68,8 @@ public class AdminAiAppController {
                 body.getSystemRole(),
                 body.getSystemTask(),
                 body.getSystemConstraints(),
-                body.getModelId());
+                body.getModelId(),
+                body.getModelProviderId());
         return toDto(e);
     }
 
@@ -83,7 +84,8 @@ public class AdminAiAppController {
                 body.getSystemRole(),
                 body.getSystemTask(),
                 body.getSystemConstraints(),
-                body.getModelId());
+                body.getModelId(),
+                body.getModelProviderId());
         return toDto(e);
     }
 
@@ -160,6 +162,7 @@ public class AdminAiAppController {
         dto.setSystemTask(e.getSystemTask());
         dto.setSystemConstraints(e.getSystemConstraints());
         dto.setModelId(e.getModelId());
+        dto.setModelProviderId(e.getModelProviderId());
         dto.setCreatedAt(e.getCreatedAt() != null ? e.getCreatedAt().toString() : null);
         return dto;
     }
