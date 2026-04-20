@@ -1,5 +1,20 @@
 import http from './http'
 
+/** 应用工具绑定信息（含调用策略） */
+export interface AppToolBinding {
+  toolId: number
+  toolName: string
+  toolLabel: string
+  toolDescription: string
+  callStrategy: string | null
+}
+
+/** 应用工具绑定输入（含调用策略） */
+export interface AppToolBindingInput {
+  toolId: number
+  callStrategy: string | null
+}
+
 export interface AiToolRow {
   id: number
   name: string
@@ -53,7 +68,18 @@ export async function adminDeleteTool(id: number): Promise<void> {
   await http.delete(`/api/admin/tools/${id}`)
 }
 
-/** 获取应用已绑定的工具列表 */
+/** 获取应用绑定的工具及调用策略 */
+export async function adminGetAppToolBindings(appId: number): Promise<AppToolBinding[]> {
+  const { data } = await http.get<AppToolBinding[]>(`/api/admin/ai-apps/${appId}/tools`)
+  return data
+}
+
+/** 保存应用工具绑定及调用策略 */
+export async function adminSaveAppToolBindings(appId: number, bindings: AppToolBindingInput[]): Promise<void> {
+  await http.put(`/api/admin/ai-apps/${appId}/tool-bindings`, bindings)
+}
+
+/** 获取应用已绑定的工具列表（旧接口，仅返回 toolIds） */
 export async function adminGetAppTools(appId: number): Promise<AiToolRow[]> {
   const { data } = await http.get<AiToolRow[]>(`/api/admin/ai-apps/${appId}/tools`)
   return data

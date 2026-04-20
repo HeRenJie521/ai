@@ -62,7 +62,7 @@ public class ToolCallOrchestrator {
                                    List<AiToolEntity> tools, Map<String, Object> userCtx,
                                    Consumer<String> onProgress) {
         // 构建 tools 数组（OpenAI function calling 格式）
-        ArrayNode toolsArray = buildToolsArray(tools);
+        ArrayNode toolsArray = buildToolsArray(tools, null);
 
         // 工作消息列表（初始为请求中的消息，循环中不断追加）
         List<ChatMessageDto> workMessages = new ArrayList<>(request.getMessages());
@@ -96,66 +96,73 @@ public class ToolCallOrchestrator {
             for (ToolCallItem tc : toolCalls) {
                 AiToolEntity matchedTool = findTool(tools, tc.functionName);
 
-                // 工具调用前：推送查询进度提示（使用 name 字段）
+                // 工具调用前：推送查询进度提示（使用 label 字段）
                 if (onProgress != null) {
-                    String name = matchedTool != null && StringUtils.hasText(matchedTool.getName())
-                            ? matchedTool.getName() : "数据";
-                    onProgress.accept("正在查询" + name + "，请稍后...\n\n");
+                    String label = matchedTool != null && StringUtils.hasText(matchedTool.getLabel())
+                            ? matchedTool.getLabel() : "数据";
+                    onProgress.accept("正在" + label + "，请稍后...\n\n");
                 }
 
-                log.info("[工具编排] 调用工具={} id={} 入参={}", tc.functionName, tc.id, tc.arguments);
-                String result;
-                if (matchedTool != null) {
-                    result = toolCallExecutor.execute(matchedTool, tc.arguments, userCtx);
-                } else {
-                    log.warn("未找到工具定义: {}", tc.functionName);
-                    result = "{\"error\": \"未找到工具: " + tc.functionName + "\"}";
-                }
-                log.info("[工具编排] 工具={} 返回结果={}", tc.functionName, result);
+                String result = toolCallExecutor.execute(matchedTool, tc.arguments, userCtx);
+
+                // 追加 tool 消息
                 ChatMessageDto toolMsg = new ChatMessageDto();
                 toolMsg.setRole("tool");
-                toolMsg.setContent(result);
                 toolMsg.setToolCallId(tc.id);
+                toolMsg.setContent(result);
                 workMessages.add(toolMsg);
             }
-
-            // 本轮所有工具执行完毕：推送 AI 分析进度提示
-            if (onProgress != null) {
-                onProgress.accept("正在分析数据...\n\n");
-            }
         }
 
-        return new OrchestratorResult(lastResponse, workMessages);
+        return new OrchestratorResult(lastResponse != null ? lastResponse.getContent() : "", workMessages, lastResponse);
     }
 
-    /** 工具调用编排结果：最终 LLM 响应 + 完整消息链（含工具调用中间消息） */
+    /**
+     * 工具调用结果封装
+     */
     public static class OrchestratorResult {
-        private final ChatResponseDto response;
+        private final String content;
         private final List<ChatMessageDto> workMessages;
+        private final ChatResponseDto response;
 
-        public OrchestratorResult(ChatResponseDto response, List<ChatMessageDto> workMessages) {
-            this.response = response;
+        public OrchestratorResult(String content, List<ChatMessageDto> workMessages, ChatResponseDto response) {
+            this.content = content;
             this.workMessages = workMessages;
+            this.response = response;
         }
 
-        public ChatResponseDto getResponse() { return response; }
+        public String getContent() { return content; }
         public List<ChatMessageDto> getWorkMessages() { return workMessages; }
+        public ChatResponseDto getResponse() { return response; }
     }
 
-    private ArrayNode buildToolsArray(List<AiToolEntity> tools) {
+    /**
+     * 构建 tools 数组（OpenAI function calling 格式）。
+     * @param tools 工具列表
+     * @param callStrategies 工具调用策略 Map，key=toolId, value=callStrategy
+     */
+    private ArrayNode buildToolsArray(List<AiToolEntity> tools, Map<Long, String> callStrategies) {
         ArrayNode array = objectMapper.createArrayNode();
         for (AiToolEntity tool : tools) {
             ObjectNode toolNode = objectMapper.createObjectNode();
             toolNode.put("type", "function");
             ObjectNode fn = objectMapper.createObjectNode();
             fn.put("name", tool.getName());
-            fn.put("description", tool.getDescription());
+            
+            // 如果有调用策略，将其追加到描述中
+            String description = tool.getDescription();
+            String callStrategy = callStrategies != null ? callStrategies.get(tool.getId()) : null;
+            if (StringUtils.hasText(callStrategy)) {
+                description = description + "\n\n【调用策略】\n" + callStrategy;
+            }
+            fn.put("description", description);
+            
             // 解析 paramsSchemaJson 并内嵌
             try {
                 JsonNode schema = objectMapper.readTree(tool.getParamsSchemaJson());
                 fn.set("parameters", schema);
             } catch (Exception e) {
-                log.warn("解析工具参数 Schema 失败: tool={} err={}", tool.getName(), e.getMessage());
+                log.warn("解析工具参数 Schema 失败：tool={} err={}", tool.getName(), e.getMessage());
                 fn.set("parameters", objectMapper.createObjectNode());
             }
             toolNode.set("function", fn);
@@ -218,10 +225,10 @@ public class ToolCallOrchestrator {
         return null;
     }
 
-    private static ChatRequestDto copyWithMessages(ChatRequestDto original, List<ChatMessageDto> messages) {
+    private static ChatRequestDto copyWithMessages(ChatRequestDto src, List<ChatMessageDto> messages) {
         ChatRequestDto copy = new ChatRequestDto();
-        BeanUtils.copyProperties(original, copy, "messages");
-        copy.setMessages(messages);
+        BeanUtils.copyProperties(src, copy);
+        copy.setMessages(new ArrayList<>(messages));
         return copy;
     }
 

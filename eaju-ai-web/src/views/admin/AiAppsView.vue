@@ -33,7 +33,13 @@ import {
   type AiAppUsage,
   type RecentTurnRow,
 } from '@/api/adminAiApps'
-import { adminListTools, adminBindAppTools, adminGetAppTools, type AiToolRow } from '@/api/adminTools'
+import {
+  adminListTools,
+  adminGetAppToolBindings,
+  adminSaveAppToolBindings,
+  type AiToolRow,
+  type AppToolBindingInput,
+} from '@/api/adminTools'
 import { listLlmProviders, type LlmProviderOption } from '@/api/llmProviders'
 import type { ChatMessage } from '@/api/conversations'
 import { useAuthStore } from '@/stores/auth'
@@ -286,26 +292,105 @@ const msgSessionId = ref('')
 const msgLoading = ref(false)
 const msgList = ref<ChatMessage[]>([])
 
-// ---- 工具绑定 ----
+// ---- 工具配置 ----
 const allTools = ref<AiToolRow[]>([])
-const editBoundToolIds = ref<number[]>([])
-const toolOptions = computed(() =>
-  allTools.value.map((t) => ({ label: `${t.label}（${t.name}）`, value: t.id })),
-)
+const showToolConfigModal = ref(false)
+const toolConfigAppId = ref<number | null>(null)
+const toolConfigAppname = ref('')
+const toolConfigList = ref<ToolConfigItem[]>([])
+const toolConfigLoading = ref(false)
+const toolConfigSelectedToolId = ref<number | null>(null)
+
+interface ToolConfigItem {
+  toolId: number
+  toolName: string
+  toolLabel: string
+  toolDescription: string
+  callStrategy: string | null
+}
+
+const toolConfigToolOptions = computed(() => {
+  // 过滤掉已添加的工具
+  const addedIds = new Set(toolConfigList.value.map(item => item.toolId))
+  return allTools.value
+    .filter(t => !addedIds.has(t.id))
+    .map(t => ({ label: `${t.label}（${t.name}）`, value: t.id }))
+})
+
+async function openToolConfig(r: AiAppRow) {
+  toolConfigAppId.value = r.id
+  toolConfigAppname.value = r.name
+  toolConfigList.value = []
+  toolConfigSelectedToolId.value = null
+  showToolConfigModal.value = true
+  toolConfigLoading.value = true
+  try {
+    // 获取所有工具
+    allTools.value = await adminListTools()
+    // 获取已绑定的工具及策略
+    const boundTools = await adminGetAppToolBindings(r.id)
+    // 转换为列表
+    toolConfigList.value = boundTools.map(b => ({
+      toolId: b.toolId,
+      toolName: b.toolName,
+      toolLabel: b.toolLabel,
+      toolDescription: b.toolDescription,
+      callStrategy: b.callStrategy,
+    }))
+  } catch (e: unknown) {
+    const err = e as { response?: { data?: { message?: string } }; message?: string }
+    message.error(err.response?.data?.message || '加载工具列表失败')
+  } finally {
+    toolConfigLoading.value = false
+  }
+}
+
+function addToolConfig() {
+  if (!toolConfigSelectedToolId.value) {
+    message.warning('请选择工具')
+    return
+  }
+  // 检查是否已添加
+  if (toolConfigList.value.some(item => item.toolId === toolConfigSelectedToolId.value)) {
+    message.warning('该工具已添加')
+    return
+  }
+  const tool = allTools.value.find(t => t.id === toolConfigSelectedToolId.value)
+  if (!tool) return
+  toolConfigList.value.push({
+    toolId: tool.id,
+    toolName: tool.name,
+    toolLabel: tool.label,
+    toolDescription: tool.description,
+    callStrategy: null,
+  })
+  toolConfigSelectedToolId.value = null
+}
+
+function removeToolConfig(index: number) {
+  toolConfigList.value.splice(index, 1)
+}
+
+async function saveToolConfig() {
+  if (!toolConfigAppId.value) return
+  try {
+    const bindings: AppToolBindingInput[] = toolConfigList.value.map(item => ({
+      toolId: item.toolId,
+      callStrategy: item.callStrategy,
+    }))
+    await adminSaveAppToolBindings(toolConfigAppId.value, bindings)
+    message.success('已保存')
+    showToolConfigModal.value = false
+  } catch (e: unknown) {
+    const err = e as { response?: { data?: { message?: string } }; message?: string }
+    message.error(err.response?.data?.message || '保存失败')
+  }
+}
 
 async function loadAllTools() {
   try {
     allTools.value = await adminListTools()
   } catch { /* 忽略 */ }
-}
-
-async function loadBoundTools(appId: number) {
-  try {
-    const bound = await adminGetAppTools(appId)
-    editBoundToolIds.value = bound.map((t) => t.id)
-  } catch {
-    editBoundToolIds.value = []
-  }
 }
 
 // ---- 推荐问题（新建/编辑共用辅助状态）----
@@ -402,8 +487,6 @@ function openEdit(r: AiAppRow) {
   }
   suggestionItemsEdit.value = r.suggestions ? JSON.parse(r.suggestions) : []
   newSuggestionEdit.value = ''
-  editBoundToolIds.value = []
-  void loadBoundTools(r.id)
 }
 
 async function submitEdit() {
@@ -428,7 +511,6 @@ async function submitEdit() {
       systemTask: editForm.value.systemTask,
       systemConstraints: editForm.value.systemConstraints,
     })
-    await adminBindAppTools(id, editBoundToolIds.value)
     editId.value = null
     message.success('已保存')
     await load()
@@ -701,7 +783,7 @@ const columns: DataTableColumns<AiAppRow> = [
   {
     title: '操作',
     key: 'actions',
-    width: 380,
+    width: 460,
     render: (r) =>
       h(NSpace, { size: 8, wrap: false, justify: 'center' }, () => [
         h(NButton, { size: 'small', onClick: () => openUsage(r) }, { default: () => '用量' }),
@@ -710,6 +792,11 @@ const columns: DataTableColumns<AiAppRow> = [
           NButton,
           { size: 'small', type: 'info', ghost: true, onClick: () => openPrompt(r) },
           { default: () => 'Prompt' },
+        ),
+        h(
+          NButton,
+          { size: 'small', type: 'warning', ghost: true, onClick: () => openToolConfig(r) },
+          { default: () => '工具配置' },
         ),
         h(
           NButton,
@@ -886,16 +973,6 @@ const columns: DataTableColumns<AiAppRow> = [
             <n-button type="primary" @click="addSuggestion(suggestionItemsEdit, newSuggestionEdit, v => newSuggestionEdit = v)">添加</n-button>
           </div>
         </div>
-      </n-form-item>
-
-      <n-form-item label="绑定工具（工具调用）">
-        <n-select
-          v-model:value="editBoundToolIds"
-          :options="toolOptions"
-          multiple
-          clearable
-          placeholder="选择该应用可调用的工具（可多选）"
-        />
       </n-form-item>
     </n-form>
     <template #footer>
@@ -1147,181 +1224,69 @@ const columns: DataTableColumns<AiAppRow> = [
       </n-modal>
     </n-drawer-content>
   </n-drawer>
+
+  <!-- ============ 工具配置弹窗 ============ -->
+  <n-modal
+    v-model:show="showToolConfigModal"
+    preset="card"
+    :title="`工具配置 — ${toolConfigAppname}`"
+    style="width: min(800px, 96vw)"
+    :mask-closable="false"
+  >
+    <n-spin :show="toolConfigLoading">
+      <!-- 添加工具 -->
+      <div style="display: flex; gap: 8px; margin-bottom: 16px">
+        <n-select
+          v-model:value="toolConfigSelectedToolId"
+          :options="toolConfigToolOptions"
+          placeholder="选择工具"
+          style="flex: 1"
+          filterable
+        />
+        <n-button type="primary" @click="addToolConfig">新增</n-button>
+      </div>
+      
+      <!-- 已选工具列表 -->
+      <div v-if="toolConfigList.length === 0" style="text-align:center; padding:40px 0; color:#999">
+        暂无已配置的工具
+      </div>
+      
+      <div v-else style="max-height:400px; overflow-y:auto; border:1px solid #e5e7eb; border-radius:8px; padding:8px; background:#fafafa">
+        <div
+          v-for="(item, idx) in toolConfigList"
+          :key="item.toolId"
+          style="display:flex; align-items:flex-start; gap:12px; padding:10px; border-bottom:1px solid #e5e7eb"
+          :style="{ borderBottom: idx < toolConfigList.length - 1 ? '1px solid #e5e7eb' : 'none' }"
+        >
+          <div style="flex:1; min-width:0">
+            <div style="display:flex; align-items:flex-start; gap:8px; margin-bottom:8px">
+              <span style="font-size:13px; color:#666; white-space:nowrap; padding-top:2px">接口名称：</span>
+              <div style="font-size:14px; font-weight:600; color:#333">
+                {{ item.toolLabel }}
+                <span style="font-size:11px; color:#999; margin-left:6px; font-weight:normal">({{ item.toolName }})</span>
+              </div>
+            </div>
+            <div style="display:flex; align-items:flex-start; gap:8px">
+              <span style="font-size:13px; color:#666; white-space:nowrap; padding-top:8px">调用策略：</span>
+              <n-input
+                v-model:value="item.callStrategy"
+                type="textarea"
+                placeholder="例如：当用户询问{{相关场景}}时调用此工具"
+                :autosize="{ minRows: 2, maxRows: 3 }"
+                style="font-size:13px; flex:1"
+              />
+            </div>
+          </div>
+          <n-button size="small" type="error" ghost @click="removeToolConfig(idx)">删除</n-button>
+        </div>
+      </div>
+    </n-spin>
+    
+    <template #footer>
+      <n-space justify="end">
+        <n-button @click="showToolConfigModal = false">取消</n-button>
+        <n-button type="primary" @click="saveToolConfig">保存</n-button>
+      </n-space>
+    </template>
+  </n-modal>
 </template>
-
-<style scoped>
-.inner {
-  max-width: 100%;
-  margin: 0 auto;
-}
-.toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 16px;
-}
-.page-title { font-size: 18px; }
-.card {
-  background: #ffffff !important;
-  border: 1px solid #e5e7eb !important;
-  border-radius: 12px;
-}
-.suggestion-list {
-  max-height: 240px;
-  overflow-y: auto;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  padding: 8px;
-  background: #f9fafb;
-}
-.suggestion-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 6px 10px;
-  margin-bottom: 4px;
-  background: #fff;
-  border-radius: 6px;
-  border: 1px solid #e5e7eb;
-}
-.suggestion-item:last-child { margin-bottom: 0; }
-.suggestion-text {
-  flex: 1;
-  font-size: 13px;
-  color: #1f2937;
-  margin-right: 8px;
-  word-break: break-word;
-}
-.suggestion-empty {
-  padding: 16px;
-  text-align: center;
-  color: #9ca3af;
-  font-size: 13px;
-  border: 1px dashed #d1d5db;
-  border-radius: 8px;
-}
-.embed-code-block {
-  position: relative;
-  background: #f3f4f6;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  padding: 16px;
-  margin-bottom: 8px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-.embed-code {
-  margin: 0;
-  font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
-  font-size: 12px;
-  line-height: 1.6;
-  white-space: pre-wrap;
-  word-break: break-all;
-  color: #1f2937;
-}
-.embed-hint {
-  font-size: 12px;
-  color: #6b7280;
-  margin: 0;
-}
-
-/* 表格标题居中 */
-:deep(.n-data-table th.n-data-table-th) {
-  text-align: center;
-}
-
-/* 表格内容居中 */
-:deep(.n-data-table td.n-data-table-td) {
-  text-align: center;
-}
-.msg-preview {
-  max-height: 70vh;
-  overflow-y: auto;
-  padding: 4px 0;
-  font-size: 13px;
-}
-.msg-row { display: flex; margin-bottom: 12px; }
-.msg-row--left  { justify-content: flex-start; }
-.msg-row--right { justify-content: flex-end; }
-.msg-bubble {
-  max-width: 75%;
-  padding: 8px 12px;
-  border-radius: 14px;
-}
-.msg-bubble--ai   { background: #f4f4f5; border-bottom-left-radius: 4px; }
-.msg-bubble--user { background: #e8f4fd; border-bottom-right-radius: 4px; }
-.msg-role-label { font-size: 11px; color: #999; margin-bottom: 4px; }
-.msg-thinking {
-  margin-bottom: 8px;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  background: #f9fafb;
-  padding: 6px 10px;
-}
-.msg-thinking-summary {
-  cursor: pointer; font-size: 12px; font-weight: 600; color: #6b7280;
-  user-select: none; list-style: none;
-}
-.msg-thinking-summary::-webkit-details-marker { display: none; }
-.msg-thinking-summary::before { content: '▶ '; font-size: 10px; }
-details[open] .msg-thinking-summary::before { content: '▼ '; }
-.msg-thinking-body { margin-top: 6px; font-size: 12px; color: #6b7280; }
-.msg-body {
-  margin: 0; white-space: pre-wrap; word-break: break-word;
-  font-family: inherit; line-height: 1.5;
-}
-.msg-md {
-  font-size: 13px; line-height: 1.6; color: #111827; word-break: break-word;
-}
-.msg-md :deep(p) { margin: 0.35em 0; }
-.msg-md :deep(p:first-child) { margin-top: 0; }
-.msg-md :deep(p:last-child) { margin-bottom: 0; }
-.msg-md :deep(ul), .msg-md :deep(ol) { margin: 0.4em 0; padding-left: 1.3em; }
-.msg-md :deep(h1), .msg-md :deep(h2), .msg-md :deep(h3), .msg-md :deep(h4) {
-  margin: 0.55em 0 0.3em; font-weight: 600; line-height: 1.3;
-}
-.msg-md :deep(blockquote) {
-  margin: 0.4em 0; padding: 0.3em 0 0.3em 0.8em;
-  border-left: 3px solid #d1d5db; color: #4b5563;
-}
-.msg-md :deep(a) { color: #2563eb; text-decoration: underline; }
-.msg-md :deep(p > code), .msg-md :deep(li > code), .msg-md :deep(td > code) {
-  background: #f3f4f6; padding: 0.1em 0.35em; border-radius: 4px;
-  font-family: ui-monospace, monospace; font-size: 0.88em;
-}
-.msg-md :deep(.md-code-block) {
-  margin: 0.6em 0; border: 1px solid #e5e7eb; border-radius: 8px;
-  overflow: hidden; background: #fff;
-}
-.msg-md :deep(.md-code-head) {
-  display: flex; align-items: center; justify-content: space-between;
-  gap: 8px; padding: 4px 10px; background: #f3f4f6;
-  border-bottom: 1px solid #e5e7eb; font-size: 11px;
-}
-.msg-md :deep(.md-code-lang) { color: #6b7280; font-family: ui-monospace, monospace; }
-.msg-md :deep(.md-copy-btn) {
-  padding: 2px 7px; font-size: 11px; color: #374151;
-  background: #fff; border: 1px solid #d1d5db; border-radius: 4px; cursor: pointer;
-}
-.msg-md :deep(.md-copy-btn:hover) { background: #f9fafb; }
-.msg-md :deep(.md-code-pre) {
-  margin: 0; padding: 8px 12px; overflow-x: auto;
-  font-size: 12px; line-height: 1.5; background: #fafafa;
-}
-.msg-md :deep(.md-code-pre code) { font-family: ui-monospace, monospace; }
-.msg-md :deep(table) { border-collapse: collapse; margin: 0.5em 0; font-size: 12px; width: 100%; }
-.msg-md :deep(th), .msg-md :deep(td) { border: 1px solid #e5e7eb; padding: 0.3em 0.5em; }
-.msg-md :deep(th) { background: #f9fafb; }
-.msg-time { margin-top: 4px; font-size: 11px; color: #aaa; text-align: right; }
-.msg-modal-header {
-  display: flex; align-items: center; gap: 10px; flex-wrap: nowrap; min-width: 0;
-}
-.msg-modal-title { font-weight: 600; white-space: nowrap; }
-.msg-modal-session {
-  font-size: 12px; color: #999; font-family: ui-monospace, monospace;
-  word-break: break-all; min-width: 0;
-}
-</style>

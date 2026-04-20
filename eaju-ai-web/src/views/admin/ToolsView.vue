@@ -177,7 +177,7 @@ const showModal = ref(false)
 const editId = ref<number | null>(null)
 const selectedApiDefId = ref<number | null>(null)
 const form = ref({
-  name: '', description: '',
+  name: '', label: '', description: '',
   paramsSchemaJson: '{"type":"object","properties":{},"required":[]}',
   enabled: true, httpMethod: 'POST', url: '', contentType: 'application/json',
 })
@@ -210,7 +210,7 @@ async function loadAll() {
 
 function openCreate() {
   editId.value = null; selectedApiDefId.value = null
-  form.value = { name: '', description: '', paramsSchemaJson: '{"type":"object","properties":{},"required":[]}', enabled: true, httpMethod: 'POST', url: '', contentType: 'application/json' }
+  form.value = { name: '', label: '', description: '', paramsSchemaJson: '{"type":"object","properties":{},"required":[]}', enabled: true, httpMethod: 'POST', url: '', contentType: 'application/json' }
   showModal.value = true
 }
 
@@ -218,16 +218,17 @@ function openEdit(row: AiToolRow) {
   editId.value = row.id
   const matched = apiDefinitions.value.find((api) => api.requestUrl === row.url && api.httpMethod === row.httpMethod)
   selectedApiDefId.value = matched ? matched.id : null
-  form.value = { name: row.name, description: row.description, paramsSchemaJson: row.paramsSchemaJson, enabled: row.enabled, httpMethod: row.httpMethod, url: row.url, contentType: row.contentType ?? 'application/json' }
+  form.value = { name: row.name, label: row.label || '', description: row.description, paramsSchemaJson: row.paramsSchemaJson, enabled: row.enabled, httpMethod: row.httpMethod, url: row.url, contentType: row.contentType ?? 'application/json' }
   showModal.value = true
 }
 
 async function handleSave() {
   if (!form.value.name.trim()) { message.warning('请填写工具名称'); return }
+  if (!form.value.label.trim()) { message.warning('请填写显示名称'); return }
   if (!form.value.description.trim()) { message.warning('请填写功能描述'); return }
   if (!form.value.url.trim()) { message.warning('请选择业务系统'); return }
   try {
-    const payload = { name: form.value.name.trim(), description: form.value.description.trim(), httpMethod: form.value.httpMethod, url: form.value.url, contentType: form.value.contentType, paramsSchemaJson: form.value.paramsSchemaJson.trim(), enabled: form.value.enabled }
+    const payload = { name: form.value.name.trim(), label: form.value.label.trim(), description: form.value.description.trim(), httpMethod: form.value.httpMethod, url: form.value.url, contentType: form.value.contentType, paramsSchemaJson: form.value.paramsSchemaJson.trim(), enabled: form.value.enabled }
     if (editId.value) { await adminUpdateTool(editId.value, payload); message.success('已更新') }
     else { await adminCreateTool(payload); message.success('已创建') }
     showModal.value = false; await loadAll()
@@ -481,7 +482,10 @@ function paramCount(row: AiToolRow): number {
 const columns: DataTableColumns<AiToolRow> = [
   {
     title: '接口名称', key: 'name', width: 180, align: 'center', titleAlign: 'center',
-    render: (row) => h(NText, { code: true, style: 'font-size:12px' }, { default: () => row.name }),
+    render: (row) => h('div', { style: 'font-size:12px; line-height:1.6' }, [
+      h('div', { style: 'font-weight:600; color:#333' }, row.label || row.name),
+      h('div', { style: 'font-size:11px; color:#999' }, `(${row.name})`),
+    ]),
   },
   {
     title: '业务系统', key: 'url', width: 140, align: 'center', titleAlign: 'center',
@@ -548,6 +552,9 @@ onMounted(() => { void loadAll() })
     <!-- ===== 新建 / 编辑接口 ===== -->
     <NModal v-model:show="showModal" preset="card" :title="editId ? '编辑接口' : '新建接口'" style="width:620px" :mask-closable="false">
       <NForm :model="form" label-placement="left" label-width="110px">
+        <NFormItem label="显示名称" required>
+          <NInput v-model:value="form.label" placeholder="中文，如 请假余额查询" />
+        </NFormItem>
         <NFormItem label="接口名称" required>
           <NInput v-model:value="form.name" placeholder="英文，如 query_leave_balance" />
         </NFormItem>

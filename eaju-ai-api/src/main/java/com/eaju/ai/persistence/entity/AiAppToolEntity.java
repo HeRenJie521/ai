@@ -26,6 +26,13 @@ public class AiAppToolEntity {
     @Column(name = "sort_order", nullable = false)
     private int sortOrder = 0;
 
+    /**
+     * 工具调用策略，指导 LLM 何时调用该工具。
+     * 例如："当用户询问请假余额时调用此工具"
+     */
+    @Column(name = "call_strategy", columnDefinition = "TEXT")
+    private String callStrategy;
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
@@ -45,6 +52,9 @@ public class AiAppToolEntity {
 
     public int getSortOrder() { return sortOrder; }
     public void setSortOrder(int sortOrder) { this.sortOrder = sortOrder; }
+
+    public String getCallStrategy() { return callStrategy; }
+    public void setCallStrategy(String callStrategy) { this.callStrategy = callStrategy; }
 
     public Instant getCreatedAt() { return createdAt; }
     public void setCreatedAt(Instant createdAt) { this.createdAt = createdAt; }

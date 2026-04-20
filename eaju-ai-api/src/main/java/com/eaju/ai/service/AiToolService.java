@@ -42,6 +42,68 @@ public class AiToolService {
         return ids;
     }
 
+    /**
+     * 获取应用绑定的工具及其调用策略
+     */
+    @Transactional(readOnly = true)
+    public List<AppToolBinding> findAppToolBindings(Long appId) {
+        List<AppToolBinding> result = new ArrayList<>();
+        for (AiAppToolEntity binding : aiAppToolRepository.findByAppIdOrderBySortOrderAscIdAsc(appId)) {
+            AiToolEntity tool = aiToolRepository.findById(binding.getToolId()).orElse(null);
+            if (tool != null) {
+                AppToolBinding dto = new AppToolBinding();
+                dto.setToolId(tool.getId());
+                dto.setToolName(tool.getName());
+                dto.setToolLabel(tool.getLabel());
+                dto.setToolDescription(tool.getDescription());
+                dto.setCallStrategy(binding.getCallStrategy());
+                result.add(dto);
+            }
+        }
+        return result;
+    }
+
+    @Transactional
+    public void bindToolsToApp(Long appId, List<Long> toolIds) {
+        aiAppToolRepository.deleteByAppId(appId);
+        if (toolIds == null || toolIds.isEmpty()) return;
+        int order = 0;
+        for (Long toolId : toolIds) {
+            if (toolId == null) continue;
+            if (!aiToolRepository.existsById(toolId)) {
+                throw new IllegalArgumentException("工具不存在：" + toolId);
+            }
+            AiAppToolEntity binding = new AiAppToolEntity();
+            binding.setAppId(appId);
+            binding.setToolId(toolId);
+            binding.setSortOrder(order++);
+            aiAppToolRepository.save(binding);
+        }
+    }
+
+    /**
+     * 保存应用工具绑定及调用策略
+     */
+    @Transactional
+    public void saveAppToolBindings(Long appId, List<AppToolBindingInput> bindings) {
+        aiAppToolRepository.deleteByAppId(appId);
+        if (bindings == null || bindings.isEmpty()) return;
+        
+        int order = 0;
+        for (AppToolBindingInput input : bindings) {
+            if (input.getToolId() == null) continue;
+            if (!aiToolRepository.existsById(input.getToolId())) {
+                throw new IllegalArgumentException("工具不存在：" + input.getToolId());
+            }
+            AiAppToolEntity binding = new AiAppToolEntity();
+            binding.setAppId(appId);
+            binding.setToolId(input.getToolId());
+            binding.setSortOrder(order++);
+            binding.setCallStrategy(input.getCallStrategy());
+            aiAppToolRepository.save(binding);
+        }
+    }
+
     @Transactional
     public AiToolEntity create(String name, String label, String description,
                                String httpMethod, String url, String headersJson,
@@ -98,22 +160,39 @@ public class AiToolService {
         aiToolRepository.deleteById(id);
     }
 
-    @Transactional
-    public void bindToolsToApp(Long appId, List<Long> toolIds) {
-        aiAppToolRepository.deleteByAppId(appId);
-        if (toolIds == null || toolIds.isEmpty()) return;
-        int order = 0;
-        for (Long toolId : toolIds) {
-            if (toolId == null) continue;
-            if (!aiToolRepository.existsById(toolId)) {
-                throw new IllegalArgumentException("工具不存在：" + toolId);
-            }
-            AiAppToolEntity binding = new AiAppToolEntity();
-            binding.setAppId(appId);
-            binding.setToolId(toolId);
-            binding.setSortOrder(order++);
-            aiAppToolRepository.save(binding);
-        }
+    /**
+     * 应用工具绑定信息（含调用策略）
+     */
+    public static class AppToolBinding {
+        private Long toolId;
+        private String toolName;
+        private String toolLabel;
+        private String toolDescription;
+        private String callStrategy;
+
+        public Long getToolId() { return toolId; }
+        public void setToolId(Long toolId) { this.toolId = toolId; }
+        public String getToolName() { return toolName; }
+        public void setToolName(String toolName) { this.toolName = toolName; }
+        public String getToolLabel() { return toolLabel; }
+        public void setToolLabel(String toolLabel) { this.toolLabel = toolLabel; }
+        public String getToolDescription() { return toolDescription; }
+        public void setToolDescription(String toolDescription) { this.toolDescription = toolDescription; }
+        public String getCallStrategy() { return callStrategy; }
+        public void setCallStrategy(String callStrategy) { this.callStrategy = callStrategy; }
+    }
+
+    /**
+     * 应用工具绑定输入（含调用策略）
+     */
+    public static class AppToolBindingInput {
+        private Long toolId;
+        private String callStrategy;
+
+        public Long getToolId() { return toolId; }
+        public void setToolId(Long toolId) { this.toolId = toolId; }
+        public String getCallStrategy() { return callStrategy; }
+        public void setCallStrategy(String callStrategy) { this.callStrategy = callStrategy; }
     }
 
     private static void validate(String name, String description,

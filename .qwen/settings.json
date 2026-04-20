@@ -72,7 +72,9 @@
       "Bash(xargs *)",
       "Bash(git checkout *)",
       "Bash(git restore *)",
-      "Bash(perl *)"
+      "Bash(perl *)",
+      "Bash(head *)",
+      "Bash(mv *)"
     ]
   },
   "$version": 3

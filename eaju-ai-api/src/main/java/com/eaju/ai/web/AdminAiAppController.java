@@ -11,6 +11,8 @@ import com.eaju.ai.persistence.entity.AiAppEntity;
 import com.eaju.ai.persistence.entity.AiToolEntity;
 import com.eaju.ai.service.AiAppService;
 import com.eaju.ai.service.AiToolService;
+import com.eaju.ai.service.AiToolService.AppToolBinding;
+import com.eaju.ai.service.AiToolService.AppToolBindingInput;
 import com.eaju.ai.service.ApiKeyAuditService;
 import com.eaju.ai.service.ChatConversationService;
 import org.springframework.validation.annotation.Validated;
@@ -96,22 +98,32 @@ public class AdminAiAppController {
     }
 
     @GetMapping("/{id}/tools")
-    public List<AiToolDto> getTools(@PathVariable("id") Long id) {
+    public List<AppToolBinding> getTools(@PathVariable("id") Long id) {
         aiAppService.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("AI 应用不存在"));
-        List<AiToolDto> out = new ArrayList<>();
-        for (AiToolEntity e : aiToolService.findEnabledToolsByAppId(id)) {
-            out.add(toToolDto(e));
-        }
-        return out;
+        return aiToolService.findAppToolBindings(id);
     }
 
+    /**
+     * 保存应用工具绑定及调用策略（旧接口兼容，仅绑定工具，不设置调用策略）
+     */
     @PutMapping("/{id}/tools")
     public void bindTools(@PathVariable("id") Long id,
                           @RequestBody AppToolBindRequestDto body) {
         aiAppService.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("AI 应用不存在"));
         aiToolService.bindToolsToApp(id, body.getToolIds());
+    }
+
+    /**
+     * 保存应用工具绑定及调用策略（新接口，支持为每个工具配置调用策略）
+     */
+    @PutMapping("/{id}/tool-bindings")
+    public void saveToolBindings(@PathVariable("id") Long id,
+                                 @RequestBody List<AppToolBindingInput> body) {
+        aiAppService.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("AI 应用不存在"));
+        aiToolService.saveAppToolBindings(id, body);
     }
 
     @GetMapping("/{id}/sessions/{sessionId}/messages")
