@@ -62,11 +62,9 @@ app:
     keep-alive-seconds: 60
   auth:
     # DMS 登录：GET ?method=appUserLogin&data={"phone","password","type"}
-    dms-base-url: ${APP_AUTH_DMS_BASE_URL:http://superapp.51eanj.com:82/eaju_app_service/eajudms/DmsInterface}
+    dms-base-url: ${APP_AUTH_DMS_BASE_URL:https://superapp.51eanj.com/eaju_app_service/eajudms/DmsInterface}
     dms-login-method: ${APP_AUTH_DMS_LOGIN_METHOD:appUserLogin}
     dms-login-type: ${APP_AUTH_DMS_LOGIN_TYPE:1}
-    # 逗号分隔的手机号，对应用户可访问 /api/admin/**
-    admin-phones: ${APP_AUTH_ADMIN_PHONES:15296711325,13403928938,15101120754,18001077289}
     # 登录会话在 Redis 中的前缀（值 JSON 含手机号、昵称、DMS 响应摘要等）
     session-redis-key-prefix: ${APP_AUTH_SESSION_REDIS_PREFIX:auth:session:}
     # 0 表示与 app.jwt.expiration-hours 相同

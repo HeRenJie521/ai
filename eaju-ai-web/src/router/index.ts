@@ -57,6 +57,12 @@ const router = createRouter({
       meta: { auth: true, admin: true },
     },
     {
+      path: '/settings/admin-accounts',
+      name: 'settings-admin-accounts',
+      component: () => import('@/views/admin/AdminAccountsView.vue'),
+      meta: { auth: true, admin: true },
+    },
+    {
       path: '/settings',
       redirect: '/settings/llm',
     },

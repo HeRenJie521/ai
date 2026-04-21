@@ -42,6 +42,14 @@ import {
 import ParamNodeEditor, { type ParamNode } from '@/components/ParamNodeEditor.vue'
 import ResponseParamEditor, { type ResponseParam } from '@/components/ResponseParamEditor.vue'
 
+interface Props {
+  isEmbedded?: boolean
+}
+
+withDefaults(defineProps<Props>(), {
+  isEmbedded: false,
+})
+
 const message = useMessage()
 const dialog = useDialog()
 
@@ -564,7 +572,7 @@ onMounted(() => { void loadAll() })
 </script>
 
 <template>
-  <div>
+  <div :class="isEmbedded ? 'embedded-content' : 'standalone-content'">
     <NCard :bordered="false" class="card" title="接口管理">
       <template #header-extra>
         <NSpace>
@@ -776,3 +784,19 @@ onMounted(() => { void loadAll() })
     </NDrawer>
   </div>
 </template>
+
+<style scoped>
+.embedded-content {
+  padding: 0;
+}
+
+.standalone-content {
+  padding: 20px;
+}
+
+.card {
+  background: #ffffff !important;
+  border: 1px solid #e5e7eb !important;
+  border-radius: 12px;
+}
+</style>

@@ -78,11 +78,10 @@ app:
     secret: prod-jwt-secret-change-me-32bytes-minimum!!
     expiration-hours: 168
   auth:
-    dms-base-url: http://superapp.51eanj.com:82/eaju_app_service/eajudms/DmsInterface
+    dms-base-url: https://superapp.51eanj.com/eaju_app_service/eajudms/DmsInterface
     dms-login-method: appUserLogin
     dms-login-type: "1"
-    # ⚠️ 修改为实际的管理员手机号，多个用英文逗号分隔
-    admin-phones: "15296711325,13403928938,15101120754,18001077289"
+    # ⚠️ 管理员账号请通过数据库表 admin_account 管理
     session-redis-key-prefix: "auth:session:"
     session-ttl-hours: 0
   http-client:

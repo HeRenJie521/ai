@@ -46,6 +46,7 @@ import ConversationsView from './ConversationsView.vue'
 import ApiKeysView from './ApiKeysView.vue'
 import AiAppsView from './AiAppsView.vue'
 import ToolsView from './ToolsView.vue'
+import AdminAccountsView from './AdminAccountsView.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -53,12 +54,13 @@ const message = useMessage()
 const dialog = useDialog()
 const auth = useAuthStore()
 
-const currentPage = computed<'llm' | 'conversations' | 'api-keys' | 'ai-apps' | 'tools'>(() => {
+const currentPage = computed<'llm' | 'conversations' | 'api-keys' | 'ai-apps' | 'tools' | 'admin-accounts'>(() => {
   const path = route.path
   if (path === '/settings/conversations') return 'conversations'
   if (path === '/settings/api-keys') return 'api-keys'
   if (path === '/settings/ai-apps') return 'ai-apps'
   if (path === '/settings/tools') return 'tools'
+  if (path === '/settings/admin-accounts') return 'admin-accounts'
   return 'llm'
 })
 
@@ -562,7 +564,7 @@ function back() {
   router.push('/chat')
 }
 
-function goTo(page: 'llm' | 'conversations' | 'api-keys' | 'ai-apps' | 'tools') {
+function goTo(page: 'llm' | 'conversations' | 'api-keys' | 'ai-apps' | 'tools' | 'admin-accounts') {
   router.push(`/settings/${page}`)
 }
 </script>
@@ -593,6 +595,10 @@ function goTo(page: 'llm' | 'conversations' | 'api-keys' | 'ai-apps' | 'tools') 
         <div v-if="auth.isAdmin" class="menu-item" :class="{ active: currentPage === 'tools' }" @click="goTo('tools')">
           <span class="menu-icon">🔧</span>
           <span class="menu-label">接口管理</span>
+        </div>
+        <div v-if="auth.isAdmin" class="menu-item" :class="{ active: currentPage === 'admin-accounts' }" @click="goTo('admin-accounts')">
+          <span class="menu-icon">👤</span>
+          <span class="menu-label">系统管理员</span>
         </div>
       </div>
     </div>
@@ -882,7 +888,12 @@ function goTo(page: 'llm' | 'conversations' | 'api-keys' | 'ai-apps' | 'tools') 
 
       <!-- 接口管理 -->
       <div v-if="currentPage === 'tools'" class="settings-content-inner-full">
-        <ToolsView />
+        <ToolsView is-embedded />
+      </div>
+
+      <!-- 系统管理员 -->
+      <div v-if="currentPage === 'admin-accounts'" class="settings-content-inner-full">
+        <AdminAccountsView is-embedded />
       </div>
     </div>
   </div>

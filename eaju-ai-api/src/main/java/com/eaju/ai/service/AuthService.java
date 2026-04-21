@@ -3,18 +3,18 @@ package com.eaju.ai.service;
 import com.eaju.ai.dto.auth.LoginRequestDto;
 import com.eaju.ai.dto.auth.LoginResponseDto;
 import com.eaju.ai.dto.auth.LoginSessionSnapshot;
+import com.eaju.ai.persistence.repository.AdminAccountRepository;
 import com.eaju.ai.security.JwtIssueResult;
 import com.eaju.ai.security.JwtTokenProvider;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 import java.util.Arrays;
-import java.util.HashSet;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -31,7 +31,7 @@ public class AuthService {
     private final LoginSessionCacheService loginSessionCacheService;
     private final UserContextFieldService userContextFieldService;
     private final UserContextCacheService userContextCacheService;
-    private final Set<String> adminPhones;
+    private final AdminAccountRepository adminAccountRepository;
 
     public AuthService(
             DmsExternalLoginClient dmsExternalLoginClient,
@@ -39,13 +39,13 @@ public class AuthService {
             LoginSessionCacheService loginSessionCacheService,
             UserContextFieldService userContextFieldService,
             UserContextCacheService userContextCacheService,
-            @Value("${app.auth.admin-phones:}") String adminPhonesRaw) {
+            AdminAccountRepository adminAccountRepository) {
         this.dmsExternalLoginClient = dmsExternalLoginClient;
         this.jwtTokenProvider = jwtTokenProvider;
         this.loginSessionCacheService = loginSessionCacheService;
         this.userContextFieldService = userContextFieldService;
         this.userContextCacheService = userContextCacheService;
-        this.adminPhones = parseAdminPhones(adminPhonesRaw);
+        this.adminAccountRepository = adminAccountRepository;
     }
 
     public void logout(String jti) {
@@ -54,20 +54,19 @@ public class AuthService {
         }
     }
 
-    private static Set<String> parseAdminPhones(String raw) {
-        Set<String> set = new HashSet<String>();
-        if (!StringUtils.hasText(raw)) {
-            return set;
+    /**
+     * 判断指定手机号是否为系统管理员
+     */
+    private boolean isAdmin(String phone) {
+        if (!StringUtils.hasText(phone)) {
+            return false;
         }
-        for (String p : raw.split(",")) {
-            if (StringUtils.hasText(p)) {
-                String normalized = normalizePhone(p);
-                if (StringUtils.hasText(normalized)) {
-                    set.add(normalized);
-                }
-            }
+        try {
+            return adminAccountRepository.existsByPhone(normalizePhone(phone));
+        } catch (Exception e) {
+            log.warn("查询管理员状态失败：{}", e.getMessage());
+            return false;
         }
-        return set;
     }
 
     public LoginResponseDto login(LoginRequestDto request) {
@@ -95,7 +94,7 @@ public class AuthService {
             phoneFromApi = phone;
         }
         String displayName = resolveDisplayName(root, phoneFromApi);
-        boolean admin = adminPhones.contains(normalizePhone(phone));
+        boolean admin = isAdmin(phoneFromApi);
 
         JwtIssueResult issued = jwtTokenProvider.createToken(phoneFromApi, displayName, admin);
         LoginSessionSnapshot snap = new LoginSessionSnapshot();

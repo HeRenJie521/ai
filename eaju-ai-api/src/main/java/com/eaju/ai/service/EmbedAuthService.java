@@ -8,6 +8,7 @@ import com.eaju.ai.persistence.entity.AiAppEntity;
 import com.eaju.ai.persistence.entity.ApiKeyEntity;
 import com.eaju.ai.persistence.entity.UserContextFieldEntity;
 import com.eaju.ai.persistence.repository.AiAppRepository;
+import com.eaju.ai.persistence.repository.AdminAccountRepository;
 import com.eaju.ai.persistence.repository.ApiKeyRepository;
 import com.eaju.ai.persistence.repository.UserContextFieldRepository;
 import com.eaju.ai.security.JwtIssueResult;
@@ -22,12 +23,9 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
-import org.springframework.beans.factory.annotation.Value;
 import java.util.stream.Collectors;
 
 /**
@@ -50,7 +48,7 @@ public class EmbedAuthService {
     private final UserContextCacheService userContextCacheService;
     private final UserContextFieldService userContextFieldService;
     private final DmsExternalLoginClient dmsExternalLoginClient;
-    private final Set<String> adminPhones;
+    private final AdminAccountRepository adminAccountRepository;
 
     public EmbedAuthService(ApiKeyRepository apiKeyRepository,
                             AiAppRepository aiAppRepository,
@@ -60,7 +58,7 @@ public class EmbedAuthService {
                             UserContextCacheService userContextCacheService,
                             UserContextFieldService userContextFieldService,
                             DmsExternalLoginClient dmsExternalLoginClient,
-                            @Value("${app.auth.admin-phones:}") String adminPhonesRaw) {
+                            AdminAccountRepository adminAccountRepository) {
         this.apiKeyRepository = apiKeyRepository;
         this.aiAppRepository = aiAppRepository;
         this.jwtTokenProvider = jwtTokenProvider;
@@ -69,24 +67,23 @@ public class EmbedAuthService {
         this.userContextCacheService = userContextCacheService;
         this.userContextFieldService = userContextFieldService;
         this.dmsExternalLoginClient = dmsExternalLoginClient;
-        this.adminPhones = parseAdminPhones(adminPhonesRaw);
-        log.info("EmbedAuthService 初始化：adminPhones 配置原始值='{}'，解析后={}", adminPhonesRaw, this.adminPhones);
+        this.adminAccountRepository = adminAccountRepository;
+        log.info("EmbedAuthService 初始化：adminAccountRepository 已注入");
     }
 
-    private static Set<String> parseAdminPhones(String raw) {
-        Set<String> set = new HashSet<>();
-        if (!StringUtils.hasText(raw)) {
-            return set;
+    /**
+     * 判断指定手机号是否为系统管理员
+     */
+    private boolean isAdmin(String phone) {
+        if (!StringUtils.hasText(phone)) {
+            return false;
         }
-        for (String p : raw.split(",")) {
-            if (StringUtils.hasText(p)) {
-                String normalized = normalizePhone(p);
-                if (StringUtils.hasText(normalized)) {
-                    set.add(normalized);
-                }
-            }
+        try {
+            return adminAccountRepository.existsByPhone(normalizePhone(phone));
+        } catch (Exception e) {
+            log.warn("查询管理员状态失败：{}", e.getMessage());
+            return false;
         }
-        return set;
     }
 
     private static String normalizePhone(String raw) {
@@ -193,7 +190,7 @@ public class EmbedAuthService {
         snap.setPhone(phoneFromDms);
         snap.setUsername(displayName);
         // 判断是否为管理员
-        boolean admin = adminPhones.contains(normalizePhone(phoneFromDms));
+        boolean admin = isAdmin(phoneFromDms);
         snap.setAdmin(admin);
         snap.setIssuedAtEpochMs(System.currentTimeMillis());
         snap.setDmsResponseExcerpt(dmsResponse.toString());
