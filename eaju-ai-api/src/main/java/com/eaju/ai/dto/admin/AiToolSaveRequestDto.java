@@ -12,16 +12,12 @@ public class AiToolSaveRequestDto {
     @NotBlank
     private String description;
 
-    private String httpMethod;
-
-    @NotBlank
-    private String url;
+    /** 关联的接口定义 ID */
+    private Long apiDefinitionId;
 
     private String headersJson;
 
     private String bodyTemplate;
-
-    private String contentType;
 
     /** DMS 接口方法名，如 miniAppMenuFunctionQuery */
     private String methodName;
@@ -49,20 +45,14 @@ public class AiToolSaveRequestDto {
     public String getDescription() { return description; }
     public void setDescription(String description) { this.description = description; }
 
-    public String getHttpMethod() { return httpMethod; }
-    public void setHttpMethod(String httpMethod) { this.httpMethod = httpMethod; }
-
-    public String getUrl() { return url; }
-    public void setUrl(String url) { this.url = url; }
+    public Long getApiDefinitionId() { return apiDefinitionId; }
+    public void setApiDefinitionId(Long apiDefinitionId) { this.apiDefinitionId = apiDefinitionId; }
 
     public String getHeadersJson() { return headersJson; }
     public void setHeadersJson(String headersJson) { this.headersJson = headersJson; }
 
     public String getBodyTemplate() { return bodyTemplate; }
     public void setBodyTemplate(String bodyTemplate) { this.bodyTemplate = bodyTemplate; }
-
-    public String getContentType() { return contentType; }
-    public void setContentType(String contentType) { this.contentType = contentType; }
 
     public String getMethodName() { return methodName; }
     public void setMethodName(String methodName) { this.methodName = methodName; }

@@ -30,12 +30,9 @@ public class AiToolEntity {
     @Column(nullable = false, columnDefinition = "TEXT")
     private String description;
 
-    @Column(name = "http_method", nullable = false, length = 16)
-    private String httpMethod = "POST";
-
-    /** 请求 URL，来自选择的接口定义 */
-    @Column(nullable = false, columnDefinition = "TEXT")
-    private String url;
+    /** 关联的接口定义 ID，通过此字段关联到 api_definition 表获取 httpMethod、url、contentType 等信息 */
+    @Column(name = "api_definition_id")
+    private Long apiDefinitionId;
 
     /** 请求头 JSON 对象，支持 {{var}} 模板变量 */
     @Column(name = "headers_json", columnDefinition = "TEXT")
@@ -44,10 +41,6 @@ public class AiToolEntity {
     /** 请求体模板（自由格式，与 dataParamsJson 二选一） */
     @Column(name = "body_template", columnDefinition = "TEXT")
     private String bodyTemplate;
-
-    /** 参数格式：application/json 或 application/x-www-form-urlencoded */
-    @Column(name = "content_type", length = 128)
-    private String contentType = "application/json";
 
     /**
      * DMS 固定格式请求的方法名，如 miniAppMenuFunctionQuery。
@@ -112,20 +105,14 @@ public class AiToolEntity {
     public String getDescription() { return description; }
     public void setDescription(String description) { this.description = description; }
 
-    public String getHttpMethod() { return httpMethod; }
-    public void setHttpMethod(String httpMethod) { this.httpMethod = httpMethod; }
-
-    public String getUrl() { return url; }
-    public void setUrl(String url) { this.url = url; }
+    public Long getApiDefinitionId() { return apiDefinitionId; }
+    public void setApiDefinitionId(Long apiDefinitionId) { this.apiDefinitionId = apiDefinitionId; }
 
     public String getHeadersJson() { return headersJson; }
     public void setHeadersJson(String headersJson) { this.headersJson = headersJson; }
 
     public String getBodyTemplate() { return bodyTemplate; }
     public void setBodyTemplate(String bodyTemplate) { this.bodyTemplate = bodyTemplate; }
-
-    public String getContentType() { return contentType; }
-    public void setContentType(String contentType) { this.contentType = contentType; }
 
     public String getMethodName() { return methodName; }
     public void setMethodName(String methodName) { this.methodName = methodName; }

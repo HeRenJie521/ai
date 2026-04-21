@@ -1,7 +1,9 @@
 package com.eaju.ai.service;
 
+import com.eaju.ai.persistence.entity.ApiDefinitionEntity;
 import com.eaju.ai.persistence.entity.AiAppToolEntity;
 import com.eaju.ai.persistence.entity.AiToolEntity;
+import com.eaju.ai.persistence.repository.ApiDefinitionRepository;
 import com.eaju.ai.persistence.repository.AiAppToolRepository;
 import com.eaju.ai.persistence.repository.AiToolRepository;
 import org.springframework.stereotype.Service;
@@ -16,10 +18,12 @@ public class AiToolService {
 
     private final AiToolRepository aiToolRepository;
     private final AiAppToolRepository aiAppToolRepository;
+    private final ApiDefinitionRepository apiDefinitionRepository;
 
-    public AiToolService(AiToolRepository aiToolRepository, AiAppToolRepository aiAppToolRepository) {
+    public AiToolService(AiToolRepository aiToolRepository, AiAppToolRepository aiAppToolRepository, ApiDefinitionRepository apiDefinitionRepository) {
         this.aiToolRepository = aiToolRepository;
         this.aiAppToolRepository = aiAppToolRepository;
+        this.apiDefinitionRepository = apiDefinitionRepository;
     }
 
     @Transactional(readOnly = true)
@@ -106,20 +110,22 @@ public class AiToolService {
 
     @Transactional
     public AiToolEntity create(String name, String label, String description,
-                               String httpMethod, String url, String headersJson,
-                               String bodyTemplate, String contentType,
-                               String methodName, String dataParamsJson,
-                               String responseParamsJson, String paramsSchemaJson) {
-        validate(name, description, url, paramsSchemaJson);
+                               Long apiDefinitionId, String headersJson,
+                               String bodyTemplate, String methodName,
+                               String dataParamsJson, String responseParamsJson, String paramsSchemaJson) {
+        if (apiDefinitionId == null) {
+            throw new IllegalArgumentException("必须选择业务系统");
+        }
+        ApiDefinitionEntity apiDef = apiDefinitionRepository.findById(apiDefinitionId)
+                .orElseThrow(() -> new IllegalArgumentException("接口定义不存在：" + apiDefinitionId));
+        validate(name, description, paramsSchemaJson);
         AiToolEntity e = new AiToolEntity();
         e.setName(name.trim());
         e.setLabel(StringUtils.hasText(label) ? label.trim() : name.trim());
         e.setDescription(description.trim());
-        e.setHttpMethod(StringUtils.hasText(httpMethod) ? httpMethod.trim().toUpperCase() : "POST");
-        e.setUrl(url.trim());
+        e.setApiDefinitionId(apiDefinitionId);
         e.setHeadersJson(StringUtils.hasText(headersJson) ? headersJson.trim() : null);
         e.setBodyTemplate(StringUtils.hasText(bodyTemplate) ? bodyTemplate.trim() : null);
-        e.setContentType(StringUtils.hasText(contentType) ? contentType.trim() : "application/json");
         e.setMethodName(StringUtils.hasText(methodName) ? methodName.trim() : null);
         e.setDataParamsJson(StringUtils.hasText(dataParamsJson) ? dataParamsJson.trim() : null);
         e.setResponseParamsJson(StringUtils.hasText(responseParamsJson) ? responseParamsJson.trim() : null);
@@ -129,20 +135,22 @@ public class AiToolService {
 
     @Transactional
     public AiToolEntity update(Long id, String name, String label, String description,
-                               String httpMethod, String url, String headersJson,
-                               String bodyTemplate, String contentType,
-                               String methodName, String dataParamsJson,
-                               String responseParamsJson, String paramsSchemaJson, Boolean enabled) {
+                               Long apiDefinitionId, String headersJson,
+                               String bodyTemplate, String methodName,
+                               String dataParamsJson, String responseParamsJson, String paramsSchemaJson, Boolean enabled) {
         AiToolEntity e = aiToolRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("工具不存在：" + id));
         if (StringUtils.hasText(name)) e.setName(name.trim());
         if (label != null) e.setLabel(StringUtils.hasText(label) ? label.trim() : e.getName());
         if (StringUtils.hasText(description)) e.setDescription(description.trim());
-        if (StringUtils.hasText(httpMethod)) e.setHttpMethod(httpMethod.trim().toUpperCase());
-        if (StringUtils.hasText(url)) e.setUrl(url.trim());
+        if (apiDefinitionId != null) {
+            if (!apiDefinitionRepository.existsById(apiDefinitionId)) {
+                throw new IllegalArgumentException("接口定义不存在：" + apiDefinitionId);
+            }
+            e.setApiDefinitionId(apiDefinitionId);
+        }
         if (headersJson != null) e.setHeadersJson(StringUtils.hasText(headersJson) ? headersJson.trim() : null);
         if (bodyTemplate != null) e.setBodyTemplate(StringUtils.hasText(bodyTemplate) ? bodyTemplate.trim() : null);
-        if (contentType != null) e.setContentType(StringUtils.hasText(contentType) ? contentType.trim() : "application/json");
         if (methodName != null) e.setMethodName(StringUtils.hasText(methodName) ? methodName.trim() : null);
         if (dataParamsJson != null) e.setDataParamsJson(StringUtils.hasText(dataParamsJson) ? dataParamsJson.trim() : null);
         if (responseParamsJson != null) e.setResponseParamsJson(StringUtils.hasText(responseParamsJson) ? responseParamsJson.trim() : null);
@@ -195,11 +203,9 @@ public class AiToolService {
         public void setCallStrategy(String callStrategy) { this.callStrategy = callStrategy; }
     }
 
-    private static void validate(String name, String description,
-                                  String url, String paramsSchemaJson) {
+    private static void validate(String name, String description, String paramsSchemaJson) {
         if (!StringUtils.hasText(name)) throw new IllegalArgumentException("工具名称不能为空");
         if (!StringUtils.hasText(description)) throw new IllegalArgumentException("工具描述不能为空");
-        if (!StringUtils.hasText(url)) throw new IllegalArgumentException("工具 URL 不能为空");
         if (!StringUtils.hasText(paramsSchemaJson)) throw new IllegalArgumentException("参数 Schema 不能为空");
     }
 }
