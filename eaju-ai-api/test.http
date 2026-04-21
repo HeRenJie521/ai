@@ -140,9 +140,7 @@ Content-Type: application/json
     { "role": "user", "content": "查下我今天的工单" }
   ],
   "extendedParameters": [
-    {"esusMobile": "13800138000"},
-    {"esusId": "U001"},
-    {"siteCode": "SITE_HZ"}
+    {"supplierCode": "18322220030"}
   ]
 }
 
@@ -161,7 +159,7 @@ Content-Type: application/json
     { "role": "user", "content": "第一个工单的备注是什么？" }
   ],
   "extendedParameters": [
-    {"esusMobile": "13800138000"},
+    {"supplierCode": "18322220030"},
     {"esusId": "U001"},
     {"siteCode": "SITE_HZ"}
   ]
