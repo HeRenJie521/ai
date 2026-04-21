@@ -20,11 +20,16 @@ export interface AiToolRow {
   name: string
   label: string
   description: string
-  httpMethod: string
-  url: string
+  /** 关联的接口定义 ID */
+  apiDefinitionId: number | null
+  /** 从关联的接口定义中获取的 URL（只读） */
+  url: string | null
+  /** 从关联的接口定义中获取的 HTTP 方法（只读） */
+  httpMethod: string | null
+  /** 从关联的接口定义中获取的 Content-Type（只读） */
+  contentType: string | null
   headersJson: string | null
   bodyTemplate: string | null
-  contentType: string | null
   methodName: string | null
   dataParamsJson: string | null
   responseParamsJson: string | null
@@ -37,11 +42,10 @@ export interface AiToolSavePayload {
   name: string
   label?: string
   description: string
-  httpMethod?: string
-  url: string
+  /** 关联的接口定义 ID */
+  apiDefinitionId: number | null
   headersJson?: string
   bodyTemplate?: string
-  contentType?: string
   methodName?: string
   dataParamsJson?: string
   responseParamsJson?: string

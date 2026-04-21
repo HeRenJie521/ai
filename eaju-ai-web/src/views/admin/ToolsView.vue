@@ -179,7 +179,7 @@ const selectedApiDefId = ref<number | null>(null)
 const form = ref({
   name: '', label: '', description: '',
   paramsSchemaJson: '{"type":"object","properties":{},"required":[]}',
-  enabled: true, httpMethod: 'POST', url: '', contentType: 'application/json',
+  enabled: true, apiDefinitionId: null as number | null,
 })
 
 const apiDefOptions = computed(() =>
@@ -189,12 +189,6 @@ const contextFieldOptions = computed(() =>
   contextFields.value.filter((f) => f.enabled)
     .map((f) => ({ label: f.label, value: f.fieldKey }))
 )
-
-function onApiDefChange(id: number | null) {
-  if (!id) return
-  const def = apiDefinitions.value.find((d) => d.id === id)
-  if (def) { form.value.httpMethod = def.httpMethod; form.value.url = def.requestUrl; form.value.contentType = def.contentType }
-}
 
 async function loadAll() {
   loading.value = true
@@ -210,15 +204,14 @@ async function loadAll() {
 
 function openCreate() {
   editId.value = null; selectedApiDefId.value = null
-  form.value = { name: '', label: '', description: '', paramsSchemaJson: '{"type":"object","properties":{},"required":[]}', enabled: true, httpMethod: 'POST', url: '', contentType: 'application/json' }
+  form.value = { name: '', label: '', description: '', paramsSchemaJson: '{"type":"object","properties":{},"required":[]}', enabled: true, apiDefinitionId: null }
   showModal.value = true
 }
 
 function openEdit(row: AiToolRow) {
   editId.value = row.id
-  const matched = apiDefinitions.value.find((api) => api.requestUrl === row.url && api.httpMethod === row.httpMethod)
-  selectedApiDefId.value = matched ? matched.id : null
-  form.value = { name: row.name, label: row.label || '', description: row.description, paramsSchemaJson: row.paramsSchemaJson, enabled: row.enabled, httpMethod: row.httpMethod, url: row.url, contentType: row.contentType ?? 'application/json' }
+  selectedApiDefId.value = row.apiDefinitionId
+  form.value = { name: row.name, label: row.label || '', description: row.description, paramsSchemaJson: row.paramsSchemaJson, enabled: row.enabled, apiDefinitionId: row.apiDefinitionId }
   showModal.value = true
 }
 
@@ -226,9 +219,9 @@ async function handleSave() {
   if (!form.value.name.trim()) { message.warning('请填写工具名称'); return }
   if (!form.value.label.trim()) { message.warning('请填写显示名称'); return }
   if (!form.value.description.trim()) { message.warning('请填写功能描述'); return }
-  if (!form.value.url.trim()) { message.warning('请选择业务系统'); return }
+  if (!form.value.apiDefinitionId) { message.warning('请选择业务系统'); return }
   try {
-    const payload = { name: form.value.name.trim(), label: form.value.label.trim(), description: form.value.description.trim(), httpMethod: form.value.httpMethod, url: form.value.url, contentType: form.value.contentType, paramsSchemaJson: form.value.paramsSchemaJson.trim(), enabled: form.value.enabled }
+    const payload = { name: form.value.name.trim(), label: form.value.label.trim(), description: form.value.description.trim(), apiDefinitionId: form.value.apiDefinitionId, paramsSchemaJson: form.value.paramsSchemaJson.trim(), enabled: form.value.enabled }
     if (editId.value) { await adminUpdateTool(editId.value, payload); message.success('已更新') }
     else { await adminCreateTool(payload); message.success('已创建') }
     showModal.value = false; await loadAll()
@@ -523,10 +516,10 @@ const columns: DataTableColumns<AiToolRow> = [
     ]),
   },
   {
-    title: '业务系统', key: 'url', width: 140, align: 'center', titleAlign: 'center',
+    title: '业务系统', key: 'apiDefinitionId', width: 140, align: 'center', titleAlign: 'center',
     render: (row) => {
-      const apiDef = apiDefinitions.value.find(d => d.requestUrl === row.url && d.httpMethod === row.httpMethod)
-      return h('span', { style: 'font-size:12px; color:#555' }, apiDef ? apiDef.systemName : (row.url || '-'))
+      const apiDef = apiDefinitions.value.find(d => d.id === row.apiDefinitionId)
+      return h(NTag, { size: 'small', type: 'info' }, { default: () => apiDef ? apiDef.systemName : '-' })
     },
   },
   {
@@ -597,7 +590,7 @@ onMounted(() => { void loadAll() })
           <NInput v-model:value="form.description" type="textarea" :rows="3" placeholder="LLM 据此决定何时调用此接口" />
         </NFormItem>
         <NFormItem label="业务系统" required>
-          <NSelect v-model:value="selectedApiDefId" :options="apiDefOptions" placeholder="选择业务系统（自动填充接口地址）" clearable style="width:100%" @update:value="onApiDefChange" />
+          <NSelect v-model:value="form.apiDefinitionId" :options="apiDefOptions" placeholder="选择业务系统" clearable style="width:100%" />
         </NFormItem>
         <NFormItem label="状态">
           <NSwitch v-model:value="form.enabled" />

@@ -1,6 +1,8 @@
 package com.eaju.ai.service;
 
+import com.eaju.ai.persistence.entity.ApiDefinitionEntity;
 import com.eaju.ai.persistence.entity.AiToolEntity;
+import com.eaju.ai.persistence.repository.ApiDefinitionRepository;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
@@ -42,10 +44,57 @@ public class ToolCallExecutor {
 
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper;
+    private final ApiDefinitionRepository apiDefinitionRepository;
 
-    public ToolCallExecutor(RestTemplate restTemplate, ObjectMapper objectMapper) {
+    public ToolCallExecutor(RestTemplate restTemplate, ObjectMapper objectMapper, ApiDefinitionRepository apiDefinitionRepository) {
         this.restTemplate = restTemplate;
         this.objectMapper = objectMapper;
+        this.apiDefinitionRepository = apiDefinitionRepository;
+    }
+
+    /**
+     * 获取工具的 API 定义信息（通过 apiDefinitionId 关联）
+     * @return ApiDefinitionEntity 或 null（如果未关联或不存在）
+     */
+    private ApiDefinitionEntity getApiDefinition(AiToolEntity tool) {
+        Long apiDefId = tool.getApiDefinitionId();
+        if (apiDefId == null) {
+            return null;
+        }
+        return apiDefinitionRepository.findById(apiDefId).orElse(null);
+    }
+
+    /**
+     * 获取工具的实际 URL（从关联的 API 定义中获取）
+     */
+    private String getToolUrl(AiToolEntity tool) {
+        ApiDefinitionEntity apiDef = getApiDefinition(tool);
+        if (apiDef != null) {
+            return apiDef.getRequestUrl();
+        }
+        return null;
+    }
+
+    /**
+     * 获取工具的实际 HTTP Method（从关联的 API 定义中获取）
+     */
+    private String getToolHttpMethod(AiToolEntity tool) {
+        ApiDefinitionEntity apiDef = getApiDefinition(tool);
+        if (apiDef != null) {
+            return apiDef.getHttpMethod();
+        }
+        return null;
+    }
+
+    /**
+     * 获取工具的实际 Content-Type（从关联的 API 定义中获取）
+     */
+    private String getToolContentType(AiToolEntity tool) {
+        ApiDefinitionEntity apiDef = getApiDefinition(tool);
+        if (apiDef != null) {
+            return apiDef.getContentType();
+        }
+        return null;
     }
 
     public String execute(AiToolEntity tool, String toolArgs, Map<String, Object> userCtx) {
@@ -69,7 +118,7 @@ public class ToolCallExecutor {
             if (userCtx != null) vars.putAll(userCtx);
             vars.putAll(argsMap);
 
-            String url = substitute(tool.getUrl(), vars);
+            String url = substitute(getToolUrl(tool), vars);
 
             HttpHeaders headers = new HttpHeaders();
             if (StringUtils.hasText(tool.getHeadersJson())) {
@@ -79,12 +128,12 @@ public class ToolCallExecutor {
                 rawHeaders.forEach((k, v) -> { if (v != null) headers.set(k, v.toString()); });
             }
 
-            String method = tool.getHttpMethod() != null ? tool.getHttpMethod().toUpperCase() : "POST";
+            String method = getToolHttpMethod(tool) != null ? getToolHttpMethod(tool).toUpperCase() : "POST";
             String body = null;
 
             if ("POST".equals(method) || "PUT".equals(method) || "PATCH".equals(method)) {
-                String contentType = StringUtils.hasText(tool.getContentType())
-                        ? tool.getContentType() : "application/json";
+                String contentType = StringUtils.hasText(getToolContentType(tool))
+                        ? getToolContentType(tool) : "application/json";
                 headers.set("Content-Type", contentType);
 
                 if (StringUtils.hasText(tool.getDataParamsJson())) {
@@ -155,7 +204,7 @@ public class ToolCallExecutor {
             if (userCtx != null) vars.putAll(userCtx);
             vars.putAll(argsMap);
 
-            String url = substitute(tool.getUrl(), vars);
+            String url = substitute(getToolUrl(tool), vars);
 
             HttpHeaders headers = new HttpHeaders();
             if (StringUtils.hasText(tool.getHeadersJson())) {
@@ -165,12 +214,12 @@ public class ToolCallExecutor {
                 rawHeaders.forEach((k, v) -> { if (v != null) headers.set(k, v.toString()); });
             }
 
-            String method = tool.getHttpMethod() != null ? tool.getHttpMethod().toUpperCase() : "POST";
+            String method = getToolHttpMethod(tool) != null ? getToolHttpMethod(tool).toUpperCase() : "POST";
             String body = null;
 
             if ("POST".equals(method) || "PUT".equals(method) || "PATCH".equals(method)) {
-                String contentType = StringUtils.hasText(tool.getContentType())
-                        ? tool.getContentType() : "application/json";
+                String contentType = StringUtils.hasText(getToolContentType(tool))
+                        ? getToolContentType(tool) : "application/json";
                 headers.set("Content-Type", contentType);
 
                 if (StringUtils.hasText(tool.getDataParamsJson())) {
@@ -232,12 +281,12 @@ public class ToolCallExecutor {
             if (userCtx != null) vars.putAll(userCtx);
             vars.putAll(argsMap);
 
-            String method = tool.getHttpMethod() != null ? tool.getHttpMethod().toUpperCase() : "POST";
+            String method = getToolHttpMethod(tool) != null ? getToolHttpMethod(tool).toUpperCase() : "POST";
             if (!("POST".equals(method) || "PUT".equals(method) || "PATCH".equals(method))) {
                 return null;
             }
-            String contentType = StringUtils.hasText(tool.getContentType())
-                    ? tool.getContentType() : "application/json";
+            String contentType = StringUtils.hasText(getToolContentType(tool))
+                    ? getToolContentType(tool) : "application/json";
 
             if (StringUtils.hasText(tool.getDataParamsJson())) {
                 return buildParamBody(tool, argsMap, userCtx, contentType, extendedParams);

@@ -92,7 +92,10 @@
       "Bash(v-if=\"m.createdat\" *)",
       "Bash(patch *)",
       "Bash(od *)",
-      "Bash(psql *)"
+      "Bash(psql *)",
+      "Bash(ls *)",
+      "Bash(pg_dump *)",
+      "Bash(mkdir *)"
     ]
   },
   "$version": 3

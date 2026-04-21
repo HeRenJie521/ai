@@ -3,7 +3,9 @@ package com.eaju.ai.web;
 import com.eaju.ai.dto.admin.AiToolDto;
 import com.eaju.ai.dto.admin.AiToolSaveRequestDto;
 import com.eaju.ai.dto.admin.AiToolTestRequestDto;
+import com.eaju.ai.persistence.entity.ApiDefinitionEntity;
 import com.eaju.ai.persistence.entity.AiToolEntity;
+import com.eaju.ai.persistence.repository.ApiDefinitionRepository;
 import com.eaju.ai.service.AiToolService;
 import com.eaju.ai.service.ToolCallExecutor;
 import org.springframework.validation.annotation.Validated;
@@ -30,10 +32,12 @@ public class AdminAiToolController {
 
     private final AiToolService service;
     private final ToolCallExecutor toolCallExecutor;
+    private final ApiDefinitionRepository apiDefinitionRepository;
 
-    public AdminAiToolController(AiToolService service, ToolCallExecutor toolCallExecutor) {
+    public AdminAiToolController(AiToolService service, ToolCallExecutor toolCallExecutor, ApiDefinitionRepository apiDefinitionRepository) {
         this.service = service;
         this.toolCallExecutor = toolCallExecutor;
+        this.apiDefinitionRepository = apiDefinitionRepository;
     }
 
     @GetMapping
@@ -49,8 +53,8 @@ public class AdminAiToolController {
     public AiToolDto create(@Valid @RequestBody AiToolSaveRequestDto body) {
         AiToolEntity e = service.create(
                 body.getName(), body.getLabel(), body.getDescription(),
-                body.getHttpMethod(), body.getUrl(),
-                body.getHeadersJson(), body.getBodyTemplate(), body.getContentType(),
+                body.getApiDefinitionId(),
+                body.getHeadersJson(), body.getBodyTemplate(),
                 body.getMethodName(), body.getDataParamsJson(),
                 body.getResponseParamsJson(), body.getParamsSchemaJson());
         return toDto(e);
@@ -61,8 +65,8 @@ public class AdminAiToolController {
                             @RequestBody AiToolSaveRequestDto body) {
         AiToolEntity e = service.update(
                 id, body.getName(), body.getLabel(), body.getDescription(),
-                body.getHttpMethod(), body.getUrl(),
-                body.getHeadersJson(), body.getBodyTemplate(), body.getContentType(),
+                body.getApiDefinitionId(),
+                body.getHeadersJson(), body.getBodyTemplate(),
                 body.getMethodName(), body.getDataParamsJson(),
                 body.getResponseParamsJson(), body.getParamsSchemaJson(), body.getEnabled());
         return toDto(e);
@@ -101,17 +105,26 @@ public class AdminAiToolController {
         return resp;
     }
 
-    private static AiToolDto toDto(AiToolEntity e) {
+    private AiToolDto toDto(AiToolEntity e) {
         AiToolDto dto = new AiToolDto();
         dto.setId(e.getId());
         dto.setName(e.getName());
         dto.setLabel(e.getLabel());
         dto.setDescription(e.getDescription());
-        dto.setHttpMethod(e.getHttpMethod());
-        dto.setUrl(e.getUrl());
+        dto.setApiDefinitionId(e.getApiDefinitionId());
+        
+        // 从关联的接口定义中获取 URL、HTTP Method、Content-Type
+        if (e.getApiDefinitionId() != null) {
+            ApiDefinitionEntity apiDef = apiDefinitionRepository.findById(e.getApiDefinitionId()).orElse(null);
+            if (apiDef != null) {
+                dto.setUrl(apiDef.getRequestUrl());
+                dto.setHttpMethod(apiDef.getHttpMethod());
+                dto.setContentType(apiDef.getContentType());
+            }
+        }
+        
         dto.setHeadersJson(e.getHeadersJson());
         dto.setBodyTemplate(e.getBodyTemplate());
-        dto.setContentType(e.getContentType());
         dto.setMethodName(e.getMethodName());
         dto.setDataParamsJson(e.getDataParamsJson());
         dto.setResponseParamsJson(e.getResponseParamsJson());

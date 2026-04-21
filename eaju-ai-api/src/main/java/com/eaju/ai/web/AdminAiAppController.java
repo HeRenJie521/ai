@@ -9,8 +9,10 @@ import com.eaju.ai.dto.admin.ApiKeyUsageDto;
 import com.eaju.ai.dto.admin.AppToolBindRequestDto;
 import com.eaju.ai.persistence.entity.AiAppEntity;
 import com.eaju.ai.persistence.entity.AiToolEntity;
+import com.eaju.ai.persistence.entity.ApiDefinitionEntity;
 import com.eaju.ai.persistence.entity.LlmModelEntity;
 import com.eaju.ai.persistence.entity.LlmProviderConfigEntity;
+import com.eaju.ai.persistence.repository.ApiDefinitionRepository;
 import com.eaju.ai.persistence.repository.LlmModelRepository;
 import com.eaju.ai.persistence.repository.LlmProviderConfigRepository;
 import com.eaju.ai.service.AiAppService;
@@ -45,19 +47,22 @@ public class AdminAiAppController {
     private final AiToolService aiToolService;
     private final LlmModelRepository llmModelRepository;
     private final LlmProviderConfigRepository llmProviderRepository;
+    private final ApiDefinitionRepository apiDefinitionRepository;
 
     public AdminAiAppController(AiAppService aiAppService,
                                 ApiKeyAuditService apiKeyAuditService,
                                 ChatConversationService chatConversationService,
                                 AiToolService aiToolService,
                                 LlmModelRepository llmModelRepository,
-                                LlmProviderConfigRepository llmProviderRepository) {
+                                LlmProviderConfigRepository llmProviderRepository,
+                                ApiDefinitionRepository apiDefinitionRepository) {
         this.aiAppService = aiAppService;
         this.apiKeyAuditService = apiKeyAuditService;
         this.chatConversationService = chatConversationService;
         this.aiToolService = aiToolService;
         this.llmModelRepository = llmModelRepository;
         this.llmProviderRepository = llmProviderRepository;
+        this.apiDefinitionRepository = apiDefinitionRepository;
     }
 
     @GetMapping
@@ -163,14 +168,24 @@ public class AdminAiAppController {
         return providerName + "·" + model.getName();
     }
 
-    private static AiToolDto toToolDto(AiToolEntity e) {
+    private AiToolDto toToolDto(AiToolEntity e) {
         AiToolDto dto = new AiToolDto();
         dto.setId(e.getId());
         dto.setName(e.getName());
         dto.setLabel(e.getLabel());
         dto.setDescription(e.getDescription());
-        dto.setHttpMethod(e.getHttpMethod());
-        dto.setUrl(e.getUrl());
+        dto.setApiDefinitionId(e.getApiDefinitionId());
+        
+        // 从关联的接口定义中获取 URL、HTTP Method、Content-Type
+        if (e.getApiDefinitionId() != null) {
+            ApiDefinitionEntity apiDef = apiDefinitionRepository.findById(e.getApiDefinitionId()).orElse(null);
+            if (apiDef != null) {
+                dto.setUrl(apiDef.getRequestUrl());
+                dto.setHttpMethod(apiDef.getHttpMethod());
+                dto.setContentType(apiDef.getContentType());
+            }
+        }
+        
         dto.setHeadersJson(e.getHeadersJson());
         dto.setBodyTemplate(e.getBodyTemplate());
         dto.setParamsSchemaJson(e.getParamsSchemaJson());

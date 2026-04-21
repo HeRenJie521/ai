@@ -6,11 +6,16 @@ public class AiToolDto {
     private String name;
     private String label;
     private String description;
-    private String httpMethod;
+    /** 关联的接口定义 ID */
+    private Long apiDefinitionId;
+    /** 从关联的接口定义中获取的 URL（只读，用于前端展示） */
     private String url;
+    /** 从关联的接口定义中获取的 HTTP 方法（只读，用于前端展示） */
+    private String httpMethod;
+    /** 从关联的接口定义中获取的 Content-Type（只读，用于前端展示） */
+    private String contentType;
     private String headersJson;
     private String bodyTemplate;
-    private String contentType;
     private String methodName;
     private String dataParamsJson;
     private String responseParamsJson;
@@ -30,20 +35,23 @@ public class AiToolDto {
     public String getDescription() { return description; }
     public void setDescription(String description) { this.description = description; }
 
-    public String getHttpMethod() { return httpMethod; }
-    public void setHttpMethod(String httpMethod) { this.httpMethod = httpMethod; }
+    public Long getApiDefinitionId() { return apiDefinitionId; }
+    public void setApiDefinitionId(Long apiDefinitionId) { this.apiDefinitionId = apiDefinitionId; }
 
     public String getUrl() { return url; }
     public void setUrl(String url) { this.url = url; }
+
+    public String getHttpMethod() { return httpMethod; }
+    public void setHttpMethod(String httpMethod) { this.httpMethod = httpMethod; }
+
+    public String getContentType() { return contentType; }
+    public void setContentType(String contentType) { this.contentType = contentType; }
 
     public String getHeadersJson() { return headersJson; }
     public void setHeadersJson(String headersJson) { this.headersJson = headersJson; }
 
     public String getBodyTemplate() { return bodyTemplate; }
     public void setBodyTemplate(String bodyTemplate) { this.bodyTemplate = bodyTemplate; }
-
-    public String getContentType() { return contentType; }
-    public void setContentType(String contentType) { this.contentType = contentType; }
 
     public String getMethodName() { return methodName; }
     public void setMethodName(String methodName) { this.methodName = methodName; }
