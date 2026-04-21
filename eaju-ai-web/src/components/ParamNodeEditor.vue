@@ -4,7 +4,7 @@ import { NButton, NDivider, NInput, NSelect, NTag } from 'naive-ui'
 export interface ParamNode {
   key: string
   fieldType: string               // String / Number / Boolean / Object / Array
-  valueSource: 'static' | 'context' | 'response' | 'llm'
+  valueSource: 'static' | 'context' | 'response' | 'llm' | 'apikey'
   sourceValue: string             // 静态值 / LLM参数描述 / 出参传递时的路径（编排时填）
   fieldKey: string                // 用户数据字段 key
   children: ParamNode[]
@@ -29,10 +29,11 @@ const fieldTypeOpts = [
 ]
 
 const valueSourceOpts = [
-  { label: '静态值',   value: 'static'   },
-  { label: '用户数据', value: 'context'  },
-  { label: 'LLM参数',  value: 'llm'      },
-  { label: '出参传递', value: 'response' },
+  { label: '静态值',    value: 'static'   },
+  { label: '用户数据',  value: 'context'  },
+  { label: 'LLM参数',   value: 'llm'      },
+  { label: 'APIKey参数', value: 'apikey'  },
+  { label: '出参传递',  value: 'response' },
 ]
 
 function newNode(): ParamNode {
@@ -104,6 +105,14 @@ function lineColor(depth: number) {
             v-model:value="node.sourceValue"
             placeholder="参数描述，LLM 据此填值，如：查询日期，格式 YYYY-MM-DD"
             style="flex:1; min-width:160px"
+            size="small"
+          />
+          <!-- APIKey参数 -->
+          <NInput
+            v-else-if="node.valueSource === 'apikey'"
+            v-model:value="node.fieldKey"
+            placeholder="extended_parameters 中的 key 名称"
+            style="flex:1; min-width:140px"
             size="small"
           />
           <!-- 出参传递 -->

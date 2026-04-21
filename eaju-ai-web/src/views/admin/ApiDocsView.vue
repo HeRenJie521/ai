@@ -95,6 +95,7 @@ const reqParams = [
   { field: 'presencePenalty', type: 'number', required: false, desc: '存在惩罚，范围 -2~2，鼓励模型涉及新话题。优先级：前端传入 > 模型配置 (llm_model.presence_penalty)。' },
   { field: 'responseFormat', type: 'string', required: false, desc: '回复格式。TEXT（默认）或 JSON_OBJECT（要求模型输出合法 JSON）。开启 JSON_OBJECT 时，部分提供商（如通义千问）会自动在 system message 中注入 JSON 提示。' },
   { field: 'thinkingMode', type: 'boolean', required: false, desc: '思考模式，对支持 deep_thinking 的模型生效（如 DeepSeek-R1）。开启后响应中包含 reasoningContent 字段（思维链）。优先级：前端传入 > 模型配置 (llm_model.thinking_mode)。' },
+  { field: 'extendedParameters', type: 'object[]', required: false, desc: '扩展参数列表，格式：[{"key1":"value1"},{"key2":"value2"}]。用于 API Key 绑定应用场景：工具入参中来源设为「APIKey参数」的字段，会按 fieldKey 从此列表中取值，无需用户登录即可传入业务参数（如手机号、门店编码等）。' },
 ]
 
 const messageParams = [
@@ -127,7 +128,7 @@ const sseFields = [
   { event: 'done', data: '[DONE]', desc: '流结束标志，收到后客户端应关闭连接。' },
 ]
 
-const openRows = ref(['params', 'message-type', 'resp-block', 'resp-stream', 'examples'])
+const openRows = ref(['params', 'message-type', 'model-capabilities', 'resp-block', 'resp-stream', 'examples'])
 
 // ---- /api/file/upload 数据 ----
 const curlUpload = `curl -X POST http://your-host/api/file/upload \\
@@ -215,7 +216,7 @@ const appEmbedLoginResponse = `{
   "phone": "13800138000",
   "username": "张三",
   "admin": false,
-  "defaultModel": "deepseek-chat",
+  "defaultModel": "42",
   "integrationName": "智能问答助手"
 }`
 
@@ -241,11 +242,42 @@ const appEmbedLoginRespFields = [
   { field: 'phone',           type: 'string',  desc: '同 userId。' },
   { field: 'username',        type: 'string',  desc: '用户显示名。' },
   { field: 'admin',           type: 'boolean', desc: '固定 false。' },
-  { field: 'defaultModel',    type: 'string',  desc: 'AI 应用绑定的模型 ID（ai_app.model_id），前端聊天页默认选中该模型。' },
+  { field: 'defaultModel',    type: 'string',  desc: 'AI 应用绑定的 llm_model.id（字符串形式），前端聊天页默认选中该模型。' },
   { field: 'integrationName', type: 'string',  desc: 'AI 应用名称（ai_app.name），前端用于展示 AI 助手名称。' },
 ]
 
 const openAppEmbedLoginRows = ref(['app-embed-login-params', 'app-embed-login-resp', 'app-embed-login-example'])
+
+// ---- API Key 绑定应用 数据 ----
+const apikeyAppExample = `curl -X POST http://your-host/api/chat \\
+  -H "Content-Type: application/json" \\
+  -H "X-API-Key: eaju_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" \\
+  -d '{
+    "provider": "QWEN",
+    "mode": "qwen3.5-plus",
+    "messages": [{ "role": "user", "content": "查询我今天的工单" }],
+    "stream": true,
+    "extended_parameters": [
+      {"esusMobile": "13800138000"},
+      {"esusId": "U001"},
+      {"siteCode": "SITE_HZ"}
+    ]
+  }'`
+
+const apikeyAppFlow = [
+  { step: '1', title: '管理后台创建 API Key 并绑定应用', desc: '在「集成管理 → API Key」新建一条记录，在「绑定应用」下拉中选择已配置好系统提示和工具的 AI 应用，保存后复制生成的密钥。' },
+  { step: '2', title: '工具入参来源设为 APIKey参数', desc: '在「接口管理 → 入参管理」中，将需要由调用方传入的字段（如手机号、门店编码）的「来源」设为「APIKey参数」，并填写对应的 key 名称（与 extended_parameters 中的 key 一致）。' },
+  { step: '3', title: '调用 /api/chat 时携带 extended_parameters', desc: '在请求体中加入 extended_parameters 数组，每项为 {"key":"value"} 形式。服务端会在工具执行时自动将来源为 apikey 的参数从此数组中取值，无需用户登录即可完成工具调用。' },
+]
+
+const apikeyVsContext = [
+  { source: 'context（用户数据）', when: '用户通过 embed/app-login 登录，Redis 中有用户上下文', typical: '用户手机号、姓名、权限标识' },
+  { source: 'apikey（APIKey参数）', when: '通过 X-API-Key 直接调用，无需登录', typical: '调用方自行传入的业务参数，如手机号、门店编码、订单号等' },
+  { source: 'llm（LLM参数）', when: '任意场景', typical: '由 AI 根据对话内容自动推断的参数，如日期、关键词' },
+  { source: 'static（静态值）', when: '任意场景', typical: '固定不变的配置值，如接口方法名、分页大小' },
+]
+
+const openApikeyAppRows = ref(['apikey-app-flow', 'apikey-param-source', 'apikey-app-example'])
 
 // ---- 复制 ----
 async function copy(text: string) {
@@ -301,6 +333,16 @@ const navItems = [
       { id: 'anchor-app-embed-login-params', label: '请求体参数' },
       { id: 'anchor-app-embed-login-resp', label: '响应' },
       { id: 'anchor-app-embed-login-example', label: '调用示例' },
+    ],
+  },
+  {
+    id: 'anchor-apikey-app',
+    label: 'API Key 绑定应用',
+    tag: 'GUIDE',
+    children: [
+      { id: 'anchor-apikey-app-flow', label: '使用流程' },
+      { id: 'anchor-apikey-param-source', label: '入参来源对比' },
+      { id: 'anchor-apikey-app-example', label: '调用示例' },
     ],
   },
 ]
@@ -748,6 +790,72 @@ onUnmounted(() => {
           </n-collapse-item>
         </n-collapse>
 
+        <!-- ========== API Key 绑定应用 ========== -->
+        <div id="anchor-apikey-app" class="anchor-target" />
+        <n-card :bordered="false" class="section-card">
+          <div class="endpoint-row">
+            <n-tag type="info" :bordered="false" class="method-tag">使用指南</n-tag>
+            <code class="endpoint-path">API Key 绑定应用</code>
+          </div>
+          <p class="endpoint-desc">
+            将 API Key 与一个 AI 应用绑定后，调用方只需在请求头携带 <code>X-API-Key</code>，服务端即自动加载该应用的系统提示词和工具配置，无需任何登录操作。工具入参中来源设为「APIKey参数」的字段，从请求体的 <code>extended_parameters</code> 中取值。
+          </p>
+        </n-card>
+
+        <n-collapse :default-expanded-names="openApikeyAppRows" class="collapse">
+          <n-collapse-item name="apikey-app-flow">
+            <template #header>
+              <div id="anchor-apikey-app-flow" class="anchor-target collapse-title">使用流程</div>
+            </template>
+            <div class="table-wrap">
+              <table class="doc-table">
+                <thead><tr><th>步骤</th><th>操作</th><th>说明</th></tr></thead>
+                <tbody>
+                  <tr v-for="s in apikeyAppFlow" :key="s.step">
+                    <td><n-tag size="small" :bordered="false" type="info">{{ s.step }}</n-tag></td>
+                    <td style="white-space:nowrap; font-weight:500">{{ s.title }}</td>
+                    <td class="desc-cell">{{ s.desc }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </n-collapse-item>
+
+          <n-collapse-item name="apikey-param-source">
+            <template #header>
+              <div id="anchor-apikey-param-source" class="anchor-target collapse-title">工具入参来源对比</div>
+            </template>
+            <div class="table-wrap">
+              <table class="doc-table">
+                <thead><tr><th>来源类型</th><th>适用场景</th><th>典型用途</th></tr></thead>
+                <tbody>
+                  <tr v-for="r in apikeyVsContext" :key="r.source">
+                    <td><code>{{ r.source }}</code></td>
+                    <td class="desc-cell">{{ r.when }}</td>
+                    <td class="desc-cell">{{ r.typical }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <p class="section-tip" style="margin-top:10px">
+              配置入口：接口管理 → 选择接口 → 入参管理 → 每个参数的「来源」下拉，选择「APIKey参数」后填写与 <code>extended_parameters</code> 中 key 一致的名称。
+            </p>
+          </n-collapse-item>
+
+          <n-collapse-item name="apikey-app-example">
+            <template #header>
+              <div id="anchor-apikey-app-example" class="anchor-target collapse-title">调用示例（curl）</div>
+            </template>
+            <div class="code-block-wrap">
+              <div class="code-header"><span>API Key 绑定应用 · 工具调用请求</span><n-button size="tiny" @click="copy(apikeyAppExample)">复制</n-button></div>
+              <pre class="code-block">{{ apikeyAppExample }}</pre>
+            </div>
+            <p class="section-tip" style="margin-top:10px">
+              服务端收到请求后，自动加载绑定应用的系统提示词和工具列表；工具执行时，来源为 <code>apikey</code> 的参数（如 <code>esusMobile</code>）从 <code>extended_parameters</code> 中取值。
+            </p>
+          </n-collapse-item>
+        </n-collapse>
+
       </div>
 
       <!-- 右侧导航 -->
@@ -759,7 +867,7 @@ onUnmounted(() => {
             :class="{ 'is-active': activeId === group.id }"
             @click="scrollTo(group.id)"
           >
-            <span class="nav-method-badge">POST</span>
+            <span :class="group.tag === 'GUIDE' ? 'nav-guide-badge' : 'nav-method-badge'">{{ group.tag }}</span>
             <span class="nav-path">{{ group.label.replace('POST ', '') }}</span>
           </div>
           <div
@@ -873,6 +981,16 @@ onUnmounted(() => {
   display: inline-block;
   background: #dcfce7;
   color: #16a34a;
+  border-radius: 3px;
+  padding: 0 4px;
+  font-size: 10px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+.nav-guide-badge {
+  display: inline-block;
+  background: #dbeafe;
+  color: #1d4ed8;
   border-radius: 3px;
   padding: 0 4px;
   font-size: 10px;

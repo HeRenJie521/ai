@@ -13,6 +13,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import javax.validation.Valid;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.UUID;
 
 @RestController
@@ -48,6 +50,14 @@ public class ChatController {
         request.setInternalIntegrationId(integrationId);
         request.setInternalAppId(appId);
         request.setInternalJti(CallerPrincipal.jti(authentication));
+        // 展平 extendedParameters → internalExtendedParams 供工具执行器快速查找
+        if (request.getExtendedParameters() != null && !request.getExtendedParameters().isEmpty()) {
+            Map<String, String> flat = new LinkedHashMap<>();
+            for (Map<String, String> entry : request.getExtendedParameters()) {
+                if (entry != null) flat.putAll(entry);
+            }
+            request.setInternalExtendedParams(flat);
+        }
         if (StringUtils.hasText(uid) && StringUtils.hasText(request.getSessionId())) {
             chatConversationService.touchOnChatStart(
                     uid,

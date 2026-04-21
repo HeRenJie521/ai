@@ -43,6 +43,11 @@ public class ApiKeyService {
      */
     @Transactional
     public CreatedApiKey create(String name, int type, String allowedOrigins) {
+        return create(name, type, allowedOrigins, null);
+    }
+
+    @Transactional
+    public CreatedApiKey create(String name, int type, String allowedOrigins, Long appId) {
         if (!StringUtils.hasText(name)) {
             throw new IllegalArgumentException("名称不能为空");
         }
@@ -64,6 +69,9 @@ public class ApiKeyService {
             String plain = PREFIX + randomHex(14).substring(0, 27);
             e.setSecretHash(sha256Hex(plain));
             e.setSecretPrefix(plain);
+            if (appId != null && appId > 0) {
+                e.setAppId(appId);
+            }
         }
         apiKeyRepository.save(e);
         return new CreatedApiKey(e, e.getSecretPrefix());
@@ -71,6 +79,11 @@ public class ApiKeyService {
 
     @Transactional
     public ApiKeyEntity update(Long id, String name, Boolean enabled, String allowedOrigins) {
+        return update(id, name, enabled, allowedOrigins, null);
+    }
+
+    @Transactional
+    public ApiKeyEntity update(Long id, String name, Boolean enabled, String allowedOrigins, Long appId) {
         ApiKeyEntity e = apiKeyRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("API Key 不存在"));
         if (StringUtils.hasText(name)) {
@@ -81,6 +94,10 @@ public class ApiKeyService {
         }
         if (allowedOrigins != null) {
             e.setAllowedOrigins(StringUtils.hasText(allowedOrigins) ? allowedOrigins.trim() : null);
+        }
+        // appId: 0 表示清除绑定，正整数表示绑定，null 表示不修改
+        if (appId != null) {
+            e.setAppId(appId == 0L ? null : appId);
         }
         return apiKeyRepository.save(e);
     }

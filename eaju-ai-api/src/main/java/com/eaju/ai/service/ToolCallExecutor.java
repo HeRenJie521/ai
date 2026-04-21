@@ -49,6 +49,11 @@ public class ToolCallExecutor {
     }
 
     public String execute(AiToolEntity tool, String toolArgs, Map<String, Object> userCtx) {
+        return execute(tool, toolArgs, userCtx, null);
+    }
+
+    public String execute(AiToolEntity tool, String toolArgs, Map<String, Object> userCtx,
+                          Map<String, String> extendedParams) {
         try {
             Map<String, Object> argsMap = parseArgs(toolArgs);
 
@@ -83,7 +88,7 @@ public class ToolCallExecutor {
                 headers.set("Content-Type", contentType);
 
                 if (StringUtils.hasText(tool.getDataParamsJson())) {
-                    body = buildParamBody(tool, argsMap, userCtx, contentType);
+                    body = buildParamBody(tool, argsMap, userCtx, contentType, extendedParams);
                 } else if (StringUtils.hasText(tool.getBodyTemplate())) {
                     body = substitute(tool.getBodyTemplate(), vars);
                     if ("application/x-www-form-urlencoded".equals(contentType)) {
@@ -100,23 +105,19 @@ public class ToolCallExecutor {
             log.info("[工具调用] 请求体：{}", body);
 
             HttpEntity<String> entity = new HttpEntity<>(body, headers);
-            
-            // 打印请求报文
+
             log.info("========== 工具调用请求开始 ==========");
             log.info("[请求信息] toolName={} method={} url={}", tool.getName(), method, url);
             log.info("[请求头] headers={}", headers);
             log.info("[请求体] body={}", body);
-            
+
             ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.valueOf(method), entity, String.class);
             String result = response.getBody();
-            
-            // 打印响应报文
+
             log.info("[响应状态] status={}", response.getStatusCode());
             log.info("[响应体] body={}", result);
             log.info("========== 工具调用请求结束 ==========");
 
-            // 配置了出参管理 → 过滤实际数据 + 拼接字段说明一起发给 AI（AI 需要字段含义才能理解数据）
-            // 未配置出参管理 → 发全量响应给 AI
             if (StringUtils.hasText(tool.getResponseParamsJson()) && StringUtils.hasText(result)) {
                 String filtered = filterResponseByParams(result, tool.getResponseParamsJson());
                 String fieldDesc = buildResponseFieldDesc(tool.getResponseParamsJson());
@@ -255,10 +256,16 @@ public class ToolCallExecutor {
      */
     private String buildParamBody(AiToolEntity tool, Map<String, Object> argsMap,
                                    Map<String, Object> userCtx, String contentType) throws Exception {
+        return buildParamBody(tool, argsMap, userCtx, contentType, null);
+    }
+
+    private String buildParamBody(AiToolEntity tool, Map<String, Object> argsMap,
+                                   Map<String, Object> userCtx, String contentType,
+                                   Map<String, String> extendedParams) throws Exception {
         List<Map<String, Object>> paramDefs = objectMapper.readValue(
                 tool.getDataParamsJson(), new TypeReference<List<Map<String, Object>>>() {});
 
-        Map<String, Object> bodyMap = resolveParamTree(paramDefs, argsMap, userCtx);
+        Map<String, Object> bodyMap = resolveParamTree(paramDefs, argsMap, userCtx, extendedParams);
 
         if ("application/x-www-form-urlencoded".equals(contentType)) {
             return convertMapToFormUrlEncoded(bodyMap);
@@ -269,7 +276,8 @@ public class ToolCallExecutor {
     @SuppressWarnings("unchecked")
     private Map<String, Object> resolveParamTree(List<Map<String, Object>> paramDefs,
                                                   Map<String, Object> argsMap,
-                                                  Map<String, Object> userCtx) {
+                                                  Map<String, Object> userCtx,
+                                                  Map<String, String> extendedParams) {
         Map<String, Object> result = new LinkedHashMap<>();
         if (paramDefs == null) return result;
         for (Map<String, Object> def : paramDefs) {
@@ -282,12 +290,12 @@ public class ToolCallExecutor {
                     ? (List<Map<String, Object>>) childrenObj : null;
 
             if ("Object".equals(fieldType) && children != null && !children.isEmpty()) {
-                Map<String, Object> childResult = resolveParamTree(children, argsMap, userCtx);
+                Map<String, Object> childResult = resolveParamTree(children, argsMap, userCtx, extendedParams);
                 if (!childResult.isEmpty()) result.put(key, childResult);
             } else if ("Array".equals(fieldType) && children != null) {
-                result.put(key, resolveArrayChildren(children, argsMap, userCtx));
+                result.put(key, resolveArrayChildren(children, argsMap, userCtx, extendedParams));
             } else {
-                Object value = resolveLeafValue(def, argsMap, userCtx);
+                Object value = resolveLeafValue(def, argsMap, userCtx, extendedParams);
                 if (value != null) result.put(key, value);
             }
         }
@@ -297,7 +305,8 @@ public class ToolCallExecutor {
     @SuppressWarnings("unchecked")
     private List<Object> resolveArrayChildren(List<Map<String, Object>> children,
                                                Map<String, Object> argsMap,
-                                               Map<String, Object> userCtx) {
+                                               Map<String, Object> userCtx,
+                                               Map<String, String> extendedParams) {
         List<Object> list = new ArrayList<>();
         for (Map<String, Object> child : children) {
             String fieldType = (String) child.getOrDefault("fieldType", "String");
@@ -306,11 +315,11 @@ public class ToolCallExecutor {
                     ? (List<Map<String, Object>>) childrenObj : null;
 
             if ("Object".equals(fieldType) && grandchildren != null && !grandchildren.isEmpty()) {
-                list.add(resolveParamTree(grandchildren, argsMap, userCtx));
+                list.add(resolveParamTree(grandchildren, argsMap, userCtx, extendedParams));
             } else if ("Array".equals(fieldType) && grandchildren != null) {
-                list.add(resolveArrayChildren(grandchildren, argsMap, userCtx));
+                list.add(resolveArrayChildren(grandchildren, argsMap, userCtx, extendedParams));
             } else {
-                Object value = resolveLeafValue(child, argsMap, userCtx);
+                Object value = resolveLeafValue(child, argsMap, userCtx, extendedParams);
                 if (value != null) list.add(value);
             }
         }
@@ -319,7 +328,8 @@ public class ToolCallExecutor {
 
     private Object resolveLeafValue(Map<String, Object> def,
                                      Map<String, Object> argsMap,
-                                     Map<String, Object> userCtx) {
+                                     Map<String, Object> userCtx,
+                                     Map<String, String> extendedParams) {
         String paramKey = (String) def.get("key");
         String valueSource = (String) def.getOrDefault("valueSource", def.get("valueType"));
         if (valueSource == null) valueSource = "static";
@@ -329,6 +339,11 @@ public class ToolCallExecutor {
             String fieldKey = (String) def.get("fieldKey");
             resolved = (userCtx != null && StringUtils.hasText(fieldKey)) ? userCtx.get(fieldKey) : null;
             log.info("[参数解析] key={} 来源=用户上下文 fieldKey={} 取到值={}", paramKey, fieldKey, resolved);
+        } else if ("apikey".equals(valueSource)) {
+            String fieldKey = (String) def.get("fieldKey");
+            resolved = (extendedParams != null && StringUtils.hasText(fieldKey))
+                    ? extendedParams.get(fieldKey) : null;
+            log.info("[参数解析] key={} 来源=APIKey扩展参数 fieldKey={} 取到值={}", paramKey, fieldKey, resolved);
         } else if ("llm".equals(valueSource)) {
             resolved = StringUtils.hasText(paramKey) ? argsMap.get(paramKey) : null;
             log.info("[参数解析] key={} 来源=LLM 入参 取到值={}", paramKey, resolved);

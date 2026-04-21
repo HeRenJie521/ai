@@ -35,6 +35,7 @@ import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
+import java.util.stream.Collectors;
 
 @Service
 public class ChatService {
@@ -83,6 +84,9 @@ public class ChatService {
         ChatRequestDto forLlm = withSystemPrompt(request, effective);
         LlmProviderConfigSnapshot cfg = llmProviderConfigService.requireSnapshot(forLlm.getProvider());
         request.setInternalLlmModelId(cfg.getModeModelId(forLlm.getMode()));
+        if (!cfg.modeSupportsVision(forLlm.getMode())) {
+            forLlm = stripVisionFromRequest(forLlm);
+        }
 
         // 若当前应用绑定了工具，走工具调用编排循环
         List<AiToolEntity> tools = resolveTools(request.getInternalAppId());
@@ -133,9 +137,25 @@ public class ChatService {
                 LlmProviderConfigSnapshot cfg = llmProviderConfigService.requireSnapshot(forLlm.getProvider());
                 request.setInternalLlmModelId(cfg.getModeModelId(forLlm.getMode()));
 
+                // vision 能力检查：剥离图片附件
+                ChatRequestDto llmReq = cfg.modeSupportsVision(forLlm.getMode())
+                        ? forLlm : stripVisionFromRequest(forLlm);
+
+                // 流式输出能力检查：转阻塞调用后模拟 SSE 发送
+                if (!cfg.modeSupportsStreamOutput(llmReq.getMode())) {
+                    ChatResponseDto response = openAiLlmExecutor.chat(llmReq, cfg);
+                    chatSessionService.appendAssistantToSession(request, effective, response);
+                    chatRecordService.saveBlockingTurn(request, effective, response, false);
+                    if (!cfg.resolveThinkingContentWanted(llmReq)) {
+                        response.setReasoningContent(null);
+                    }
+                    emitResponseAsStream(emitter, response);
+                    return;
+                }
+
                 // 若应用绑定了工具，走非流式工具调用编排，再将最终回复模拟为 SSE 输出
                 List<AiToolEntity> tools = resolveTools(request.getInternalAppId());
-                if (!tools.isEmpty() && !cfg.modeSupportsToolCall(forLlm.getMode())) {
+                if (!tools.isEmpty() && !cfg.modeSupportsToolCall(llmReq.getMode())) {
                     ChatResponseDto errResp = new ChatResponseDto();
                     errResp.setContent("当前模型不支持工具调用，请切换到支持工具调用的模型。");
                     errResp.setFinishReason("error");
@@ -145,11 +165,11 @@ public class ChatService {
                 if (!tools.isEmpty()) {
                     Map<String, Object> userCtx = userContextCacheService.get(request.getInternalJti());
                     Consumer<String> onProgress = buildProgressEmitter(emitter);
-                    OrchestratorResult result = toolCallOrchestrator.chat(forLlm, cfg, tools, userCtx, onProgress);
+                    OrchestratorResult result = toolCallOrchestrator.chat(llmReq, cfg, tools, userCtx, onProgress);
                     ChatResponseDto response = result.getResponse();
                     chatSessionService.appendToolCallToSession(request, result.getWorkMessages(), response);
                     chatRecordService.saveBlockingTurn(request, effective, response, false);
-                    if (!cfg.resolveThinkingContentWanted(forLlm)) {
+                    if (!cfg.resolveThinkingContentWanted(llmReq)) {
                         response.setReasoningContent(null);
                     }
                     emitResponseAsStream(emitter, response);
@@ -157,13 +177,14 @@ public class ChatService {
                 }
 
                 OpenAiStreamAccumulator accum = new OpenAiStreamAccumulator(objectMapper, true);
-                String resolvedModel = cfg.resolveUpstreamModelId(forLlm.getModel(), forLlm.getMode());
-                openAiLlmExecutor.chatStream(forLlm, cfg, emitter, accum::acceptChunkJson, upstreamHolder);
+                String resolvedModel = cfg.resolveUpstreamModelId(llmReq.getModel(), llmReq.getMode());
+                openAiLlmExecutor.chatStream(llmReq, cfg, emitter, accum::acceptChunkJson, upstreamHolder);
                 if (accum.hasAssistantPayload()) {
                     ChatResponseDto response = accum.toResponse(cfg.getCode(), resolvedModel);
                     chatSessionService.appendAssistantToSession(request, effective, response);
                     chatRecordService.saveBlockingTurn(request, effective, response, true);
                 }
+
             } catch (Exception ex) {
                 log.warn("[对话异常] {}", ex.getMessage());
                 String errorText = "调用失败：" + (ex.getMessage() != null ? ex.getMessage() : "未知错误");
@@ -186,6 +207,24 @@ public class ChatService {
             }
         });
         return emitter;
+    }
+
+    /**
+     * 剥离消息中的图片附件，用于视觉能力未开启的模型。
+     */
+    private ChatRequestDto stripVisionFromRequest(ChatRequestDto src) {
+        ChatRequestDto copy = new ChatRequestDto();
+        BeanUtils.copyProperties(src, copy, "messages");
+        if (src.getMessages() != null) {
+            List<ChatMessageDto> stripped = src.getMessages().stream().map(m -> {
+                if (m.getFileUrls() == null || m.getFileUrls().isEmpty()) return m;
+                ChatMessageDto nm = new ChatMessageDto();
+                BeanUtils.copyProperties(m, nm, "fileUrls");
+                return nm;
+            }).collect(Collectors.toList());
+            copy.setMessages(stripped);
+        }
+        return copy;
     }
 
     /**

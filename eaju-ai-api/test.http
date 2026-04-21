@@ -1,0 +1,183 @@
+### 变量：服务地址（按需修改端口）
+@baseUrl = http://localhost:8080
+### 登录后把 JWT 填到下面（管理端 / 聊天接口需要）
+@token = 替换为登录返回的 token
+### API Key（通过管理后台生成，header 名为 X-API-Key）
+@apiKey = eaju_69f6f2ad75e8259057921673457
+
+### 登录（获取 token）
+POST {{baseUrl}}/api/auth/login
+Content-Type: application/json
+
+{
+  "phone": "13121656267",
+  "password": "你的明文密码"
+}
+
+### 登出（清除服务端 Redis 登录会话 + 前端应清 localStorage）
+POST {{baseUrl}}/api/auth/logout
+Authorization: Bearer {{token}}
+
+POST {{baseUrl}}/api/chat
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "provider": "DEEPSEEK",
+  "mode": "deepseek-chat",
+  "stream": false,
+  "messages": [
+    { "role": "user", "content": "用一句话介绍 Spring Boot。" }
+  ],
+  "temperature": 0.7,
+  "maxTokens": 512
+}
+
+### [API Key] Qwen：阻塞式单轮会话
+POST {{baseUrl}}/api/chat
+X-API-Key: {{apiKey}}
+Content-Type: application/json
+
+{
+  "provider": "QWEN",
+  "mode": "qwen3.6-plus",
+  "stream": false,
+  "messages": [
+    { "role": "user", "content": "用中文简要介绍什么是大语言模型。" }
+  ]
+}
+
+### [API Key] DeepSeek：流式会话（SSE）
+POST {{baseUrl}}/api/chat
+X-API-Key: {{apiKey}}
+Content-Type: application/json
+
+{
+  "provider": "DEEPSEEK",
+  "mode": "deepseek-chat",
+  "stream": true,
+  "messages": [
+    { "role": "user", "content": "请用三句话介绍 Spring Boot。" }
+  ]
+}
+
+###
+### ===== API Key 绑定应用 · 工单助手（app_id=1）=====
+### API Key: 倚天（eaju_69f6f2...）已绑定「工单助手」
+### 工单助手使用 阿里百炼/qwen3.5-plus，绑定工具：查询工单信息、搜索工单
+### extended_parameters 中的 key 须与工具入参 valueSource=apikey 的 fieldKey 对应
+###
+
+### [API Key × 应用] 查询今日工单（阻塞式，工具调用）
+POST {{baseUrl}}/api/chat
+X-API-Key: {{apiKey}}
+Content-Type: application/json
+
+{
+  "provider": "阿里百炼",
+  "mode": "qwen3.5-plus",
+  "stream": false,
+  "messages": [
+    { "role": "user", "content": "查下我今天有哪些工单" }
+  ],
+  "extended_parameters": [
+    {"esusMobile": "13800138000"},
+    {"esusId": "U001"},
+    {"siteCode": "SITE_HZ"}
+  ]
+}
+
+### [API Key × 应用] 查询今日工单（流式 SSE）
+POST {{baseUrl}}/api/chat
+X-API-Key: {{apiKey}}
+Content-Type: application/json
+
+{
+  "provider": "阿里百炼",
+  "mode": "qwen3.5-plus",
+  "stream": true,
+  "messages": [
+    { "role": "user", "content": "查下我今天有哪些工单" }
+  ],
+  "extended_parameters": [
+    {"esusMobile": "13800138000"},
+    {"esusId": "U001"},
+    {"siteCode": "SITE_HZ"}
+  ]
+}
+
+### [API Key × 应用] 搜索指定工单（模糊搜索）
+POST {{baseUrl}}/api/chat
+X-API-Key: {{apiKey}}
+Content-Type: application/json
+
+{
+  "provider": "阿里百炼",
+  "mode": "qwen3.5-plus",
+  "stream": false,
+  "messages": [
+    { "role": "user", "content": "帮我搜下张三的工单" }
+  ],
+  "extended_parameters": [
+    {"esusMobile": "13800138000"},
+    {"esusId": "U001"},
+    {"esusSubnum1": "1"},
+    {"siteCode": "SITE_HZ"}
+  ]
+}
+
+### [API Key × 应用] 多轮会话（第一轮）
+POST {{baseUrl}}/api/chat
+X-API-Key: {{apiKey}}
+Content-Type: application/json
+
+{
+  "provider": "阿里百炼",
+  "mode": "qwen3.5-plus",
+  "stream": false,
+  "sessionId": "test-apikey-session-001",
+  "messages": [
+    { "role": "user", "content": "查下我今天的工单" }
+  ],
+  "extended_parameters": [
+    {"esusMobile": "13800138000"},
+    {"esusId": "U001"},
+    {"siteCode": "SITE_HZ"}
+  ]
+}
+
+### [API Key × 应用] 多轮会话（第二轮，追问上一轮结果）
+### 先执行上面的第一轮，再执行这条
+POST {{baseUrl}}/api/chat
+X-API-Key: {{apiKey}}
+Content-Type: application/json
+
+{
+  "provider": "阿里百炼",
+  "mode": "qwen3.5-plus",
+  "stream": false,
+  "sessionId": "test-apikey-session-001",
+  "messages": [
+    { "role": "user", "content": "第一个工单的备注是什么？" }
+  ],
+  "extended_parameters": [
+    {"esusMobile": "13800138000"},
+    {"esusId": "U001"},
+    {"siteCode": "SITE_HZ"}
+  ]
+}
+
+### [API Key × 应用] 验证未绑定应用时工具不加载（普通问答）
+### apiKey 已绑定工单助手，但这条请求的 provider 不存在，应返回错误
+POST {{baseUrl}}/api/chat
+X-API-Key: {{apiKey}}
+Content-Type: application/json
+
+{
+  "provider": "DEEPSEEK",
+  "mode": "deepseek-chat",
+  "stream": false,
+  "messages": [
+    { "role": "user", "content": "你好，介绍一下你自己。" }
+  ]
+}

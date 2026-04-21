@@ -447,7 +447,7 @@ async function saveModelParams() {
     providerId,
     name: modelForm.value.name,
     upstreamModelId: modelForm.value.name,
-    textGeneration: modelForm.value.textGeneration,
+    textGeneration: true,
     deepThinking: modelForm.value.deepThinking,
     vision: modelForm.value.vision,
     streamOutput: modelForm.value.streamOutput,
@@ -487,7 +487,7 @@ async function saveModel() {
     providerId,
     name,
     upstreamModelId: name,
-    textGeneration: modelForm.value.textGeneration,
+    textGeneration: true,
     deepThinking: modelForm.value.deepThinking,
     vision: modelForm.value.vision,
     streamOutput: modelForm.value.streamOutput,
@@ -755,7 +755,7 @@ function goTo(page: 'llm' | 'conversations' | 'api-keys' | 'ai-apps' | 'tools') 
 
           <div class="model-cap-grid">
             <n-form-item label="文本生成">
-              <n-switch v-model:value="modelForm.textGeneration" />
+              <n-switch :value="true" disabled />
             </n-form-item>
             <n-form-item label="深度思考">
               <n-switch v-model:value="modelForm.deepThinking" />

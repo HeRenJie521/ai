@@ -17,16 +17,17 @@ public class ApiKeyPrincipal implements UserDetails {
     private final Long id;
     private final String keyName;
     private final String plainKey;
+    private final Long appId;
 
-    public ApiKeyPrincipal(Long id, String keyName, String plainKey) {
+    public ApiKeyPrincipal(Long id, String keyName, String plainKey, Long appId) {
         this.id = id;
         this.keyName = keyName != null ? keyName : "";
         this.plainKey = plainKey != null ? plainKey : "";
+        this.appId = appId;
     }
 
-    public Long getId() {
-        return id;
-    }
+    public Long getId() { return id; }
+    public Long getAppId() { return appId; }
 
     public String getKeyName() {
         return keyName;

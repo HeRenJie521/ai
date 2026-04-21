@@ -182,6 +182,17 @@ public final class LlmProviderConfigSnapshot {
         return e == null || e.isToolCall();
     }
 
+    public boolean modeSupportsStreamOutput(String modeKey) {
+        ModeEntryConfig e = findEntry(modeKey);
+        return e == null || e.isStreamOutput();
+    }
+
+    public boolean modeSupportsVision(String modeKey) {
+        ModeEntryConfig e = findEntry(modeKey);
+        // 未配置 modeCapabilities 时视为兼容旧数据，不拦截
+        return e == null || e.isVision();
+    }
+
     public boolean modeSupportsThinkingApi(String modeKey) {
         ModeEntryConfig e = findEntry(modeKey);
         return e != null && e.isDeepThinking();

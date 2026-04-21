@@ -5,7 +5,9 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 import javax.validation.Valid;
 import javax.validation.constraints.NotBlank;
 import javax.validation.constraints.NotEmpty;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 public class ChatRequestDto {
 
@@ -67,6 +69,12 @@ public class ChatRequestDto {
      */
     private Boolean stream;
 
+    /**
+     * 扩展参数列表，格式：[{"key1":"value1"},{"key2":"value2"}]。
+     * 工具入参 valueSource=apikey 时，按 fieldKey 从此列表中取值。
+     */
+    private List<Map<String, String>> extendedParameters;
+
     /** 服务端写入：X-API-Key 调用时的密钥 id，不落库到请求 JSON */
     @JsonIgnore
     private Long internalApiKeyId;
@@ -86,6 +94,10 @@ public class ChatRequestDto {
     /** 服务端写入：本次对话使用的 llm_model.id，写入 chat_turn 便于统计 */
     @JsonIgnore
     private Long internalLlmModelId;
+
+    /** 服务端写入：extendedParameters 展开后的平铺 Map，供工具执行器快速查找 */
+    @JsonIgnore
+    private Map<String, String> internalExtendedParams;
 
     public String getProvider() {
         return provider;
@@ -253,5 +265,21 @@ public class ChatRequestDto {
 
     public void setInternalLlmModelId(Long internalLlmModelId) {
         this.internalLlmModelId = internalLlmModelId;
+    }
+
+    public List<Map<String, String>> getExtendedParameters() {
+        return extendedParameters;
+    }
+
+    public void setExtendedParameters(List<Map<String, String>> extendedParameters) {
+        this.extendedParameters = extendedParameters;
+    }
+
+    public Map<String, String> getInternalExtendedParams() {
+        return internalExtendedParams;
+    }
+
+    public void setInternalExtendedParams(Map<String, String> internalExtendedParams) {
+        this.internalExtendedParams = internalExtendedParams;
     }
 }

@@ -73,6 +73,9 @@ public final class CallerPrincipal {
         if (p instanceof AuthUserPrincipal) {
             return ((AuthUserPrincipal) p).getAppId();
         }
+        if (p instanceof ApiKeyPrincipal) {
+            return ((ApiKeyPrincipal) p).getAppId();
+        }
         return null;
     }
 

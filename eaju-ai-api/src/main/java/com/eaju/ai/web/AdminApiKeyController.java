@@ -55,7 +55,7 @@ public class AdminApiKeyController {
     @PostMapping
     public ApiKeyCreateResponseDto create(@Valid @RequestBody ApiKeyCreateRequestDto body) {
         ApiKeyService.CreatedApiKey created = apiKeyService.create(
-                body.getName(), body.getType(), body.getAllowedOrigins());
+                body.getName(), body.getType(), body.getAllowedOrigins(), body.getAppId());
         ApiKeyEntity e = created.getEntity();
         ApiKeyCreateResponseDto dto = new ApiKeyCreateResponseDto();
         copyToRow(e, dto);
@@ -67,7 +67,7 @@ public class AdminApiKeyController {
     public ApiKeyResponseDto patch(@PathVariable("id") Long id,
                                    @RequestBody ApiKeyPatchRequestDto body) {
         ApiKeyEntity e = apiKeyService.update(id, body.getName(), body.getEnabled(),
-                body.getAllowedOrigins());
+                body.getAllowedOrigins(), body.getAppId());
         return toRow(e);
     }
 
@@ -113,5 +113,6 @@ public class AdminApiKeyController {
         dto.setCreatedAt(e.getCreatedAt() != null ? e.getCreatedAt().toString() : null);
         dto.setType(e.getType());
         dto.setAllowedOrigins(e.getAllowedOrigins());
+        dto.setAppId(e.getAppId());
     }
 }

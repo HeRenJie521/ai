@@ -18,7 +18,17 @@
       "Bash(cat /Users/hrj/developer/code/AI/zhiyi/eaju-ai-api/db/*.sql)",
       "Bash(find *)",
       "Bash(./mvnw compile *)",
-      "Bash(/opt/homebrew/opt/maven/bin/mvn compile *)"
+      "Bash(/opt/homebrew/opt/maven/bin/mvn compile *)",
+      "Bash(psql -U postgres -c \"\\\\dt llm*\")",
+      "Bash(psql -l)",
+      "Bash(psql --version)",
+      "Bash(pg_isready)",
+      "Read(//private/tmp/**)",
+      "Bash(psql -h /tmp -p 5432 -c \"\\\\l\")",
+      "Bash(PGPASSWORD=root psql *)",
+      "Bash(PGPASSWORD=root pg_dump -h localhost -U postgres -d zhiyi --schema-only)",
+      "Bash(pg_dump -h localhost -U postgres -d zhiyi --no-owner --no-acl --column-inserts --if-exists --clean -f /Users/hrj/developer/code/AI/zhiyi/zhiyi_deploy.sql)",
+      "Bash(psql -h localhost -U postgres -d zhiyi -c ' *)"
     ]
   }
 }

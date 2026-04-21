@@ -14,6 +14,9 @@ public class ApiKeyResponseDto {
     /** WEB_EMBED 允许嵌入的来源域名 */
     private String allowedOrigins;
 
+    /** 绑定的 AI 应用 ID */
+    private Long appId;
+
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
 
@@ -34,4 +37,7 @@ public class ApiKeyResponseDto {
 
     public String getAllowedOrigins() { return allowedOrigins; }
     public void setAllowedOrigins(String allowedOrigins) { this.allowedOrigins = allowedOrigins; }
+
+    public Long getAppId() { return appId; }
+    public void setAppId(Long appId) { this.appId = appId; }
 }

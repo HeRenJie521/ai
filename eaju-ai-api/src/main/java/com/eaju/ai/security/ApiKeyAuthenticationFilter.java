@@ -53,7 +53,7 @@ public class ApiKeyAuthenticationFilter extends OncePerRequestFilter {
             return;
         }
         ApiKeyEntity e = ok.get();
-        ApiKeyPrincipal principal = new ApiKeyPrincipal(e.getId(), e.getName(), header.trim());
+        ApiKeyPrincipal principal = new ApiKeyPrincipal(e.getId(), e.getName(), header.trim(), e.getAppId());
         UsernamePasswordAuthenticationToken auth =
                 new UsernamePasswordAuthenticationToken(principal, null, principal.getAuthorities());
         auth.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));

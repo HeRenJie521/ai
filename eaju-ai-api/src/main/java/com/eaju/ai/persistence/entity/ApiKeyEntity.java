@@ -53,6 +53,10 @@ public class ApiKeyEntity {
     @Column(name = "default_model_id")
     private Long defaultModelId;
 
+    /** 绑定的 AI 应用 ID；非 null 时请求自动加载该应用的系统提示和工具 */
+    @Column(name = "app_id")
+    private Long appId;
+
     @PrePersist
     public void prePersist() {
         Instant n = Instant.now();
@@ -99,4 +103,7 @@ public class ApiKeyEntity {
 
     public Long getDefaultModelId() { return defaultModelId; }
     public void setDefaultModelId(Long defaultModelId) { this.defaultModelId = defaultModelId; }
+
+    public Long getAppId() { return appId; }
+    public void setAppId(Long appId) { this.appId = appId; }
 }
