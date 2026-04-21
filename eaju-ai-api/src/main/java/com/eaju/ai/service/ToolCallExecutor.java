@@ -144,6 +144,11 @@ public class ToolCallExecutor {
      * 如果配置了出参管理，返回过滤后的响应数据；否则返回全部响应数据。
      */
     public String executeWithRawResult(AiToolEntity tool, String toolArgs, Map<String, Object> userCtx) {
+        return executeWithRawResult(tool, toolArgs, userCtx, null);
+    }
+
+    public String executeWithRawResult(AiToolEntity tool, String toolArgs, Map<String, Object> userCtx,
+                                        Map<String, String> extendedParams) {
         try {
             Map<String, Object> argsMap = parseArgs(toolArgs);
             Map<String, Object> vars = new LinkedHashMap<>();
@@ -169,7 +174,7 @@ public class ToolCallExecutor {
                 headers.set("Content-Type", contentType);
 
                 if (StringUtils.hasText(tool.getDataParamsJson())) {
-                    body = buildParamBody(tool, argsMap, userCtx, contentType);
+                    body = buildParamBody(tool, argsMap, userCtx, contentType, extendedParams);
                 } else if (StringUtils.hasText(tool.getBodyTemplate())) {
                     body = substitute(tool.getBodyTemplate(), vars);
                     if ("application/x-www-form-urlencoded".equals(contentType)) {
@@ -183,7 +188,7 @@ public class ToolCallExecutor {
             }
 
             HttpEntity<String> entity = new HttpEntity<>(body, headers);
-            
+
             // 打印请求报文
             log.info("========== 工具调用请求开始 ==========");
             log.info("[请求信息] toolName={} method={} url={}", tool.getName(), method, url);
@@ -216,6 +221,11 @@ public class ToolCallExecutor {
      * 仅构建请求体，不发起 HTTP 调用，供测试接口展示实际入参。
      */
     public String buildRequestBody(AiToolEntity tool, String toolArgs, Map<String, Object> userCtx) {
+        return buildRequestBody(tool, toolArgs, userCtx, null);
+    }
+
+    public String buildRequestBody(AiToolEntity tool, String toolArgs, Map<String, Object> userCtx,
+                                    Map<String, String> extendedParams) {
         try {
             Map<String, Object> argsMap = parseArgs(toolArgs);
             Map<String, Object> vars = new LinkedHashMap<>();
@@ -230,7 +240,7 @@ public class ToolCallExecutor {
                     ? tool.getContentType() : "application/json";
 
             if (StringUtils.hasText(tool.getDataParamsJson())) {
-                return buildParamBody(tool, argsMap, userCtx, contentType);
+                return buildParamBody(tool, argsMap, userCtx, contentType, extendedParams);
             } else if (StringUtils.hasText(tool.getBodyTemplate())) {
                 String body = substitute(tool.getBodyTemplate(), vars);
                 return "application/x-www-form-urlencoded".equals(contentType)
@@ -596,10 +606,13 @@ public class ToolCallExecutor {
                     // Object 类型但无子字段配置 → 跳过，不整体透传
                 } else if ("Array".equals(fieldType) && grandchildren != null && !grandchildren.isEmpty()) {
                     Object arrayValue = map.get(key);
+                    log.info("[filterByConfig] Array key={} found={} isList={}", key, arrayValue != null, arrayValue instanceof List);
                     if (arrayValue instanceof List) {
                         List<Object> filteredArray = new ArrayList<>();
                         for (Object item : (List<?>) arrayValue) {
+                            log.info("[filterByConfig] Array item type={} value={}", item == null ? "null" : item.getClass().getSimpleName(), item);
                             Object filteredItem = filterByConfig(item, grandchildren);
+                            log.info("[filterByConfig] Array item filtered={}", filteredItem);
                             if (filteredItem != null) {
                                 filteredArray.add(filteredItem);
                             }
@@ -611,6 +624,7 @@ public class ToolCallExecutor {
                 } else {
                     // 叶子节点
                     Object childValue = map.get(key);
+                    log.info("[filterByConfig] Leaf key={} mapKeys={} found={}", key, map.keySet(), childValue);
                     if (childValue != null) {
                         result.put(key, childValue);
                     }

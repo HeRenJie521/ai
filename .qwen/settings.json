@@ -91,7 +91,8 @@
       "Bash('' *)",
       "Bash(v-if=\"m.createdat\" *)",
       "Bash(patch *)",
-      "Bash(od *)"
+      "Bash(od *)",
+      "Bash(psql *)"
     ]
   },
   "$version": 3

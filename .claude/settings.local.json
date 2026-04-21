@@ -28,7 +28,15 @@
       "Bash(PGPASSWORD=root psql *)",
       "Bash(PGPASSWORD=root pg_dump -h localhost -U postgres -d zhiyi --schema-only)",
       "Bash(pg_dump -h localhost -U postgres -d zhiyi --no-owner --no-acl --column-inserts --if-exists --clean -f /Users/hrj/developer/code/AI/zhiyi/zhiyi_deploy.sql)",
-      "Bash(psql -h localhost -U postgres -d zhiyi -c ' *)"
+      "Bash(psql -h localhost -U postgres -d zhiyi -c ' *)",
+      "Bash(psql -U postgres -d zhiyi_ai -c \"SELECT id, name, label, response_params_json FROM ai_tool WHERE label LIKE '%线路%' OR name LIKE '%route%' OR name LIKE '%xianlu%' OR label LIKE '%路%' LIMIT 5;\")",
+      "Bash(psql -d zhiyi_ai -c \"SELECT id, name, label, response_params_json FROM ai_tool WHERE label LIKE '%线路%' OR label LIKE '%查询%' LIMIT 5;\")",
+      "Bash(psql \"postgresql://localhost:5432/zhiyi_ai\" -c \"SELECT id, name, label, response_params_json FROM ai_tool LIMIT 20;\")",
+      "Bash(psql \"postgresql://localhost/zhiyi_ai\" -c \"SELECT id, name, label FROM ai_tool;\")",
+      "Bash(pg_dump --version)",
+      "Read(//Applications/**)",
+      "Bash(/Library/PostgreSQL/17/bin/psql *)",
+      "Bash(PGPASSWORD=root /Library/PostgreSQL/17/bin/psql *)"
     ]
   }
 }

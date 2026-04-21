@@ -85,12 +85,13 @@ public class AdminAiToolController {
         Map<String, Object> testCtx = (body != null && body.getTestContext() != null)
                 ? body.getTestContext() : Collections.emptyMap();
         String toolArgs = (body != null && body.getToolArgs() != null) ? body.getToolArgs() : "{}";
+        Map<String, String> extendedParams = (body != null) ? body.getExtendedParams() : null;
 
-        String requestBody = toolCallExecutor.buildRequestBody(tool, toolArgs, testCtx);
+        String requestBody = toolCallExecutor.buildRequestBody(tool, toolArgs, testCtx, extendedParams);
 
         long start = System.currentTimeMillis();
         // 测试接口使用 executeWithRawResult，返回过滤后的真实响应数据
-        String result = toolCallExecutor.executeWithRawResult(tool, toolArgs, testCtx);
+        String result = toolCallExecutor.executeWithRawResult(tool, toolArgs, testCtx, extendedParams);
         long elapsed = System.currentTimeMillis() - start;
 
         Map<String, Object> resp = new LinkedHashMap<>();

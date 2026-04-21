@@ -257,7 +257,7 @@ const apikeyAppExample = `curl -X POST http://your-host/api/chat \\
     "mode": "qwen3.5-plus",
     "messages": [{ "role": "user", "content": "查询我今天的工单" }],
     "stream": true,
-    "extended_parameters": [
+    "extendedParameters": [
       {"esusMobile": "13800138000"},
       {"esusId": "U001"},
       {"siteCode": "SITE_HZ"}
@@ -266,8 +266,8 @@ const apikeyAppExample = `curl -X POST http://your-host/api/chat \\
 
 const apikeyAppFlow = [
   { step: '1', title: '管理后台创建 API Key 并绑定应用', desc: '在「集成管理 → API Key」新建一条记录，在「绑定应用」下拉中选择已配置好系统提示和工具的 AI 应用，保存后复制生成的密钥。' },
-  { step: '2', title: '工具入参来源设为 APIKey参数', desc: '在「接口管理 → 入参管理」中，将需要由调用方传入的字段（如手机号、门店编码）的「来源」设为「APIKey参数」，并填写对应的 key 名称（与 extended_parameters 中的 key 一致）。' },
-  { step: '3', title: '调用 /api/chat 时携带 extended_parameters', desc: '在请求体中加入 extended_parameters 数组，每项为 {"key":"value"} 形式。服务端会在工具执行时自动将来源为 apikey 的参数从此数组中取值，无需用户登录即可完成工具调用。' },
+  { step: '2', title: '工具入参来源设为 APIKey参数', desc: '在「接口管理 → 入参管理」中，将需要由调用方传入的字段（如手机号、门店编码）的「来源」设为「APIKey参数」，并填写对应的 key 名称（与 extendedParameters 中的 key 一致）。' },
+  { step: '3', title: '调用 /api/chat 时携带 extendedParameters', desc: '在请求体中加入 extendedParameters 数组，每项为 {"key":"value"} 形式。服务端会在工具执行时自动将来源为 apikey 的参数从此数组中取值，无需用户登录即可完成工具调用。' },
 ]
 
 const apikeyVsContext = [
@@ -798,7 +798,7 @@ onUnmounted(() => {
             <code class="endpoint-path">API Key 绑定应用</code>
           </div>
           <p class="endpoint-desc">
-            将 API Key 与一个 AI 应用绑定后，调用方只需在请求头携带 <code>X-API-Key</code>，服务端即自动加载该应用的系统提示词和工具配置，无需任何登录操作。工具入参中来源设为「APIKey参数」的字段，从请求体的 <code>extended_parameters</code> 中取值。
+            将 API Key 与一个 AI 应用绑定后，调用方只需在请求头携带 <code>X-API-Key</code>，服务端即自动加载该应用的系统提示词和工具配置，无需任何登录操作。工具入参中来源设为「APIKey参数」的字段，从请求体的 <code>extendedParameters</code> 中取值。
           </p>
         </n-card>
 
@@ -838,7 +838,7 @@ onUnmounted(() => {
               </table>
             </div>
             <p class="section-tip" style="margin-top:10px">
-              配置入口：接口管理 → 选择接口 → 入参管理 → 每个参数的「来源」下拉，选择「APIKey参数」后填写与 <code>extended_parameters</code> 中 key 一致的名称。
+              配置入口：接口管理 → 选择接口 → 入参管理 → 每个参数的「来源」下拉，选择「APIKey参数」后填写与 <code>extendedParameters</code> 中 key 一致的名称。
             </p>
           </n-collapse-item>
 
@@ -851,7 +851,7 @@ onUnmounted(() => {
               <pre class="code-block">{{ apikeyAppExample }}</pre>
             </div>
             <p class="section-tip" style="margin-top:10px">
-              服务端收到请求后，自动加载绑定应用的系统提示词和工具列表；工具执行时，来源为 <code>apikey</code> 的参数（如 <code>esusMobile</code>）从 <code>extended_parameters</code> 中取值。
+              服务端收到请求后，自动加载绑定应用的系统提示词和工具列表；工具执行时，来源为 <code>apikey</code> 的参数（如 <code>esusMobile</code>）从 <code>extendedParameters</code> 中取值。
             </p>
           </n-collapse-item>
         </n-collapse>

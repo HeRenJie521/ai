@@ -95,7 +95,8 @@ export async function adminTestTool(
   id: number,
   testContext: Record<string, string>,
   toolArgs?: string,
+  extendedParams?: Record<string, string>,
 ): Promise<{ result: string; elapsedMs: number; requestBody?: string }> {
-  const { data } = await http.post(`/api/admin/tools/${id}/test`, { testContext, toolArgs })
+  const { data } = await http.post(`/api/admin/tools/${id}/test`, { testContext, toolArgs, extendedParams })
   return data
 }

@@ -11,9 +11,11 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.client.HttpComponentsClientHttpRequestFactory;
+import org.springframework.http.converter.StringHttpMessageConverter;
 import org.springframework.web.client.RestTemplate;
 
 import javax.net.ssl.SSLContext;
+import java.nio.charset.StandardCharsets;
 
 /**
  * REST 客户端性能优化配置
@@ -86,6 +88,15 @@ public class RestClientConfig {
                 .build();
 
         HttpComponentsClientHttpRequestFactory factory = new HttpComponentsClientHttpRequestFactory(httpClient);
-        return new RestTemplate(factory);
+        RestTemplate template = new RestTemplate(factory);
+        // Spring Boot 2.7 / Java 8: StringHttpMessageConverter 默认 ISO-8859-1，
+        // 业务系统返回 Content-Type: application/json 时不带 charset，导致中文 key 被乱码。
+        // 统一改为 UTF-8，确保中文字段名与字段值都能正确读取。
+        template.getMessageConverters().forEach(converter -> {
+            if (converter instanceof StringHttpMessageConverter) {
+                ((StringHttpMessageConverter) converter).setDefaultCharset(StandardCharsets.UTF_8);
+            }
+        });
+        return template;
     }
 }

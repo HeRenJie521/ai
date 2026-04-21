@@ -983,7 +983,9 @@ ALTER TABLE api_key
 
 COMMENT ON COLUMN api_key.app_id IS '绑定的 AI 应用 ID；非 null 时调用自动加载该应用系统提示和工具';
 
-        
+
+SELECT setval('public.ai_tool_id_seq', (SELECT COALESCE(MAX(id), 0) FROM public.ai_tool));
+
 INSERT INTO public.ai_app (id, name, welcome_text, suggestions, system_role, system_task, system_constraints, llm_model_id, deleted, created_at, updated_at) VALUES (1, '工单助手', '你好，我是工单助手，有什么可以帮您', '["我今天有哪些单子","我本周有多少单子","我今天挣了多少钱","帮我搜索下4177513的单子，将信息发我下"]', ' 你是一名熟悉我司工单管理业务的专员，回答师傅提问的问题', '我配置了工具，用户问问题时，可以根据工具的描述，来判断是否调用工具', ' 每次回复用户时，要向用户进行问好', 4, false, '2026-04-20 17:51:11.665+08', '2026-04-20 17:54:55.458+08');
 INSERT INTO public.ai_app (id, name, welcome_text, suggestions, system_role, system_task, system_constraints, llm_model_id, deleted, created_at, updated_at) VALUES (2, '物流专家', '你好，我是专业的物流助手，请问有什么帮助。', '["近期运费趋势怎么样","这个报价是否符合我司计费规则？"]', '你是我司专属的定制化综合物流专家Agent。你必须基于我司特有的业务范畴、计费规则、履约条件和表单数据结构，进行精准的物流业务分析与最优报价决策。', '处理我司货源发布的具体数据（如货主、线路、公里数、发货量、实际重量/体积等）及承运商报价数据，执行以下任务：
 1. 报价命中决策：在多个报价中，结合承运商报价与我司【要求到货日期】、【装车时间要求】等硬性条件，综合考量价格与附加项，选出最优承运商并说明原因。

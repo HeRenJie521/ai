@@ -394,6 +394,8 @@ const showTestModal = ref(false)
 const testTool = ref<AiToolRow | null>(null)
 // context 类型参数的测试输入值，key = fieldKey
 const testContextInputs = ref<Record<string, string>>({})
+// apikey 类型参数的测试输入值，key = fieldKey
+const testApiKeyInputs = ref<Record<string, string>>({})
 const testRunning = ref(false)
 const testRequestBody = ref('')
 const testResult = ref('')
@@ -412,12 +414,36 @@ function walkContextParams(nodes: ParamNode[], path: string, out: FlatContextPar
   }
 }
 
+/** 递归收集所有 valueSource=apikey 的参数，供测试运行填值 */
+function walkApiKeyParams(nodes: ParamNode[], path: string, out: FlatContextParam[]) {
+  for (const p of nodes) {
+    const fullPath = path ? `${path}.${p.key}` : p.key
+    if (p.valueSource === 'apikey' && p.fieldKey) {
+      // 同一 fieldKey 只收集一次
+      if (!out.some(o => o.fieldKey === p.fieldKey)) {
+        out.push({ label: `${fullPath}（${p.fieldKey}）`, fieldKey: p.fieldKey })
+      }
+    }
+    if (p.children?.length) walkApiKeyParams(p.children, fullPath, out)
+  }
+}
+
 function collectContextParams(row: AiToolRow): FlatContextParam[] {
   if (!row.dataParamsJson) return []
   try {
     const items = JSON.parse(row.dataParamsJson) as ParamNode[]
     const result: FlatContextParam[] = []
     walkContextParams(items, '', result)
+    return result
+  } catch { return [] }
+}
+
+function collectApiKeyParams(row: AiToolRow): FlatContextParam[] {
+  if (!row.dataParamsJson) return []
+  try {
+    const items = JSON.parse(row.dataParamsJson) as ParamNode[]
+    const result: FlatContextParam[] = []
+    walkApiKeyParams(items, '', result)
     return result
   } catch { return [] }
 }
@@ -432,6 +458,12 @@ function openTest(row: AiToolRow) {
   const inputs: Record<string, string> = {}
   for (const p of ctxParams) inputs[p.fieldKey] = ''
   testContextInputs.value = inputs
+
+  const apiKeyParams = collectApiKeyParams(row)
+  const apiKeyInputs: Record<string, string> = {}
+  for (const p of apiKeyParams) apiKeyInputs[p.fieldKey] = ''
+  testApiKeyInputs.value = apiKeyInputs
+
   showTestModal.value = true
 }
 
@@ -442,7 +474,10 @@ async function runTest() {
   testResult.value = ''
   testElapsed.value = null
   try {
-    const { result, elapsedMs, requestBody } = await adminTestTool(testTool.value.id, testContextInputs.value)
+    const extendedParams = Object.keys(testApiKeyInputs.value).length > 0
+      ? testApiKeyInputs.value : undefined
+    const { result, elapsedMs, requestBody } = await adminTestTool(
+      testTool.value.id, testContextInputs.value, undefined, extendedParams)
     // 尝试格式化入参 JSON
     if (requestBody) {
       try { testRequestBody.value = JSON.stringify(JSON.parse(requestBody), null, 2) }
@@ -640,7 +675,28 @@ onMounted(() => { void loadAll() })
             </NFormItem>
           </NForm>
         </template>
-        <div v-else style="color:#aaa; font-size:12px; margin-bottom:12px">
+
+        <!-- apikey 参数输入区 -->
+        <template v-if="collectApiKeyParams(testTool).length > 0">
+          <NDivider title-placement="left" style="margin:0 0 10px">APIKey 扩展参数（测试值）</NDivider>
+          <NForm label-placement="left" label-width="200px" size="small">
+            <NFormItem
+              v-for="p in collectApiKeyParams(testTool)"
+              :key="p.fieldKey"
+              :label="p.label"
+            >
+              <NInput
+                v-model:value="testApiKeyInputs[p.fieldKey]"
+                :placeholder="`${p.fieldKey} 的测试值`"
+              />
+            </NFormItem>
+          </NForm>
+        </template>
+
+        <div
+          v-if="collectContextParams(testTool).length === 0 && collectApiKeyParams(testTool).length === 0"
+          style="color:#aaa; font-size:12px; margin-bottom:12px"
+        >
           该接口无需用户数据参数，直接点击"发起测试"即可
         </div>
 

@@ -65,7 +65,7 @@ Content-Type: application/json
 ### ===== API Key 绑定应用 · 工单助手（app_id=1）=====
 ### API Key: 倚天（eaju_69f6f2...）已绑定「工单助手」
 ### 工单助手使用 阿里百炼/qwen3.5-plus，绑定工具：查询工单信息、搜索工单
-### extended_parameters 中的 key 须与工具入参 valueSource=apikey 的 fieldKey 对应
+### extendedParameters 中的 key 须与工具入参 valueSource=apikey 的 fieldKey 对应
 ###
 
 ### [API Key × 应用] 查询今日工单（阻塞式，工具调用）
@@ -80,7 +80,7 @@ Content-Type: application/json
   "messages": [
     { "role": "user", "content": "查下我今天有哪些工单" }
   ],
-  "extended_parameters": [
+  "extendedParameters": [
     {"esusMobile": "13800138000"},
     {"esusId": "U001"},
     {"siteCode": "SITE_HZ"}
@@ -99,7 +99,7 @@ Content-Type: application/json
   "messages": [
     { "role": "user", "content": "查下我今天有哪些工单" }
   ],
-  "extended_parameters": [
+  "extendedParameters": [
     {"esusMobile": "13800138000"},
     {"esusId": "U001"},
     {"siteCode": "SITE_HZ"}
@@ -118,7 +118,7 @@ Content-Type: application/json
   "messages": [
     { "role": "user", "content": "帮我搜下张三的工单" }
   ],
-  "extended_parameters": [
+  "extendedParameters": [
     {"esusMobile": "13800138000"},
     {"esusId": "U001"},
     {"esusSubnum1": "1"},
@@ -139,7 +139,7 @@ Content-Type: application/json
   "messages": [
     { "role": "user", "content": "查下我今天的工单" }
   ],
-  "extended_parameters": [
+  "extendedParameters": [
     {"esusMobile": "13800138000"},
     {"esusId": "U001"},
     {"siteCode": "SITE_HZ"}
@@ -160,7 +160,7 @@ Content-Type: application/json
   "messages": [
     { "role": "user", "content": "第一个工单的备注是什么？" }
   ],
-  "extended_parameters": [
+  "extendedParameters": [
     {"esusMobile": "13800138000"},
     {"esusId": "U001"},
     {"siteCode": "SITE_HZ"}

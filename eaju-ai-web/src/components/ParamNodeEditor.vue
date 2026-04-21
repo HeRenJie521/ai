@@ -111,7 +111,7 @@ function lineColor(depth: number) {
           <NInput
             v-else-if="node.valueSource === 'apikey'"
             v-model:value="node.fieldKey"
-            placeholder="extended_parameters 中的 key 名称"
+            placeholder="extendedParameters 中的 key 名称"
             style="flex:1; min-width:140px"
             size="small"
           />
