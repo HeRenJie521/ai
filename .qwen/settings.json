@@ -95,7 +95,8 @@
       "Bash(psql *)",
       "Bash(ls *)",
       "Bash(pg_dump *)",
-      "Bash(mkdir *)"
+      "Bash(mkdir *)",
+      "Bash(cat *)"
     ]
   },
   "$version": 3
