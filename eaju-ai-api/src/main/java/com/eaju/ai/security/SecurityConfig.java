@@ -54,6 +54,8 @@ public class SecurityConfig {
                 .antMatchers("/api/embed/login").permitAll()
                 // 应用管理嵌入登录（无需凭证，直接通过 appId 登录）
                 .antMatchers("/api/embed/app-login").permitAll()
+                // 移动端免密登录（通过手机号调用 DMS 免密接口）
+                .antMatchers("/api/mobile/login").permitAll()
                 .antMatchers("/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs", "/v3/api-docs/**")
                 .permitAll()
                 // 所有 /api/admin/** 仅管理员可访问

@@ -36,7 +36,9 @@
       "Bash(pg_dump --version)",
       "Read(//Applications/**)",
       "Bash(/Library/PostgreSQL/17/bin/psql *)",
-      "Bash(PGPASSWORD=root /Library/PostgreSQL/17/bin/psql *)"
+      "Bash(PGPASSWORD=root /Library/PostgreSQL/17/bin/psql *)",
+      "Bash(/usr/local/bin/mvn --version)",
+      "Bash(/opt/homebrew/bin/mvn --version)"
     ]
   }
 }

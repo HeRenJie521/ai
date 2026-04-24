@@ -73,6 +73,25 @@ const router = createRouter({
       component: () => import('@/views/EmbedView.vue'),
       meta: { embed: true },
     },
+    {
+      // 移动端入口：?phone=手机号 → DMS 免密登录后展示列表
+      path: '/mobile',
+      name: 'mobile-home',
+      component: () => import('@/views/mobile/MobileHomeView.vue'),
+      meta: { mobile: true },
+    },
+    {
+      path: '/mobile/apps',
+      name: 'mobile-apps',
+      component: () => import('@/views/mobile/MobileAppsView.vue'),
+      meta: { mobile: true },
+    },
+    {
+      path: '/mobile/chat',
+      name: 'mobile-chat',
+      component: () => import('@/views/mobile/MobileChatView.vue'),
+      meta: { mobile: true },
+    },
   ],
 })
 
