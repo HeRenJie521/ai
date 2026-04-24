@@ -76,11 +76,6 @@ function formatTime(t: string | null): string {
 
 <template>
   <div class="mobile-home">
-    <!-- 顶部导航 -->
-    <header class="mobile-header">
-      <span class="header-title">AI 助手</span>
-    </header>
-
     <!-- 加载中 -->
     <div v-if="status === 'loading'" class="center-state">
       <div class="spinner"></div>
@@ -156,25 +151,6 @@ function formatTime(t: string | null): string {
   background: #f5f5f5;
   font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Helvetica Neue', sans-serif;
   position: relative;
-}
-
-.mobile-header {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 12px 16px;
-  padding-top: calc(12px + env(safe-area-inset-top));
-  background: #fff;
-  border-bottom: 1px solid #e8e8e8;
-  position: sticky;
-  top: 0;
-  z-index: 10;
-}
-
-.header-title {
-  font-size: 17px;
-  font-weight: 600;
-  color: #1a1a1a;
 }
 
 .list-container {
