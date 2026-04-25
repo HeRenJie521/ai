@@ -8,9 +8,12 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.retry.annotation.Backoff;
+import org.springframework.retry.annotation.Retryable;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 import org.springframework.web.client.HttpStatusCodeException;
+import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
@@ -40,6 +43,15 @@ public class OpenAiChatCompletionClient {
         this.objectMapper = objectMapper;
     }
 
+    /**
+     * 调用 Chat Completions API（阻塞模式）。
+     * 超时或网络错误时自动重试，最多 3 次，间隔 2 秒。
+     */
+    @Retryable(
+            value = {ResourceAccessException.class},
+            maxAttempts = 3,
+            backoff = @Backoff(delay = 2000, multiplier = 1.0)
+    )
     public JsonNode post(String baseUrl, String apiKey, ObjectNode body) {
         String url = trimTrailingSlash(baseUrl) + COMPLETIONS_PATH;
         HttpHeaders headers = new HttpHeaders();
@@ -59,6 +71,21 @@ public class OpenAiChatCompletionClient {
 
     public void postStream(String baseUrl, String apiKey, ObjectNode body, SseEmitter emitter) throws IOException {
         postStream(baseUrl, apiKey, body, emitter, null, null);
+    }
+
+    /**
+     * 流式（带重试）：超时或网络错误时自动重试，最多 3 次，间隔 2 秒。
+     * 注意：重试时会重新发起整个请求，已发送的内容不会保留。
+     */
+    @Retryable(
+            value = {ResourceAccessException.class, IOException.class},
+            maxAttempts = 3,
+            backoff = @Backoff(delay = 2000, multiplier = 1.0)
+    )
+    public void postStreamWithRetry(String baseUrl, String apiKey, ObjectNode body, SseEmitter emitter,
+                                     Consumer<String> onEachChunkJson,
+                                     AtomicReference<Closeable> upstreamHolder) throws IOException {
+        postStream(baseUrl, apiKey, body, emitter, onEachChunkJson, upstreamHolder);
     }
 
     /**

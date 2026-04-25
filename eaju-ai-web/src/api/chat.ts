@@ -149,7 +149,13 @@ export async function chatStreamFetch(
       await options?.onAbort?.()
       return
     }
-    await onError(e instanceof Error ? e : new Error(String(e)))
+    // 增强错误提示：识别超时错误
+    const errMsg = e instanceof Error ? e.message : String(e)
+    if (errMsg.includes('timeout') || errMsg.includes('timed out')) {
+      await onError(new Error('请求超时，模型响应时间过长。请稍后重试或简化问题。'))
+    } else {
+      await onError(e instanceof Error ? e : new Error(String(e)))
+    }
     return
   }
   if (!res.ok) {
@@ -254,6 +260,14 @@ export interface ChatBlockResponse {
 }
 
 export async function chatBlock(body: ChatRequestBody): Promise<ChatBlockResponse> {
-  const { data } = await http.post<ChatBlockResponse>('/api/chat', { ...body, stream: false })
-  return data
+  try {
+    const { data } = await http.post<ChatBlockResponse>('/api/chat', { ...body, stream: false })
+    return data
+  } catch (e) {
+    // 增强超时错误提示
+    if (e instanceof Error && (e.message.includes('timeout') || e.message.includes('timed out'))) {
+      throw new Error('请求超时，模型响应时间过长。请稍后重试或简化问题。')
+    }
+    throw e
+  }
 }

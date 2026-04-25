@@ -48,12 +48,17 @@ app:
   # HTTP 客户端配置
   http-client:
     connect-timeout-ms: ${HTTP_CONNECT_TIMEOUT:10000}
-    read-timeout-ms: ${HTTP_READ_TIMEOUT:180000}
+    read-timeout-ms: ${HTTP_READ_TIMEOUT:300000}  # 读取超时 300 秒（模型响应可能较慢）
     connection-request-timeout-ms: ${HTTP_CONNECTION_REQUEST_TIMEOUT:5000}
     max-total: ${HTTP_MAX_TOTAL:100}
     max-per-route: ${HTTP_MAX_PER_ROUTE:20}
     validate-after-inactivity-ms: 1000
     time-to-live-minutes: 10
+  # 重试配置（Spring Retry）
+  # 超时或网络错误时自动重试，最多 3 次，每次间隔 2 秒
+  retry:
+    max-attempts: 3
+    delay-ms: 2000
   # 线程池配置
   thread-pool:
     core-size: ${THREAD_POOL_CORE:8}

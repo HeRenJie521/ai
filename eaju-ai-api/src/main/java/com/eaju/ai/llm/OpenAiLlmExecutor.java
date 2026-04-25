@@ -77,7 +77,9 @@ public class OpenAiLlmExecutor {
         cfg.validateOrThrow();
         String modelId = cfg.resolveUpstreamModelId(request.getModel(), request.getMode());
         ObjectNode body = buildChatCompletionBody(cfg, modelId, request, true);
-        httpClient.postStream(cfg.getBaseUrl(), cfg.getApiKey(), body, emitter, onEachChunkJson, upstreamHolder);
+        log.info("[LLM请求-流式] provider={} model={}", cfg.getCode(), modelId);
+        // 使用带重试的流式方法，超时或网络错误时自动重试最多 3 次
+        httpClient.postStreamWithRetry(cfg.getBaseUrl(), cfg.getApiKey(), body, emitter, onEachChunkJson, upstreamHolder);
     }
 
     private ObjectNode buildChatCompletionBody(LlmProviderConfigSnapshot cfg, String modelId,

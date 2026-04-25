@@ -4,10 +4,12 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.autoconfigure.domain.EntityScan;
 import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
+import org.springframework.retry.annotation.EnableRetry;
 
 @SpringBootApplication
 @EnableJpaRepositories(basePackages = "com.eaju.ai.persistence.repository")
 @EntityScan(basePackages = "com.eaju.ai.persistence.entity")
+@EnableRetry
 public class EajuAiApplication {
 
     public static void main(String[] args) {
