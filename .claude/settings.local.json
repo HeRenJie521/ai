@@ -38,7 +38,15 @@
       "Bash(/Library/PostgreSQL/17/bin/psql *)",
       "Bash(PGPASSWORD=root /Library/PostgreSQL/17/bin/psql *)",
       "Bash(/usr/local/bin/mvn --version)",
-      "Bash(/opt/homebrew/bin/mvn --version)"
+      "Bash(/opt/homebrew/bin/mvn --version)",
+      "Bash(/Users/hrj/developer/SDK/Server/apache-maven-3.9.11/bin/mvn compile *)",
+      "Bash(/usr/libexec/java_home -V)",
+      "Bash(JAVA_HOME=/Library/Java/JavaVirtualMachines/jdk-1.8.jdk/Contents/Home /Users/hrj/developer/SDK/Server/apache-maven-3.9.11/bin/mvn compile -q)",
+      "Bash(grep -v \"符号\\\\|位置\\\\|^$\")",
+      "Bash(jar xf *)",
+      "Bash(mv com/eaju/ai/persistence/entity/AiAppToolEntity.class classes/com/eaju/ai/persistence/entity/)",
+      "Bash(mv com/eaju/ai/persistence/repository/AiAppToolRepository.class classes/com/eaju/ai/persistence/repository/)",
+      "Bash(rm -rf com)"
     ]
   }
 }

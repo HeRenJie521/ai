@@ -48,7 +48,9 @@ public class ChatController {
         String uid = CallerPrincipal.userId(authentication);
         request.setInternalApiKeyId(apiKeyId);
         request.setInternalIntegrationId(integrationId);
-        request.setInternalAppId(appId);
+        // 优先使用 token 中携带的 appId（embed 登录），其次使用请求体中的 agentId（/home 页面普通用户选择 Agent）
+        Long effectiveAppId = appId != null ? appId : request.getAgentId();
+        request.setInternalAppId(effectiveAppId);
         request.setInternalJti(CallerPrincipal.jti(authentication));
         // 展平 extendedParameters → internalExtendedParams 供工具执行器快速查找
         if (request.getExtendedParameters() != null && !request.getExtendedParameters().isEmpty()) {
@@ -63,7 +65,7 @@ public class ChatController {
                     uid,
                     apiKeyId,
                     integrationId,
-                    appId,
+                    effectiveAppId,
                     request.getSessionId(),
                     request.getMessages(),
                     request.getProvider(),

@@ -22,13 +22,17 @@ export interface ChatMessage {
   createdAt?: string | null
 }
 
-export async function listConversations(): Promise<ConversationItem[]> {
-  const { data } = await http.get<ConversationItem[]>('/api/conversations')
+export async function listConversations(agentId?: number | null, all?: boolean): Promise<ConversationItem[]> {
+  const params: Record<string, unknown> = {}
+  if (agentId != null) params.agentId = agentId
+  if (all) params.all = true
+  const { data } = await http.get<ConversationItem[]>('/api/conversations', { params })
   return data
 }
 
-export async function createConversation(): Promise<ConversationItem> {
-  const { data } = await http.post<ConversationItem>('/api/conversations')
+export async function createConversation(agentId?: number | null): Promise<ConversationItem> {
+  const params = agentId != null ? { agentId } : {}
+  const { data } = await http.post<ConversationItem>('/api/conversations', undefined, { params })
   return data
 }
 

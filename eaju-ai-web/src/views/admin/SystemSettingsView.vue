@@ -563,7 +563,7 @@ function confirmDeleteProvider(row: LlmAdminRow) {
 }
 
 function back() {
-  router.push('/chat')
+  router.push('/home')
 }
 
 function goTo(page: 'llm' | 'conversations' | 'api-keys' | 'ai-apps' | 'tools' | 'admin-accounts' | 'api-docs') {

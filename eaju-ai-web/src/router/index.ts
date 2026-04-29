@@ -12,7 +12,13 @@ const router = createRouter({
     },
     {
       path: '/',
-      redirect: '/chat',
+      redirect: '/home',
+    },
+    {
+      path: '/home',
+      name: 'home',
+      component: () => import('@/views/AgentChatView.vue'),
+      meta: { auth: true },
     },
     {
       path: '/chat',
@@ -104,7 +110,7 @@ router.beforeEach((to) => {
     return { name: 'chat' }
   }
   if (to.meta.guest && auth.isLoggedIn && to.name === 'login') {
-    return { name: 'chat' }
+    return { name: 'home' }
   }
   return true
 })

@@ -12,6 +12,8 @@ export interface ChatRequestBody {
   maxTokens?: number
   /** 与后端 ChatRequestDto.thinkingMode 一致；false 时不展示/不落库思考流 */
   thinkingMode?: boolean
+  /** 选择的 Agent 应用 ID，后端据此应用 Agent 的提示词/工具等配置 */
+  agentId?: number
 }
 
 /** 流式增量：正文与思考过程（OpenAI 兼容里常为 delta.reasoning_content） */

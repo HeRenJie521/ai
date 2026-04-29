@@ -18,6 +18,12 @@ public class ChatRequestDto {
     private String provider;
 
     /**
+     * 前端选择的 Agent 应用 ID（ai_app.id）。普通登录用户传此字段时，后端自动应用该 Agent
+     * 的系统提示词、工具绑定等配置，等同于 embed 登录时携带 appId 的效果。
+     */
+    private Long agentId;
+
+    /**
      * 会话 ID（可选）：有值时从 Redis 读取该会话历史并拼在本轮 {@link #messages} 之前，阻塞对话成功后再写回。
      */
     private String sessionId;
@@ -281,5 +287,13 @@ public class ChatRequestDto {
 
     public void setInternalExtendedParams(Map<String, String> internalExtendedParams) {
         this.internalExtendedParams = internalExtendedParams;
+    }
+
+    public Long getAgentId() {
+        return agentId;
+    }
+
+    public void setAgentId(Long agentId) {
+        this.agentId = agentId;
     }
 }

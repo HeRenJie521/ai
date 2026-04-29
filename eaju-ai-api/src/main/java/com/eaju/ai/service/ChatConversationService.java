@@ -160,6 +160,18 @@ public class ChatConversationService {
         return out;
     }
 
+    /** 返回该用户所有未删除会话（含 app/embed/apiKey 类型），供 /home 页全量展示 */
+    @Transactional(readOnly = true)
+    public List<ConversationResponseDto> listAllForUser(String userId) {
+        List<ConversationResponseDto> out = new ArrayList<>();
+        if (!StringUtils.hasText(userId)) return out;
+        for (ChatConversationEntity e : conversationRepository
+                .findByUserIdAndDeletedAtIsNullOrderByLastMessageAtDesc(userId.trim())) {
+            out.add(toDto(e));
+        }
+        return out;
+    }
+
     @Transactional(readOnly = true)
     public List<ConversationResponseDto> listForApiKey(Long apiKeyId) {
         List<ConversationResponseDto> out = new ArrayList<>();
@@ -172,6 +184,11 @@ public class ChatConversationService {
 
     @Transactional
     public ConversationResponseDto createNew(String userId, Long apiKeyId) {
+        return createNew(userId, apiKeyId, null);
+    }
+
+    @Transactional
+    public ConversationResponseDto createNew(String userId, Long apiKeyId, Long appId) {
         if (!StringUtils.hasText(userId)) throw new IllegalArgumentException("用户无效");
         String sessionId = UUID.randomUUID().toString();
         ChatConversationEntity n = new ChatConversationEntity();
@@ -180,6 +197,7 @@ public class ChatConversationService {
         n.setTitle("新对话");
         n.setLastMessageAt(Instant.now());
         if (apiKeyId != null) n.setApiKeyId(apiKeyId);
+        if (appId != null) n.setAppId(appId);
         conversationRepository.save(n);
         return toDto(n);
     }

@@ -25,7 +25,7 @@ async function onSubmit() {
     })
     auth.setFromLogin(res)
     message.success('登录成功')
-    const redirect = (route.query.redirect as string) || '/chat'
+    const redirect = (route.query.redirect as string) || '/home'
     await router.replace(redirect)
   } catch (e: unknown) {
     const err = e as { response?: { data?: { error?: string } } }
@@ -49,7 +49,7 @@ onMounted(async () => {
       console.log('[Auto Login] 登录成功，响应:', res)
       auth.setFromLogin(res)
       message.success('登录成功')
-      const redirect = (route.query.redirect as string) || '/chat'
+      const redirect = (route.query.redirect as string) || '/home'
       await router.replace(redirect)
     } catch (e: unknown) {
       console.error('[Auto Login] 自动登录失败，错误详情:', e)
