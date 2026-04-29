@@ -47,6 +47,7 @@ import ApiKeysView from './ApiKeysView.vue'
 import AiAppsView from './AiAppsView.vue'
 import ToolsView from './ToolsView.vue'
 import AdminAccountsView from './AdminAccountsView.vue'
+import ApiDocsView from './ApiDocsView.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -54,13 +55,14 @@ const message = useMessage()
 const dialog = useDialog()
 const auth = useAuthStore()
 
-const currentPage = computed<'llm' | 'conversations' | 'api-keys' | 'ai-apps' | 'tools' | 'admin-accounts'>(() => {
+const currentPage = computed<'llm' | 'conversations' | 'api-keys' | 'ai-apps' | 'tools' | 'admin-accounts' | 'api-docs'>(() => {
   const path = route.path
   if (path === '/settings/conversations') return 'conversations'
   if (path === '/settings/api-keys') return 'api-keys'
   if (path === '/settings/ai-apps') return 'ai-apps'
   if (path === '/settings/tools') return 'tools'
   if (path === '/settings/admin-accounts') return 'admin-accounts'
+  if (path === '/settings/api-docs') return 'api-docs'
   return 'llm'
 })
 
@@ -564,7 +566,7 @@ function back() {
   router.push('/chat')
 }
 
-function goTo(page: 'llm' | 'conversations' | 'api-keys' | 'ai-apps' | 'tools' | 'admin-accounts') {
+function goTo(page: 'llm' | 'conversations' | 'api-keys' | 'ai-apps' | 'tools' | 'admin-accounts' | 'api-docs') {
   router.push(`/settings/${page}`)
 }
 </script>
@@ -586,7 +588,7 @@ function goTo(page: 'llm' | 'conversations' | 'api-keys' | 'ai-apps' | 'tools' |
         </div>
         <div v-if="auth.isAdmin" class="menu-item" :class="{ active: currentPage === 'ai-apps' }" @click="goTo('ai-apps')">
           <span class="menu-icon">🤖</span>
-          <span class="menu-label">应用管理</span>
+          <span class="menu-label">Agent应用</span>
         </div>
         <div v-if="auth.isAdmin" class="menu-item" :class="{ active: currentPage === 'api-keys' }" @click="goTo('api-keys')">
           <span class="menu-icon">🔑</span>
@@ -599,6 +601,10 @@ function goTo(page: 'llm' | 'conversations' | 'api-keys' | 'ai-apps' | 'tools' |
         <div v-if="auth.isAdmin" class="menu-item" :class="{ active: currentPage === 'admin-accounts' }" @click="goTo('admin-accounts')">
           <span class="menu-icon">👤</span>
           <span class="menu-label">系统管理员</span>
+        </div>
+        <div v-if="auth.isAdmin" class="menu-item" :class="{ active: currentPage === 'api-docs' }" @click="goTo('api-docs')">
+          <span class="menu-icon">📄</span>
+          <span class="menu-label">API 文档</span>
         </div>
       </div>
     </div>
@@ -876,7 +882,7 @@ function goTo(page: 'llm' | 'conversations' | 'api-keys' | 'ai-apps' | 'tools' |
         <ConversationsView />
       </div>
 
-      <!-- AI 应用管理 -->
+      <!-- Agent应用管理 -->
       <div v-if="currentPage === 'ai-apps'" class="settings-content-inner-full">
         <AiAppsView />
       </div>
@@ -894,6 +900,11 @@ function goTo(page: 'llm' | 'conversations' | 'api-keys' | 'ai-apps' | 'tools' |
       <!-- 系统管理员 -->
       <div v-if="currentPage === 'admin-accounts'" class="settings-content-inner-full">
         <AdminAccountsView is-embedded />
+      </div>
+
+      <!-- API 文档 -->
+      <div v-if="currentPage === 'api-docs'" class="settings-content-inner-full">
+        <ApiDocsView />
       </div>
     </div>
   </div>

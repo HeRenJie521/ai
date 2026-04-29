@@ -40,7 +40,7 @@ const dialog = useDialog()
 const loading = ref(false)
 const rows = ref<ApiKeyRow[]>([])
 
-// ---- AI 应用选项 ----
+// ---- Agent选项 ----
 const aiAppOptions = ref<{ label: string; value: number }[]>([])
 
 // ---- 新建 API Key ----
@@ -399,12 +399,12 @@ function sessionColumns(keyId: number): DataTableColumns<SessionGroup> {
           @keyup.enter="submitCreate"
         />
       </n-form-item>
-      <n-form-item label="绑定应用（可选）">
+      <n-form-item label="绑定Agent（可选）">
         <n-select
           v-model:value="createAppId"
           :options="aiAppOptions"
           clearable
-          placeholder="不绑定，选择后自动加载该应用的提示词和工具"
+          placeholder="不绑定，选择后自动加载该Agent的提示词和工具"
         />
       </n-form-item>
     </n-form>
@@ -448,12 +448,12 @@ function sessionColumns(keyId: number): DataTableColumns<SessionGroup> {
       <n-form-item label="名称">
         <n-input v-model:value="editName" />
       </n-form-item>
-      <n-form-item label="绑定应用">
+      <n-form-item label="绑定Agent">
         <n-select
           v-model:value="editAppId"
           :options="aiAppOptions"
           clearable
-          placeholder="不绑定，选择后自动加载该应用的提示词和工具"
+          placeholder="不绑定，选择后自动加载该Agent的提示词和工具"
         />
       </n-form-item>
     </n-form>

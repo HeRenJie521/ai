@@ -1,9 +1,9 @@
 ### 变量：服务地址（按需修改端口）
-@baseUrl = http://localhost:8080
+@baseUrl = https://tai.51eanj.com/
 ### 登录后把 JWT 填到下面（管理端 / 聊天接口需要）
 @token = 替换为登录返回的 token
 ### API Key（通过管理后台生成，header 名为 X-API-Key）
-@apiKey = eaju_69f6f2ad75e8259057921673457
+@apiKey = eaju_2fc4236d6cd1211b78cc8f432b9
 
 ### 登录（获取 token）
 POST {{baseUrl}}/api/auth/login

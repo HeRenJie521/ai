@@ -238,7 +238,7 @@ function goTo(page: string) {
         </div>
         <div class="menu-item" @click="goTo('ai-apps')">
           <span class="menu-icon">🤖</span>
-          <span class="menu-label">应用管理</span>
+          <span class="menu-label">Agent应用</span>
         </div>
         <div class="menu-item" @click="goTo('api-keys')">
           <span class="menu-icon">🔑</span>

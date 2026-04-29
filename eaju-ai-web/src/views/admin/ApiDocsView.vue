@@ -95,7 +95,7 @@ const reqParams = [
   { field: 'presencePenalty', type: 'number', required: false, desc: '存在惩罚，范围 -2~2，鼓励模型涉及新话题。优先级：前端传入 > 模型配置 (llm_model.presence_penalty)。' },
   { field: 'responseFormat', type: 'string', required: false, desc: '回复格式。TEXT（默认）或 JSON_OBJECT（要求模型输出合法 JSON）。开启 JSON_OBJECT 时，部分提供商（如通义千问）会自动在 system message 中注入 JSON 提示。' },
   { field: 'thinkingMode', type: 'boolean', required: false, desc: '思考模式，对支持 deep_thinking 的模型生效（如 DeepSeek-R1）。开启后响应中包含 reasoningContent 字段（思维链）。优先级：前端传入 > 模型配置 (llm_model.thinking_mode)。' },
-  { field: 'extendedParameters', type: 'object[]', required: false, desc: '扩展参数列表，格式：[{"key1":"value1"},{"key2":"value2"}]。用于 API Key 绑定应用场景：工具入参中来源设为「APIKey参数」的字段，会按 fieldKey 从此列表中取值，无需用户登录即可传入业务参数（如手机号、门店编码等）。' },
+  { field: 'extendedParameters', type: 'object[]', required: false, desc: '扩展参数列表，格式：[{"key1":"value1"},{"key2":"value2"}]。用于 API Key 绑定Agent场景：工具入参中来源设为「APIKey参数」的字段，会按 fieldKey 从此列表中取值，无需用户登录即可传入业务参数（如手机号、门店编码等）。' },
 ]
 
 const messageParams = [
@@ -229,7 +229,7 @@ const curlAppEmbedLogin = `curl -X POST http://your-host/api/embed/app-login \\
   }'`
 
 const appEmbedLoginReqParams = [
-  { field: 'appId',    type: 'Long',   required: true,  desc: 'AI 应用 ID，对应 ai_app 表 id。从管理后台「应用管理」或嵌入代码中的 aid 参数获取。' },
+  { field: 'appId',    type: 'Long',   required: true,  desc: 'AI 应用 ID，对应 ai_app 表 id。从管理后台「Agent应用」或嵌入代码中的 aid 参数获取。' },
   { field: 'userId',   type: 'string', required: true,  desc: '业务用户 ID。用于在 JWT 中标识用户身份，写入会话缓存。' },
   { field: 'username', type: 'string', required: false, desc: '用户显示名。未传时前端展示名降级为 userId。' },
 ]
@@ -248,7 +248,7 @@ const appEmbedLoginRespFields = [
 
 const openAppEmbedLoginRows = ref(['app-embed-login-params', 'app-embed-login-resp', 'app-embed-login-example'])
 
-// ---- API Key 绑定应用 数据 ----
+// ---- API Key 绑定Agent 数据 ----
 const apikeyAppExample = `curl -X POST http://your-host/api/chat \\
   -H "Content-Type: application/json" \\
   -H "X-API-Key: eaju_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" \\
@@ -265,7 +265,7 @@ const apikeyAppExample = `curl -X POST http://your-host/api/chat \\
   }'`
 
 const apikeyAppFlow = [
-  { step: '1', title: '管理后台创建 API Key 并绑定应用', desc: '在「集成管理 → API Key」新建一条记录，在「绑定应用」下拉中选择已配置好系统提示和工具的 AI 应用，保存后复制生成的密钥。' },
+  { step: '1', title: '管理后台创建 API Key 并绑定Agent', desc: '在「集成管理 → API Key」新建一条记录，在「绑定Agent」下拉中选择已配置好系统提示和工具的 AI 应用，保存后复制生成的密钥。' },
   { step: '2', title: '工具入参来源设为 APIKey参数', desc: '在「接口管理 → 入参管理」中，将需要由调用方传入的字段（如手机号、门店编码）的「来源」设为「APIKey参数」，并填写对应的 key 名称（与 extendedParameters 中的 key 一致）。' },
   { step: '3', title: '调用 /api/chat 时携带 extendedParameters', desc: '在请求体中加入 extendedParameters 数组，每项为 {"key":"value"} 形式。服务端会在工具执行时自动将来源为 apikey 的参数从此数组中取值，无需用户登录即可完成工具调用。' },
 ]
@@ -337,7 +337,7 @@ const navItems = [
   },
   {
     id: 'anchor-apikey-app',
-    label: 'API Key 绑定应用',
+    label: 'API Key 绑定Agent',
     tag: 'GUIDE',
     children: [
       { id: 'anchor-apikey-app-flow', label: '使用流程' },
@@ -720,7 +720,7 @@ onUnmounted(() => {
             <code class="endpoint-path">/api/embed/app-login</code>
           </div>
           <p class="endpoint-desc">
-            应用管理嵌入登录接口。管理员在「应用管理」中配置好 AI 应用并生成嵌入代码，前端通过 URL 参数 <code>aid/uid/username</code> 调用此接口完成登录。<strong>无需 HMAC 签名</strong>，直接按 appId 校验应用是否存在即可。JWT 中携带 appId claim，ChatService 据此直接加载对应 AI 应用配置。
+            Agent应用嵌入登录接口。管理员在「Agent应用」中配置好 AI 应用并生成嵌入代码，前端通过 URL 参数 <code>aid/uid/username</code> 调用此接口完成登录。<strong>无需 HMAC 签名</strong>，直接按 appId 校验应用是否存在即可。JWT 中携带 appId claim，ChatService 据此直接加载对应 AI 应用配置。
           </p>
           <div class="auth-block">
             <n-text strong style="display:block;margin-bottom:6px">鉴权方式</n-text>
@@ -790,12 +790,12 @@ onUnmounted(() => {
           </n-collapse-item>
         </n-collapse>
 
-        <!-- ========== API Key 绑定应用 ========== -->
+        <!-- ========== API Key 绑定Agent ========== -->
         <div id="anchor-apikey-app" class="anchor-target" />
         <n-card :bordered="false" class="section-card">
           <div class="endpoint-row">
             <n-tag type="info" :bordered="false" class="method-tag">使用指南</n-tag>
-            <code class="endpoint-path">API Key 绑定应用</code>
+            <code class="endpoint-path">API Key 绑定Agent</code>
           </div>
           <p class="endpoint-desc">
             将 API Key 与一个 AI 应用绑定后，调用方只需在请求头携带 <code>X-API-Key</code>，服务端即自动加载该应用的系统提示词和工具配置，无需任何登录操作。工具入参中来源设为「APIKey参数」的字段，从请求体的 <code>extendedParameters</code> 中取值。
@@ -847,11 +847,11 @@ onUnmounted(() => {
               <div id="anchor-apikey-app-example" class="anchor-target collapse-title">调用示例（curl）</div>
             </template>
             <div class="code-block-wrap">
-              <div class="code-header"><span>API Key 绑定应用 · 工具调用请求</span><n-button size="tiny" @click="copy(apikeyAppExample)">复制</n-button></div>
+              <div class="code-header"><span>API Key 绑定Agent · 工具调用请求</span><n-button size="tiny" @click="copy(apikeyAppExample)">复制</n-button></div>
               <pre class="code-block">{{ apikeyAppExample }}</pre>
             </div>
             <p class="section-tip" style="margin-top:10px">
-              服务端收到请求后，自动加载绑定应用的系统提示词和工具列表；工具执行时，来源为 <code>apikey</code> 的参数（如 <code>esusMobile</code>）从 <code>extendedParameters</code> 中取值。
+              服务端收到请求后，自动加载绑定Agent的系统提示词和工具列表；工具执行时，来源为 <code>apikey</code> 的参数（如 <code>esusMobile</code>）从 <code>extendedParameters</code> 中取值。
             </p>
           </n-collapse-item>
         </n-collapse>

@@ -40,7 +40,7 @@ const errorMsg = ref('')
 
 // 集成参数（挂载后填充）
 let iid = 0       // WEB_EMBED 集成 ID
-let aid = 0       // 应用管理嵌入 AppID
+let aid = 0       // Agent应用嵌入 AppID
 const integrationName = ref('AI 助手')
 
 // ---- 用户上下文（用于测试展示） ----
@@ -148,7 +148,7 @@ onMounted(async () => {
   }
 
   if (aid) {
-    // 应用管理嵌入方式：通过 aid + phone 登录，无需 token
+    // Agent应用嵌入方式：通过 aid + phone 登录，无需 token
     if (!phone) {
       status.value = 'error'
       errorMsg.value = '缺少必要的嵌入参数（aid / phone）'

@@ -250,11 +250,11 @@ const modelOptions = computed(() =>
   })),
 )
 
-// ---- 新建应用 ----
+// ---- 新建Agent ----
 const showCreate = ref(false)
 const createForm = ref(defaultForm())
 
-// ---- 编辑应用 ----
+// ---- 编辑Agent ----
 const editId = ref<number | null>(null)
 const editForm = ref(defaultForm())
 
@@ -439,7 +439,7 @@ function openCreate() {
 async function submitCreate() {
   const name = createForm.value.name.trim()
   if (!name) {
-    message.warning('请填写应用名称')
+    message.warning('请填写Agent名称')
     return
   }
   const suggestionsJson =
@@ -487,7 +487,7 @@ async function submitEdit() {
   if (id == null) return
   const name = editForm.value.name.trim()
   if (!name) {
-    message.warning('请填写应用名称')
+    message.warning('请填写Agent名称')
     return
   }
   const suggestionsJson =
@@ -737,7 +737,7 @@ function sessionColumns(appId: number): DataTableColumns<SessionGroup> {
 
 const columns: DataTableColumns<AiAppRow> = [
   {
-    title: '应用名称',
+    title: 'Agent名称',
     key: 'name',
     width: 160,
     ellipsis: { tooltip: true },
@@ -813,11 +813,11 @@ const columns: DataTableColumns<AiAppRow> = [
 
 <template>
   <div class="inner">
-    <n-card :bordered="false" class="card" title="应用管理">
+    <n-card :bordered="false" class="card" title="Agent应用">
       <template #header-extra>
         <n-space>
           <n-button @click="openContextDrawer">用户数据</n-button>
-          <n-button type="primary" @click="openCreate">+ 新建应用</n-button>
+          <n-button type="primary" @click="openCreate">+ 新建Agent</n-button>
         </n-space>
       </template>
       <n-spin :show="loading">
@@ -831,23 +831,23 @@ const columns: DataTableColumns<AiAppRow> = [
     </n-card>
   </div>
 
-  <!-- ============ 新建应用弹窗 ============ -->
+  <!-- ============ 新建Agent弹窗 ============ -->
   <n-modal
     v-model:show="showCreate"
     preset="card"
-    title="新建应用"
+    title="新建Agent"
     style="width: min(800px, 96vw)"
     :mask-closable="false"
   >
     <template #header>
       <div style="display:flex; align-items:center; justify-content:space-between; width:100%">
         <n-button size="small" type="info" ghost @click="openContextDrawer">用户数据</n-button>
-        <span style="font-size:16px; font-weight:600">新建应用</span>
+        <span style="font-size:16px; font-weight:600">新建Agent</span>
         <span style="width:60px"></span>
       </div>
     </template>
     <n-form label-placement="top">
-      <n-form-item label="应用名称" required>
+      <n-form-item label="Agent名称" required>
         <n-input v-model:value="createForm.name" placeholder="如 官网客服助手" />
       </n-form-item>
 
@@ -903,11 +903,11 @@ const columns: DataTableColumns<AiAppRow> = [
     </template>
   </n-modal>
 
-  <!-- ============ 编辑应用弹窗 ============ -->
+  <!-- ============ 编辑Agent弹窗 ============ -->
   <n-modal
     :show="editId != null"
     preset="card"
-    title="编辑应用"
+    title="编辑Agent"
     style="width: min(800px, 96vw)"
     :mask-closable="false"
     @update:show="(v: boolean) => { if (!v) editId = null }"
@@ -915,12 +915,12 @@ const columns: DataTableColumns<AiAppRow> = [
     <template #header>
       <div style="display:flex; align-items:center; justify-content:space-between; width:100%">
         <n-button size="small" type="info" ghost @click="openContextDrawer">用户数据</n-button>
-        <span style="font-size:16px; font-weight:600">编辑应用</span>
+        <span style="font-size:16px; font-weight:600">编辑Agent</span>
         <span style="width:60px"></span>
       </div>
     </template>
     <n-form v-if="editId != null" label-placement="top">
-      <n-form-item label="应用名称" required>
+      <n-form-item label="Agent名称" required>
         <n-input v-model:value="editForm.name" />
       </n-form-item>
 

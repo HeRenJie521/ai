@@ -29,7 +29,7 @@ const router = createRouter({
     {
       path: '/settings/api-docs',
       name: 'settings-api-docs',
-      component: () => import('@/views/admin/ApiDocsView.vue'),
+      component: () => import('@/views/admin/SystemSettingsView.vue'),
       meta: { auth: true },
     },
     {
@@ -59,7 +59,7 @@ const router = createRouter({
     {
       path: '/settings/admin-accounts',
       name: 'settings-admin-accounts',
-      component: () => import('@/views/admin/AdminAccountsView.vue'),
+      component: () => import('@/views/admin/SystemSettingsView.vue'),
       meta: { auth: true, admin: true },
     },
     {
