@@ -348,7 +348,7 @@ async function sendMessage(text?: string) {
     provider: selectedProvider.value,
     messages: messages.value.slice(0, assistantIdx),
     stream: currentModeCapability.value?.streamOutput !== false,
-    sessionId: sessionId.value,
+    sessionId: sessionId.value ?? undefined,
     thinkingMode: thinkingOn.value,
     ...(selectedMode.value ? { mode: selectedMode.value } : {}),
   }
