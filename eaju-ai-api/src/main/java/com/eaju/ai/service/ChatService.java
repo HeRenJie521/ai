@@ -153,7 +153,7 @@ public class ChatService {
                     return;
                 }
 
-                // 若应用绑定了工具，走非流式工具调用编排，再将最终回复模拟为 SSE 输出
+                // 若应用绑定了工具，走流式工具调用编排
                 List<AiToolEntity> tools = resolveTools(request.getInternalAppId());
                 if (!tools.isEmpty() && !cfg.modeSupportsToolCall(llmReq.getMode())) {
                     ChatResponseDto errResp = new ChatResponseDto();
@@ -165,14 +165,23 @@ public class ChatService {
                 if (!tools.isEmpty()) {
                     Map<String, Object> userCtx = userContextCacheService.get(request.getInternalJti());
                     Consumer<String> onProgress = buildProgressEmitter(emitter);
-                    OrchestratorResult result = toolCallOrchestrator.chat(llmReq, cfg, tools, userCtx, onProgress);
-                    ChatResponseDto response = result.getResponse();
-                    chatSessionService.appendToolCallToSession(request, result.getWorkMessages(), response);
-                    chatRecordService.saveBlockingTurn(request, effective, response, false);
-                    if (!cfg.resolveThinkingContentWanted(llmReq)) {
-                        response.setReasoningContent(null);
+                    OpenAiStreamAccumulator accum = new OpenAiStreamAccumulator(objectMapper, true);
+                    String resolvedModel = cfg.resolveUpstreamModelId(llmReq.getModel(), llmReq.getMode());
+                    
+                    // 使用流式工具调用编排
+                    ToolCallOrchestrator.StreamOrchestratorResult streamResult = 
+                            toolCallOrchestrator.chatStream(llmReq, cfg, tools, userCtx, onProgress,
+                                    emitter, accum::acceptChunkJson, upstreamHolder);
+                    
+                    // 流式完成后保存会话和记录
+                    if (accum.hasAssistantPayload()) {
+                        ChatResponseDto response = accum.toResponse(cfg.getCode(), resolvedModel);
+                        chatSessionService.appendToolCallToSession(request, streamResult.getWorkMessages(), response);
+                        chatRecordService.saveBlockingTurn(request, effective, response, true);
+                        if (!cfg.resolveThinkingContentWanted(llmReq)) {
+                            response.setReasoningContent(null);
+                        }
                     }
-                    emitResponseAsStream(emitter, response);
                     return;
                 }
 

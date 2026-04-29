@@ -15,10 +15,13 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
+import java.io.Closeable;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 
 /**
@@ -46,6 +49,107 @@ public class ToolCallOrchestrator {
         this.openAiLlmExecutor = openAiLlmExecutor;
         this.toolCallExecutor = toolCallExecutor;
         this.objectMapper = objectMapper;
+    }
+
+    /**
+     * 流式工具调用编排：工具调用阶段使用非流式，最终回复阶段使用流式。
+     *
+     * @param request  合并了历史记录的请求
+     * @param cfg      LLM 配置快照
+     * @param tools    本次对话可用的工具列表
+     * @param userCtx  当前用户上下文
+     * @param onProgress 进度回调（推送工具调用进度）
+     * @param streamEmitter SSE 发射器，用于流式发送最终回复
+     * @param onEachChunkJson 每个流式 chunk 的回调
+     * @param upstreamHolder 上游连接持有者
+     * @return 流式编排结果，包含工作消息列表
+     * @throws Exception 异常
+     */
+    public StreamOrchestratorResult chatStream(ChatRequestDto request, LlmProviderConfigSnapshot cfg,
+                           List<AiToolEntity> tools, Map<String, Object> userCtx,
+                           Consumer<String> onProgress,
+                           SseEmitter streamEmitter,
+                           Consumer<String> onEachChunkJson,
+                           AtomicReference<Closeable> upstreamHolder) throws Exception {
+        ArrayNode toolsArray = buildToolsArray(tools, null);
+        List<ChatMessageDto> workMessages = new ArrayList<>(request.getMessages());
+
+        ChatResponseDto lastResponse = null;
+        for (int round = 0; round < MAX_ROUNDS; round++) {
+            ChatRequestDto roundRequest = copyWithMessages(request, workMessages);
+
+            // 最后一轮（没有 tool_calls 或达到最大轮次）使用流式请求
+            boolean isFinalRound = (round == MAX_ROUNDS - 1);
+            if (isFinalRound) {
+                log.info("[工具编排-流式] 第 {} 轮，使用流式请求", round + 1);
+                openAiLlmExecutor.chatStream(roundRequest, cfg, streamEmitter, onEachChunkJson, upstreamHolder);
+                return new StreamOrchestratorResult(workMessages);
+            }
+
+            // 非最后一轮使用非流式请求，获取工具调用指令
+            lastResponse = openAiLlmExecutor.chatWithTools(roundRequest, cfg, toolsArray);
+
+            JsonNode raw = lastResponse.getRaw();
+            List<ToolCallItem> toolCalls = extractToolCalls(raw);
+            if (toolCalls.isEmpty()) {
+                // 响应里没有 tool_calls，是普通文本回复，结束循环
+                break;
+            }
+
+            String finishReason = lastResponse.getFinishReason();
+            log.info("[工具编排] 第 {} 轮，共 {} 个工具调用，finish_reason={}", round + 1, toolCalls.size(), finishReason);
+
+            ChatMessageDto assistantMsg = buildAssistantToolCallMessage(raw);
+            workMessages.add(assistantMsg);
+
+            for (ToolCallItem tc : toolCalls) {
+                AiToolEntity matchedTool = findTool(tools, tc.functionName);
+
+                if (onProgress != null) {
+                    String label = matchedTool != null && StringUtils.hasText(matchedTool.getLabel())
+                            ? matchedTool.getLabel() : "数据";
+                    onProgress.accept("正在" + label + "，请稍后...\n\n");
+                }
+
+                String result;
+                if (matchedTool == null) {
+                    log.warn("[工具编排] 未找到工具定义: {}", tc.functionName);
+                    result = "{\"error\": \"未找到工具: " + tc.functionName + "\"}";
+                } else {
+                    log.info("[工具编排] 调用工具={} id={} 入参={}", tc.functionName, tc.id, tc.arguments);
+                    result = toolCallExecutor.execute(matchedTool, tc.arguments, userCtx,
+                            request.getInternalExtendedParams());
+                    log.info("[工具编排] 工具={} 返回结果={}", tc.functionName, result);
+                }
+
+                ChatMessageDto toolMsg = new ChatMessageDto();
+                toolMsg.setRole("tool");
+                toolMsg.setToolCallId(tc.id);
+                toolMsg.setContent(result);
+                workMessages.add(toolMsg);
+            }
+        }
+
+        // 最终回复使用流式请求
+        log.info("[工具编排-流式] 工具调用完成，发送流式最终回复");
+        ChatRequestDto finalRequest = copyWithMessages(request, workMessages);
+        openAiLlmExecutor.chatStream(finalRequest, cfg, streamEmitter, onEachChunkJson, upstreamHolder);
+        return new StreamOrchestratorResult(workMessages);
+    }
+
+    /**
+     * 流式工具调用编排结果
+     */
+    public static class StreamOrchestratorResult {
+        private final List<ChatMessageDto> workMessages;
+
+        public StreamOrchestratorResult(List<ChatMessageDto> workMessages) {
+            this.workMessages = workMessages;
+        }
+
+        public List<ChatMessageDto> getWorkMessages() {
+            return workMessages;
+        }
     }
 
     /**

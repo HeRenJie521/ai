@@ -27,6 +27,7 @@ import {
   type ChatMessage,
   type ConversationItem,
 } from '@/api/conversations'
+import { chatStreamFetch, type StreamDelta } from '@/api/chat'
 import { renderChatMarkdown } from '@/utils/chatMarkdown'
 
 const route = useRoute()
@@ -343,59 +344,39 @@ async function sendMessage(text?: string) {
   const assistantIdx = messages.value.length
   messages.value.push({ role: 'assistant', content: '', reasoningContent: '' })
 
+  const payload = {
+    provider: selectedProvider.value,
+    messages: messages.value.slice(0, assistantIdx),
+    stream: currentModeCapability.value?.streamOutput !== false,
+    sessionId: sessionId.value,
+    thinkingMode: thinkingOn.value,
+    ...(selectedMode.value ? { mode: selectedMode.value } : {}),
+  }
+
   try {
-    const payload: Record<string, unknown> = {
-      provider: selectedProvider.value,
-      messages: messages.value.slice(0, assistantIdx),
-      stream: currentModeCapability.value?.streamOutput !== false,  // 模型支持流式则使用流式
-      sessionId: sessionId.value,
-      thinkingMode: thinkingOn.value,
-    }
-    if (selectedMode.value) payload.mode = selectedMode.value
-
-    const resp = await fetch('/api/chat', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${authStore.token}`,
+    await chatStreamFetch(
+      authStore.token,
+      payload,
+      (delta: StreamDelta) => {
+        if (delta.content) {
+          messages.value[assistantIdx].content += delta.content
+        }
+        if (thinkingOn.value && delta.reasoning) {
+          messages.value[assistantIdx].reasoningContent =
+            (messages.value[assistantIdx].reasoningContent ?? '') + delta.reasoning
+        }
+        void scrollToStreamBottom()
       },
-      body: JSON.stringify(payload),
-    })
-
-    if (!resp.ok || !resp.body) {
-      messages.value[assistantIdx].content = '请求失败，请重试'
-      return
-    }
-
-    const reader = resp.body.getReader()
-    const decoder = new TextDecoder()
-    let buffer = ''
-    while (true) {
-      const { done, value } = await reader.read()
-      if (done) break
-      buffer += decoder.decode(value, { stream: true })
-      const lines = buffer.split('\n')
-      buffer = lines.pop() ?? ''
-      for (const line of lines) {
-        if (!line.startsWith('data:')) continue
-        const raw = line.slice(5).trim()
-        if (raw === '[DONE]') continue
-        try {
-          const chunk = JSON.parse(raw)
-          const delta = chunk?.choices?.[0]?.delta?.content ?? ''
-          const reasoning = chunk?.choices?.[0]?.delta?.reasoning_content ?? ''
-          messages.value[assistantIdx].content += delta
-          if (thinkingOn.value && reasoning) {
-            messages.value[assistantIdx].reasoningContent =
-              (messages.value[assistantIdx].reasoningContent ?? '') + reasoning
-          }
-          await scrollToStreamBottom()
-        } catch { /* skip */ }
-      }
-    }
-    if (isNewSession) {
-      try { conversations.value = await listConversations() } catch { /* 忽略 */ }
-    }
+      () => {
+        // onDone
+        if (isNewSession) {
+          listConversations().then(list => { conversations.value = list }).catch(() => {})
+        }
+      },
+      (e: Error) => {
+        messages.value[assistantIdx].content = `错误：${e.message}`
+      },
+    )
   } catch (e: unknown) {
     const err = e as { message?: string }
     messages.value[assistantIdx].content = `错误：${err.message ?? '未知错误'}`
