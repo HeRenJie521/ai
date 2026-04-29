@@ -132,6 +132,19 @@ function formatTokens(n: number): string {
   return String(n)
 }
 
+function formatLocalTime(timeStr?: string | null): string {
+  if (!timeStr) return '-'
+  try {
+    const date = new Date(timeStr)
+    if (isNaN(date.getTime())) {
+      return timeStr.replace('T', ' ').slice(0, 19)
+    }
+    return date.toLocaleString('zh-CN', { hour12: false })
+  } catch {
+    return timeStr.replace('T', ' ').slice(0, 19)
+  }
+}
+
 const columns = [
   {
     title: '用户',
@@ -198,8 +211,7 @@ const columns = [
     key: 'lastMessageAt',
     width: 180,
     align: 'center' as const,
-    render: (row: ConversationAdminRow) =>
-      row.lastMessageAt ? row.lastMessageAt.replace('T', ' ').slice(0, 19) : '-',
+    render: (row: ConversationAdminRow) => formatLocalTime(row.lastMessageAt),
   },
   {
     title: '操作',
@@ -298,8 +310,8 @@ const columns = [
                 {{ detailData.deletedAt ? '已删除' : '正常' }}
               </n-tag>
             </n-descriptions-item>
-            <n-descriptions-item label="创建时间">{{ detailData.createdAt?.replace('T', ' ').slice(0, 19) || '-' }}</n-descriptions-item>
-            <n-descriptions-item label="最后消息">{{ detailData.lastMessageAt?.replace('T', ' ').slice(0, 19) || '-' }}</n-descriptions-item>
+            <n-descriptions-item label="创建时间">{{ formatLocalTime(detailData.createdAt) }}</n-descriptions-item>
+            <n-descriptions-item label="最后消息">{{ formatLocalTime(detailData.lastMessageAt) }}</n-descriptions-item>
           </n-descriptions>
 
           <div v-if="detailData.usage" class="usage-section">
@@ -350,7 +362,7 @@ const columns = [
                   </details>
                   <div v-if="msg.role === 'assistant'" class="msg-md" v-html="renderChatMarkdown(msg.content)" />
                   <div v-else-if="msg.content" class="message-content">{{ msg.content }}</div>
-                  <div v-if="msg.createdAt" class="message-time">{{ msg.createdAt.replace('T', ' ').slice(0, 19) }}</div>
+                  <div v-if="msg.createdAt" class="message-time">{{ formatLocalTime(msg.createdAt) }}</div>
                 </div>
               </div>
             </div>

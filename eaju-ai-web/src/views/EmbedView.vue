@@ -725,9 +725,9 @@ function onMdAreaClick(ev: MouseEvent) {
           </svg>
         </button>
         <span class="topbar-logo">{{ integrationName }}</span>
-        <!-- 用户上下文测试按钮（仅当有用户数据时显示） -->
+        <!-- 用户上下文测试按钮（隐藏） -->
         <button
-          v-if="userContext && Object.keys(userContext).length > 0"
+          v-if="false"
           class="icon-btn"
           :class="{ 'icon-btn--active': showUserContext }"
           title="用户上下文（测试）"
@@ -838,8 +838,9 @@ function onMdAreaClick(ev: MouseEvent) {
               </button>
             </div>
             <div style="flex: 1" />
-            <!-- 语音按钮 -->
+            <!-- 语音按钮（隐藏） -->
             <button
+              v-if="false"
               :class="['voice-btn', { 'voice-btn--recording': isRecording }]"
               :title="isRecording ? '停止录音' : '语音输入'"
               :disabled="sending || isErrorStatus()"
