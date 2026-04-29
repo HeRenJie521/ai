@@ -767,7 +767,7 @@ function goSettingsPage(page: 'llm' | 'api-keys' | 'api-docs') {
 
     <aside v-if="!isMobile" class="sidebar ds-sidebar">
       <div class="brand">
-        <span class="brand-mark">专家领域</span>
+        <span class="brand-mark">Agent专家</span>
         <span class="brand-sub">AI</span>
       </div>
       <div class="side-head">
@@ -1004,7 +1004,7 @@ function goSettingsPage(page: 'llm' | 'api-keys' | 'api-docs') {
 
     <n-drawer v-model:show="drawerOpen" :width="288" placement="left" class="drawer-side">
       <div class="brand drawer-brand">
-        <span class="brand-mark">专家领域</span>
+        <span class="brand-mark">Agent专家</span>
         <span class="brand-sub">AI</span>
       </div>
       <div class="side-head">

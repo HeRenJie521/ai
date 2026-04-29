@@ -366,6 +366,7 @@ public class ChatConversationService {
         dto.setLastProviderCode(e.getLastProviderCode());
         dto.setLastModeKey(e.getLastModeKey());
         dto.setLastModelDisplayName(resolveModelDisplayName(e.getLlmModelId(), e.getLastProviderCode(), e.getLastModeKey()));
+        dto.setAppId(e.getAppId());
         return dto;
     }
 

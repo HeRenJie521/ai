@@ -9,6 +9,8 @@ export interface ConversationItem {
   lastModeKey?: string | null
   /** 提供商·模型展示名，如"通义千问·qwen-plus" */
   lastModelDisplayName?: string | null
+  /** Agent 应用 ID，Agent 会话时有值，用于恢复 Agent 选择 */
+  appId?: number | null
 }
 
 export interface ChatMessage {

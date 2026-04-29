@@ -240,6 +240,15 @@ async function selectConv(c: ConversationItem) {
   sessionId.value = c.sessionId
   conversationPicked.value = true
   deletingSessionId.value = null
+
+  // 恢复 Agent 选择：若会话关联 Agent 且与当前不同，切换并加载欢迎语
+  const agentId = c.appId ?? null
+  if (agentId !== selectedAgentId.value) {
+    selectedAgentId.value = agentId
+    // watch 会自动加载 welcomeConfig，但若 agentId 为 null 则手动清空
+    if (agentId == null) welcomeConfig.value = null
+  }
+
   try {
     messages.value = await loadConversationMessages(c.sessionId)
   } catch (e) {
@@ -566,7 +575,7 @@ function goSettingsPage(page: 'llm' | 'api-keys' | 'api-docs') {
     <!-- ===== 左侧会话列表 ===== -->
     <aside v-if="!isMobile" class="sidebar ds-sidebar">
       <div class="brand">
-        <span class="brand-mark">专家领域</span>
+        <span class="brand-mark">Agent专家</span>
         <span class="brand-sub">AI</span>
       </div>
       <div class="side-head">
@@ -594,7 +603,6 @@ function goSettingsPage(page: 'llm' | 'api-keys' | 'api-docs') {
           <template v-else>
             <div class="conv-item-main" @click="selectConv(c)">
               <n-ellipsis class="conv-title">{{ c.title || '无标题' }}</n-ellipsis>
-              <span v-if="c.lastModelDisplayName" class="conv-model">{{ c.lastModelDisplayName }}</span>
             </div>
             <button class="conv-del-btn" title="删除会话" @click="askDelete(c, $event)">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -833,7 +841,7 @@ function goSettingsPage(page: 'llm' | 'api-keys' | 'api-docs') {
     <!-- ===== 移动端抽屉 ===== -->
     <n-drawer v-model:show="drawerOpen" :width="288" placement="left" class="drawer-side">
       <div class="brand drawer-brand">
-        <span class="brand-mark">专家领域</span>
+        <span class="brand-mark">Agent专家</span>
         <span class="brand-sub">AI</span>
       </div>
       <div class="side-head">
@@ -861,7 +869,6 @@ function goSettingsPage(page: 'llm' | 'api-keys' | 'api-docs') {
           <template v-else>
             <div class="conv-item-main" @click="selectConv(c)">
               <n-ellipsis class="conv-title">{{ c.title || '无标题' }}</n-ellipsis>
-              <span v-if="c.lastModelDisplayName" class="conv-model">{{ c.lastModelDisplayName }}</span>
             </div>
             <button class="conv-del-btn" title="删除会话" @click="askDelete(c, $event)">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">

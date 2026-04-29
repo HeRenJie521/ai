@@ -11,6 +11,8 @@ public class ConversationResponseDto {
     private String lastModeKey;
     /** 前端展示用：提供商名称·模型名称，如"通义千问·qwen3.5-plus" */
     private String lastModelDisplayName;
+    /** 关联的 AI 应用 ID（Agent 会话），前端据此恢复 Agent 选择 */
+    private Long appId;
 
     public String getSessionId() { return sessionId; }
     public void setSessionId(String sessionId) { this.sessionId = sessionId; }
@@ -29,4 +31,7 @@ public class ConversationResponseDto {
 
     public String getLastModelDisplayName() { return lastModelDisplayName; }
     public void setLastModelDisplayName(String lastModelDisplayName) { this.lastModelDisplayName = lastModelDisplayName; }
+
+    public Long getAppId() { return appId; }
+    public void setAppId(Long appId) { this.appId = appId; }
 }

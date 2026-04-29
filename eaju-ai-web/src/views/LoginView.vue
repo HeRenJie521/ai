@@ -77,7 +77,7 @@ onMounted(async () => {
       <!-- 正常登录表单 -->
       <template v-else>
         <div class="login-header">
-          <h2 class="login-title">专家领域</h2>
+          <h2 class="login-title">Agent专家</h2>
         </div>
         <p class="hint">使用倚天系统账号与密码登录</p>
         <n-form @submit.prevent="onSubmit">
