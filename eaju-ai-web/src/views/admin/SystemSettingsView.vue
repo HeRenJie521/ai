@@ -602,7 +602,7 @@ function goTo(page: 'llm' | 'conversations' | 'api-keys' | 'ai-apps' | 'tools' |
           <span class="menu-icon">👤</span>
           <span class="menu-label">系统管理员</span>
         </div>
-        <div v-if="auth.isAdmin" class="menu-item" :class="{ active: currentPage === 'api-docs' }" @click="goTo('api-docs')">
+        <div class="menu-item" :class="{ active: currentPage === 'api-docs' }" @click="goTo('api-docs')">
           <span class="menu-icon">📄</span>
           <span class="menu-label">API 文档</span>
         </div>
