@@ -28,7 +28,7 @@ public class RestClientConfig {
     @Value("${app.http-client.connect-timeout-ms:30000}")
     private int connectTimeout;
 
-    @Value("${app.http-client.read-timeout-ms:600000}")
+    @Value("${app.http-client.read-timeout-ms:10000}")
     private int readTimeout;
 
     @Value("${app.http-client.connection-request-timeout-ms:10000}")

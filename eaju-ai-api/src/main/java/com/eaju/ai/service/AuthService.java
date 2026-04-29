@@ -74,9 +74,15 @@ public class AuthService {
         if (!StringUtils.hasText(phone)) {
             throw new IllegalArgumentException("手机号不能为空");
         }
+        String password = request.getPassword();
         JsonNode root;
         try {
-            root = dmsExternalLoginClient.login(phone, request.getPassword());
+            // 密码为空时，使用免密登录（loginType=2）
+            if (!StringUtils.hasText(password)) {
+                root = dmsExternalLoginClient.loginWithLoginType(phone, "2");
+            } else {
+                root = dmsExternalLoginClient.login(phone, password);
+            }
         } catch (IllegalArgumentException ex) {
             throw ex;
         } catch (Exception ex) {

@@ -61,6 +61,7 @@ public class DmsExternalLoginClient {
                 .encode()
                 .toUri();
 
+        log.info("[DMS 密码登录] 请求 URL: {}", uri.toString());
         try {
             ResponseEntity<String> response = restTemplate.getForEntity(uri, String.class);
             if (!response.getStatusCode().is2xxSuccessful() || response.getBody() == null) {
@@ -100,6 +101,7 @@ public class DmsExternalLoginClient {
                 .encode()
                 .toUri();
 
+        log.info("[DMS 免密登录] 请求 URL: {}", uri.toString());
         try {
             ResponseEntity<String> response = restTemplate.getForEntity(uri, String.class);
             if (!response.getStatusCode().is2xxSuccessful() || response.getBody() == null) {

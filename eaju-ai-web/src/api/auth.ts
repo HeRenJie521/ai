@@ -2,7 +2,8 @@ import http from './http'
 
 export interface LoginPayload {
   phone: string
-  password: string
+  password?: string
+  loginType?: number
 }
 
 export interface LoginResult {
