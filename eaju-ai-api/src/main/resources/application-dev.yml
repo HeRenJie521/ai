@@ -1,12 +1,12 @@
 # 开发环境（本地）：连接测试环境数据库和 Redis
 spring:
   datasource:
-#    url: jdbc:postgresql://localhost:5432/zhiyi
-#    username: postgres
-#    password: root
-    url: jdbc:postgresql://10.0.254.21:5432/eaju_ai
-    username: eaju_ai_user
-    password: anbang@123
+    url: jdbc:postgresql://localhost:5432/zhiyi
+    username: postgres
+    password: root
+#    url: jdbc:postgresql://10.0.254.21:5432/eaju_ai
+#    username: eaju_ai_user
+#    password: anbang@123
     driver-class-name: org.postgresql.Driver
     hikari:
       # 连接池配置
