@@ -411,13 +411,23 @@ public class ToolCallExecutor {
             log.info("[参数解析] key={} 来源=出参传递 跳过", paramKey);
         } else if ("dynamic".equals(valueSource)) {
             // 优先级：① LLM提取 → ② APIKey参数 → ③ 用户上下文
-            Object llmVal = StringUtils.hasText(paramKey) ? argsMap.get(paramKey) : null;
+            Object llmValRaw = StringUtils.hasText(paramKey) ? argsMap.get(paramKey) : null;
+            // LLM 可能返回空字符串（""），视为未提取，回退到 APIKey 参数或用户上下文
+            boolean hasLlmVal = llmValRaw != null
+                    && (!(llmValRaw instanceof String) || StringUtils.hasText((String) llmValRaw));
+            Object llmVal = hasLlmVal ? llmValRaw : null;
             String apikeyField = (String) def.get("dynamicApikeyField");
+            // dynamicApikeyField 未配置时，回退到用参数 key 名称直接查找 extendedParams
+            if (!StringUtils.hasText(apikeyField)) {
+                apikeyField = paramKey;
+            }
             Object apikeyVal = (extendedParams != null && StringUtils.hasText(apikeyField))
                     ? extendedParams.get(apikeyField) : null;
             String contextField = (String) def.get("fieldKey");
             Object contextVal = (userCtx != null && StringUtils.hasText(contextField))
                     ? userCtx.get(contextField) : null;
+            log.info("[参数解析] key={} 动态解析 extendedParams={} apikeyField={} llmValRaw={} hasLlmVal={} apikeyVal={} contextVal={}",
+                    paramKey, extendedParams, apikeyField, llmValRaw, hasLlmVal, apikeyVal, contextVal);
             if (llmVal != null) {
                 resolved = llmVal;
                 log.info("[参数解析] key={} 来源=动态解析 命中=LLM 取到值={}", paramKey, resolved);

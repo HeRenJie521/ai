@@ -116,7 +116,8 @@ public class ToolCallOrchestrator {
                     log.warn("[工具编排] 未找到工具定义: {}", tc.functionName);
                     result = "{\"error\": \"未找到工具: " + tc.functionName + "\"}";
                 } else {
-                    log.info("[工具编排] 调用工具={} id={} 入参={}", tc.functionName, tc.id, tc.arguments);
+                    log.info("[工具编排] 调用工具={} id={} 入参={} extendedParams={}",
+                            tc.functionName, tc.id, tc.arguments, request.getInternalExtendedParams());
                     result = toolCallExecutor.execute(matchedTool, tc.arguments, userCtx,
                             request.getInternalExtendedParams());
                     log.info("[工具编排] 工具={} 返回结果={}", tc.functionName, result);
@@ -208,7 +209,8 @@ public class ToolCallOrchestrator {
                     log.warn("[工具编排] 未找到工具定义: {}", tc.functionName);
                     result = "{\"error\": \"未找到工具: " + tc.functionName + "\"}";
                 } else {
-                    log.info("[工具编排] 调用工具={} id={} 入参={}", tc.functionName, tc.id, tc.arguments);
+                    log.info("[工具编排] 调用工具={} id={} 入参={} extendedParams={}",
+                            tc.functionName, tc.id, tc.arguments, request.getInternalExtendedParams());
                     result = toolCallExecutor.execute(matchedTool, tc.arguments, userCtx,
                             request.getInternalExtendedParams());
                     log.info("[工具编排] 工具={} 返回结果={}", tc.functionName, result);

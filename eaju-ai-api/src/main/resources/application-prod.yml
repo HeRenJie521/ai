@@ -66,10 +66,10 @@ spring:
 
 logging:
   level:
-    root: WARN
-    com.eaju.ai: INFO
-    org.springframework.web: WARN
-    org.hibernate.SQL: WARN
+    root: INFO
+    com.eaju.ai: DEBUG
+    org.springframework.web: INFO
+    org.hibernate.SQL: INFO
     com.zaxxer.hikari: INFO
 
 app:
