@@ -258,6 +258,8 @@ function migrateParamNode(p: any): ParamNode {
     valueSource: p.valueSource || (isOldObject ? 'static' : oldValueType === 'context' ? 'context' : 'static'),
     sourceValue: p.sourceValue ?? p.value ?? '',
     fieldKey: p.fieldKey || '',
+    dynamicApikeyField: p.dynamicApikeyField,
+    arrayMode: p.arrayMode,
     children: hasChildren ? p.children.map(migrateParamNode) : [],
   }
 }
@@ -274,16 +276,18 @@ function openParams(row: AiToolRow) {
   showParamsModal.value = true
 }
 /** 递归校验参数树，返回第一个错误信息或 null */
-function validateParamNodes(nodes: ParamNode[], path = ''): string | null {
+function validateParamNodes(nodes: ParamNode[], path = '', isValueArrayItem = false): string | null {
   for (const p of nodes) {
-    const fullKey = path ? `${path}.${p.key}` : p.key
-    if (!p.key.trim()) return `"${path || '根节点'}" 下有参数名未填`
+    const fullKey = path ? `${path}.${p.key || '#'}` : (p.key || '#')
+    // 值列表模式的子项不需要 key
+    if (!isValueArrayItem && !p.key.trim()) return `"${path || '根节点'}" 下有参数名未填`
     if (p.fieldType !== 'Object' && p.fieldType !== 'Array') {
       if (p.valueSource === 'static' && !p.sourceValue.trim()) return `参数 "${fullKey}" 的静态值不能为空`
       if (p.valueSource === 'context' && !p.fieldKey) return `参数 "${fullKey}" 未选择用户数据字段`
-      // 'llm' 和 'response' 无需额外校验
+      // 'llm'、'apikey'、'response'、'dynamic' 无需强制校验（dynamic 三项均为可选）
     } else {
-      const childErr = validateParamNodes(p.children, fullKey)
+      const childIsValueArray = p.fieldType === 'Array' && (p.arrayMode ?? 'object') === 'value'
+      const childErr = validateParamNodes(p.children, fullKey, childIsValueArray)
       if (childErr) return childErr
     }
   }
@@ -294,12 +298,17 @@ const FIELD_TYPE_MAP: Record<string, string> = {
   String: 'string', Number: 'number', Boolean: 'boolean', Array: 'array', Object: 'object',
 }
 
-/** 遍历参数树，收集所有 valueSource=llm 的参数，构建 paramsSchemaJson */
+/** 遍历参数树，收集所有 valueSource=llm 或 dynamic 的参数，构建 paramsSchemaJson */
 function buildParamsSchema(nodes: ParamNode[]): string {
   const properties: Record<string, { type: string; description?: string }> = {}
   function walk(list: ParamNode[]) {
     for (const node of list) {
       if (node.valueSource === 'llm' && node.key.trim()) {
+        const entry: { type: string; description?: string } = { type: FIELD_TYPE_MAP[node.fieldType] ?? 'string' }
+        if (node.sourceValue.trim()) entry.description = node.sourceValue.trim()
+        properties[node.key.trim()] = entry
+      } else if (node.valueSource === 'dynamic' && node.key.trim()) {
+        // dynamic 模式：若配置了 LLM 描述，则也加入 schema 让 LLM 尝试提取
         const entry: { type: string; description?: string } = { type: FIELD_TYPE_MAP[node.fieldType] ?? 'string' }
         if (node.sourceValue.trim()) entry.description = node.sourceValue.trim()
         properties[node.key.trim()] = entry
@@ -319,7 +328,7 @@ async function saveParams() {
   if (!paramsToolId.value) return
   paramsSaving.value = true
   try {
-    const dataParamsJson = params.value.length > 0 ? JSON.stringify(params.value) : undefined
+    const dataParamsJson = JSON.stringify(params.value)
     const paramsSchemaJson = buildParamsSchema(params.value)
     await adminUpdateTool(paramsToolId.value, { dataParamsJson, paramsSchemaJson })
     message.success('参数已保存'); showParamsModal.value = false; await loadAll()
@@ -373,7 +382,7 @@ async function saveResp() {
   if (!respToolId.value) return
   respSaving.value = true
   try {
-    const responseParamsJson = respParams.value.length > 0 ? JSON.stringify(respParams.value) : undefined
+    const responseParamsJson = JSON.stringify(respParams.value)
     await adminUpdateTool(respToolId.value, { responseParamsJson })
     message.success('出参已保存'); showRespModal.value = false; await loadAll()
   } catch (e: unknown) {
@@ -404,25 +413,32 @@ const testElapsed = ref<number | null>(null)
 
 interface FlatContextParam { label: string; fieldKey: string }
 
-/** 递归收集所有 valueSource=context 的参数，供测试运行填值 */
+/** 递归收集所有 valueSource=context 或 dynamic（有上下文字段）的参数，供测试运行填值 */
 function walkContextParams(nodes: ParamNode[], path: string, out: FlatContextParam[]) {
   for (const p of nodes) {
     const fullPath = path ? `${path}.${p.key}` : p.key
     if (p.valueSource === 'context' && p.fieldKey) {
       out.push({ label: fullPath, fieldKey: p.fieldKey })
+    } else if (p.valueSource === 'dynamic' && p.fieldKey) {
+      if (!out.some(o => o.fieldKey === p.fieldKey)) {
+        out.push({ label: `${fullPath}（动态兜底）`, fieldKey: p.fieldKey })
+      }
     }
     if (p.children?.length) walkContextParams(p.children, fullPath, out)
   }
 }
 
-/** 递归收集所有 valueSource=apikey 的参数，供测试运行填值 */
+/** 递归收集所有 valueSource=apikey 或 dynamic（有 apikey 字段）的参数，供测试运行填值 */
 function walkApiKeyParams(nodes: ParamNode[], path: string, out: FlatContextParam[]) {
   for (const p of nodes) {
     const fullPath = path ? `${path}.${p.key}` : p.key
     if (p.valueSource === 'apikey' && p.fieldKey) {
-      // 同一 fieldKey 只收集一次
       if (!out.some(o => o.fieldKey === p.fieldKey)) {
         out.push({ label: `${fullPath}（${p.fieldKey}）`, fieldKey: p.fieldKey })
+      }
+    } else if (p.valueSource === 'dynamic' && p.dynamicApikeyField) {
+      if (!out.some(o => o.fieldKey === p.dynamicApikeyField)) {
+        out.push({ label: `${fullPath}（${p.dynamicApikeyField}）`, fieldKey: p.dynamicApikeyField })
       }
     }
     if (p.children?.length) walkApiKeyParams(p.children, fullPath, out)
@@ -540,12 +556,14 @@ const columns: DataTableColumns<AiToolRow> = [
       const count = paramCount(row)
       if (count === 0) return h('span', { style: 'color:#bbb; font-size:12px' }, '未配置')
       try {
-        const items = JSON.parse(row.dataParamsJson!) as Array<{ key: string; valueType?: string }>
-        return h('div', { style: 'font-size:12px; color:#555; line-height:1.6' },
-          items.map((p, i) => h('div', { key: i, style: 'margin-bottom:4px' }, [
-            h(NTag, { size: 'tiny', type: p.valueType === 'object' ? 'warning' : p.valueType === 'context' ? 'success' : 'default' }, { default: () => p.key }),
-          ]))
-        )
+        const items = JSON.parse(row.dataParamsJson!) as Array<{ key: string; valueType?: string; valueSource?: string }>
+        const visible = items.slice(0, 2)
+        const rest = items.length - 2
+        const nodes = visible.map((p, i) => h('div', { key: i, style: 'margin-bottom:4px' }, [
+          h(NTag, { size: 'tiny', type: p.valueSource === 'context' || p.valueType === 'context' ? 'success' : p.valueSource === 'llm' ? 'info' : p.valueType === 'object' ? 'warning' : 'default' }, { default: () => p.key }),
+        ]))
+        if (rest > 0) nodes.push(h('div', { style: 'font-size:11px; color:#bbb; margin-top:2px' }, `... 共 ${items.length} 个`))
+        return h('div', { style: 'font-size:12px; color:#555; line-height:1.6' }, nodes)
       } catch { return h(NTag, { size: 'small', type: 'success' }, { default: () => `${count} 个` }) }
     },
   },

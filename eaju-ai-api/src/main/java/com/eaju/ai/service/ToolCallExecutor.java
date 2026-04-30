@@ -409,6 +409,25 @@ public class ToolCallExecutor {
         } else if ("response".equals(valueSource)) {
             resolved = null;
             log.info("[参数解析] key={} 来源=出参传递 跳过", paramKey);
+        } else if ("dynamic".equals(valueSource)) {
+            // 优先级：① LLM提取 → ② APIKey参数 → ③ 用户上下文
+            Object llmVal = StringUtils.hasText(paramKey) ? argsMap.get(paramKey) : null;
+            String apikeyField = (String) def.get("dynamicApikeyField");
+            Object apikeyVal = (extendedParams != null && StringUtils.hasText(apikeyField))
+                    ? extendedParams.get(apikeyField) : null;
+            String contextField = (String) def.get("fieldKey");
+            Object contextVal = (userCtx != null && StringUtils.hasText(contextField))
+                    ? userCtx.get(contextField) : null;
+            if (llmVal != null) {
+                resolved = llmVal;
+                log.info("[参数解析] key={} 来源=动态解析 命中=LLM 取到值={}", paramKey, resolved);
+            } else if (apikeyVal != null) {
+                resolved = apikeyVal;
+                log.info("[参数解析] key={} 来源=动态解析 命中=APIKey(field={}) 取到值={}", paramKey, apikeyField, resolved);
+            } else {
+                resolved = contextVal;
+                log.info("[参数解析] key={} 来源=动态解析 命中=用户上下文(field={}) 取到值={}", paramKey, contextField, resolved);
+            }
         } else {
             String raw = (String) def.get("sourceValue");
             if (raw == null) raw = (String) def.get("value");

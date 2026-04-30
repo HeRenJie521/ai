@@ -175,7 +175,6 @@ Content-Type: application/json
   "provider": "DEEPSEEK",
   "mode": "deepseek-chat",
   "stream": false,
-  "userId": "15296711325",
   "messages": [
     { "role": "user", "content": "你好，介绍一下你自己。" }
   ]
