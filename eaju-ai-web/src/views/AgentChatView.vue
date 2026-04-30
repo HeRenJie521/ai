@@ -198,7 +198,7 @@ onMounted(async () => {
     message.error('加载 Agent 列表失败')
   }
   try {
-    conversations.value = await listConversations(null, true)
+    conversations.value = await listConversations()
   } catch { /* 忽略 */ }
   await scrollMessagesToBottom()
 })
@@ -212,7 +212,7 @@ onUnmounted(() => {
 
 async function refreshConversations() {
   try {
-    conversations.value = await listConversations(null, true)
+    conversations.value = await listConversations()
   } catch { /* 忽略 */ }
 }
 

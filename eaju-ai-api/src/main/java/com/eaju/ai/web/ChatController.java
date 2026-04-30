@@ -4,6 +4,8 @@ import com.eaju.ai.dto.ChatRequestDto;
 import com.eaju.ai.security.CallerPrincipal;
 import com.eaju.ai.service.ChatConversationService;
 import com.eaju.ai.service.ChatService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.security.core.Authentication;
 import org.springframework.util.StringUtils;
 import org.springframework.validation.annotation.Validated;
@@ -21,6 +23,8 @@ import java.util.UUID;
 @RequestMapping("/api")
 @Validated
 public class ChatController {
+
+    private static final Logger log = LoggerFactory.getLogger(ChatController.class);
 
     private final ChatService chatService;
     private final ChatConversationService chatConversationService;
@@ -45,7 +49,6 @@ public class ChatController {
                 && !StringUtils.hasText(request.getSessionId())) {
             request.setSessionId(UUID.randomUUID().toString());
         }
-        String uid = CallerPrincipal.userId(authentication);
         request.setInternalApiKeyId(apiKeyId);
         request.setInternalIntegrationId(integrationId);
         // 优先使用 token 中携带的 appId（embed 登录），其次使用请求体中的 agentId（/home 页面普通用户选择 Agent）
@@ -60,6 +63,12 @@ public class ChatController {
             }
             request.setInternalExtendedParams(flat);
         }
+        // 使用 request 中已填充的 userId（可能是用户自定义传入的，也可能是认证主体自动填充的）
+        String uid = request.getUserId();
+        log.info("[ChatController] userId resolved: request.userId={}, authPrincipal={}, finalUid={}",
+                request.getUserId(),
+                authentication != null ? CallerPrincipal.userId(authentication) : "null",
+                uid);
         if (StringUtils.hasText(uid) && StringUtils.hasText(request.getSessionId())) {
             chatConversationService.touchOnChatStart(
                     uid,
@@ -77,9 +86,29 @@ public class ChatController {
         return chatService.chat(request);
     }
 
+    /**
+     * 设置 userId：优先使用请求体传入的 userId，其次使用认证主体自动填充。
+     * <p>API Key 场景：
+     * <ul>
+     *   <li>传了 user_id：使用用户传入的 user_id（支持自定义业务用户标识）</li>
+     *   <li>未传 user_id：使用 API Key 明文作为 user_id（保持现有逻辑）</li>
+     * </ul>
+     * JWT 场景：未传时使用手机号作为 user_id。
+     */
     private static void applyPrincipal(ChatRequestDto request, Authentication authentication) {
+        String incomingUserId = request.getUserId();
+        log.info("[ChatController.applyPrincipal] incoming userId='{}', auth={}",
+                incomingUserId,
+                authentication != null ? authentication.getPrincipal().getClass().getSimpleName() : "null");
+        // 如果请求已传入 userId，直接使用（不做覆盖）
+        if (StringUtils.hasText(incomingUserId)) {
+            log.info("[ChatController.applyPrincipal] using incoming userId='{}'", incomingUserId);
+            return;
+        }
+        // 未传入时，使用认证主体自动填充
         String uid = CallerPrincipal.userId(authentication);
-        if (StringUtils.hasText(uid) && !StringUtils.hasText(request.getUserId())) {
+        if (StringUtils.hasText(uid)) {
+            log.info("[ChatController.applyPrincipal] auto-filled userId='{}' from auth", uid);
             request.setUserId(uid);
         }
     }

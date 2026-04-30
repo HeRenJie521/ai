@@ -156,18 +156,19 @@ public class AdminConversationController {
         dto.setApiKeyId(e.getApiKeyId());
         dto.setDeletedAt(e.getDeletedAt() != null ? e.getDeletedAt().toString() : null);
 
-        if (e.getAppId() != null) {
-            aiAppRepository.findById(e.getAppId())
-                    .ifPresent(a -> dto.setApiKeyName(a.getName()));
-            dto.setType("APP");
+        // 会话类型判断：优先按鉴权方式区分（API_KEY > CHAT），再按应用区分（APP）
+        if (e.getApiKeyId() != null) {
+            apiKeyRepository.findById(e.getApiKeyId())
+                    .ifPresent(ak -> dto.setApiKeyName(ak.getName()));
+            dto.setType("API_KEY");
         } else if (e.getIntegrationId() != null) {
             apiKeyRepository.findById(e.getIntegrationId())
                     .ifPresent(ak -> dto.setApiKeyName(ak.getName()));
             dto.setType("APP");
-        } else if (e.getApiKeyId() != null) {
-            apiKeyRepository.findById(e.getApiKeyId())
-                    .ifPresent(ak -> dto.setApiKeyName(ak.getName()));
-            dto.setType("API_KEY");
+        } else if (e.getAppId() != null) {
+            aiAppRepository.findById(e.getAppId())
+                    .ifPresent(a -> dto.setApiKeyName(a.getName()));
+            dto.setType("APP");
         } else {
             dto.setType("CHAT");
         }
@@ -222,15 +223,16 @@ public class AdminConversationController {
         dto.setLastProviderDisplayName(e.getLastProviderDisplayName());
         dto.setLastModeKey(e.getLastModeKey());
         dto.setApiKeyId(e.getApiKeyId());
-        if (e.getAppId() != null) {
-            dto.setApiKeyName(appNameMap.get(e.getAppId()));
-            dto.setType("APP");
+        // 会话类型判断：优先按鉴权方式区分（API_KEY > CHAT），再按应用区分（APP）
+        if (e.getApiKeyId() != null) {
+            dto.setApiKeyName(apiKeyNameMap.get(e.getApiKeyId()));
+            dto.setType("API_KEY");
         } else if (e.getIntegrationId() != null) {
             dto.setApiKeyName(apiKeyNameMap.get(e.getIntegrationId()));
             dto.setType("APP");
-        } else if (e.getApiKeyId() != null) {
-            dto.setApiKeyName(apiKeyNameMap.get(e.getApiKeyId()));
-            dto.setType("API_KEY");
+        } else if (e.getAppId() != null) {
+            dto.setApiKeyName(appNameMap.get(e.getAppId()));
+            dto.setType("APP");
         } else {
             dto.setType("CHAT");
         }

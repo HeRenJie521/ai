@@ -153,8 +153,9 @@ public class ChatConversationService {
     public List<ConversationResponseDto> listForUser(String userId) {
         List<ConversationResponseDto> out = new ArrayList<>();
         if (!StringUtils.hasText(userId)) return out;
+        // 返回用户自己的会话（含 CHAT 和应用来源），过滤掉 API Key 和 embed 来源
         for (ChatConversationEntity e : conversationRepository
-                .findByUserIdAndApiKeyIdIsNullAndIntegrationIdIsNullAndAppIdIsNullAndDeletedAtIsNullOrderByLastMessageAtDesc(userId.trim())) {
+                .findByUserIdAndApiKeyIdIsNullAndIntegrationIdIsNullAndDeletedAtIsNullOrderByLastMessageAtDesc(userId.trim())) {
             out.add(toDto(e));
         }
         return out;

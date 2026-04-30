@@ -83,6 +83,7 @@ const curlStreaming = `curl -N -X POST http://your-host/api/chat \\
 const reqParams = [
   { field: 'provider', type: 'string', required: true, desc: '模型提供商代码，与后台 llm_provider_config.code 一致，大小写不敏感。可选值：DEEPSEEK、QWEN、KIMI、QIANFAN、GEMINI、MINIMAX 等。' },
   { field: 'messages', type: 'Message[]', required: true, desc: '对话消息列表，至少包含一条。多轮对话时可只传最新一轮，历史记录由 sessionId 从服务端自动拼接。' },
+  { field: 'userId', type: 'string', required: false, desc: '业务用户 ID（可选）。通过 X-API-Key 调用时：传入此参数可将会话记录关联到指定用户标识' },
   { field: 'mode', type: 'string', required: false, desc: '逻辑模型名，对应后台 llm_model.name。不传时使用该提供商的默认模型。与 model 二选一，model 优先。' },
   { field: 'model', type: 'string', required: false, desc: '直接指定上游模型 ID，绕过 mode 映射，原样透传给上游接口。' },
   { field: 'sessionId', type: 'string', required: false, desc: '会话 ID。有值时从 Redis 读取该会话历史并拼接在本轮消息之前，阻塞模式成功后将本轮写回 Redis 并落库。不传时服务端自动生成 UUID（X-API-Key 调用时）。' },
