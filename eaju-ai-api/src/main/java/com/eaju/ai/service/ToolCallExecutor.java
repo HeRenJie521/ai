@@ -169,13 +169,17 @@ public class ToolCallExecutor {
 
             if (StringUtils.hasText(tool.getResponseParamsJson()) && StringUtils.hasText(result)) {
                 String filtered = filterResponseByParams(result, tool.getResponseParamsJson());
+                // 过滤结果为空说明出参配置是空列表或全部字段未命中，直接返回原始响应
+                if (!StringUtils.hasText(filtered)) {
+                    log.info("[出参发给AI] 过滤结果为空，返回原始响应");
+                    return result;
+                }
                 String fieldDesc = buildResponseFieldDesc(tool.getResponseParamsJson());
                 StringBuilder sb = new StringBuilder();
                 if (StringUtils.hasText(fieldDesc)) {
                     sb.append("字段说明：\n").append(fieldDesc).append("\n");
                 }
-                // 严格只发过滤后的数据，绝不 fallback 到完整响应（避免泄露未配置字段）
-                sb.append("响应数据：\n").append(filtered != null ? filtered : "{}");
+                sb.append("响应数据：\n").append(filtered);
                 String payload = sb.toString();
                 log.info("[出参发给AI] {}", payload);
                 return payload;
@@ -252,11 +256,11 @@ public class ToolCallExecutor {
             log.info("[响应体] body={}", result);
             log.info("========== 工具调用请求结束 ==========");
 
-            // 如果配置了出参管理，过滤响应数据；否则返回全部
+            // 如果配置了出参管理，过滤响应数据；过滤结果为空（空配置）则返回全部
             if (StringUtils.hasText(tool.getResponseParamsJson()) && StringUtils.hasText(result)) {
                 String filtered = filterResponseByParams(result, tool.getResponseParamsJson());
                 log.info("[出参过滤] 过滤后结果={}", filtered);
-                return filtered;
+                return StringUtils.hasText(filtered) ? filtered : result;
             }
             return result != null ? result : "";
 
